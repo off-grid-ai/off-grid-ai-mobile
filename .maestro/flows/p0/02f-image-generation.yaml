@@ -177,6 +177,7 @@ tags:
 
 # ==============================
 # Test image generation
+# Defaults: imageGenerationMode='auto', autoDetectMethod='pattern' — no config needed
 # ==============================
 - evalScript: "${console.log('IMAGE_GEN - Start chat')}"
 - tapOn:
@@ -186,41 +187,6 @@ tags:
     visible:
       id: "chat-screen"
     timeout: 10000
-
-# ==============================
-# Configure auto-detect settings
-# ==============================
-- evalScript: "${console.log('IMAGE_GEN - Configure settings')}"
-- tapOn:
-    id: "chat-settings-icon"
-
-# Expand the IMAGE GENERATION section (collapsed by default)
-- extendedWaitUntil:
-    visible:
-      text: "IMAGE GENERATION"
-    timeout: 5000
-- tapOn:
-    text: "IMAGE GENERATION"
-
-- extendedWaitUntil:
-    visible:
-      text: "Auto-detect image requests"
-    timeout: 5000
-
-# Tap on Auto mode
-- evalScript: "${console.log('IMAGE_GEN - Set Auto mode')}"
-- tapOn:
-    id: "image-gen-mode-auto"
-
-# Tap on Pattern
-- evalScript: "${console.log('IMAGE_GEN - Set Pattern')}"
-- tapOn:
-    id: "auto-detect-method-pattern"
-
-# Close settings modal
-- evalScript: "${console.log('IMAGE_GEN - Close settings')}"
-- tapOn:
-    text: "Done"
 
 # Type an image generation prompt
 - evalScript: "${console.log('IMAGE_GEN - Type prompt')}"

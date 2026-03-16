@@ -90,8 +90,7 @@ function buildMessagesForContext(conversationId: string, messageText: string, sy
   const { prefix, filtered } = applyCompactionPrefix(conversation, systemPrompt, allMessages);
   const lastMsg = filtered.at(-1);
   if (!lastMsg) return [...prefix];
-  const userMessageForContext: Message = lastMsg.role === 'user' ? { ...lastMsg, content: messageText } : lastMsg;
-  return [...prefix, ...filtered.slice(0, -1), userMessageForContext];
+  return [...prefix, ...filtered.slice(0, -1), lastMsg.role === 'user' ? { ...lastMsg, content: messageText } : lastMsg];
 }
 export async function shouldRouteToImageGenerationFn(
   deps: Pick<GenerationDeps, 'isGeneratingImage' | 'settings' | 'imageModelLoaded' | 'downloadedModels' | 'setIsClassifying' | 'setAppImageGenerationStatus' | 'setAppIsGeneratingImage'>,

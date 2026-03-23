@@ -23,10 +23,12 @@ import javax.inject.Singleton
 @Singleton
 class ToolDispatcher @Inject constructor(
     private val aetherTool: AetherTool,
+    private val codexTool: CodexTool,
+    private val oodaContextTool: OodaContextTool,
 ) {
 
     private val tools: Map<String, Tool> by lazy {
-        listOf(aetherTool).associateBy { it.name }
+        listOf(aetherTool, codexTool, oodaContextTool).associateBy { it.name }
     }
 
     /** All registered tools — used to build the system prompt tool manifest. */

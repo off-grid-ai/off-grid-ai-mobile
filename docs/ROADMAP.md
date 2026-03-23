@@ -77,18 +77,19 @@ Commit convention: `feat(phase-3): description`
 
 ---
 
-## Phase 4 — CODEX + OODA Integration [ CURRENT PHASE ]
+## Phase 4 — CODEX + OODA Integration [~] [ CURRENT PHASE ]
 
 Goal: Make the inference layer aware of your personal knowledge graph and
 physical environment.
 
 Tasks:
-- [ ] Create `CodexTool.kt` — queries CODEX Supabase backend (LAN or API)
-- [ ] Create `OodaContextTool.kt` — pulls structured snapshot from OODA Loop app
-- [ ] Integrate both tools into tool calling dispatch
-- [ ] Add `ContextSourceManager.kt` — manages which context sources are active
-- [ ] Create `ContextDashboard.kt` composable — shows live active context feeds
-- [ ] Add conversation export to CODEX
+- [x] Create `CodexTool.kt` — queries CODEX Supabase backend (LAN or API)
+- [x] Create `OodaContextTool.kt` — pulls structured snapshot from OODA Loop app
+- [x] Integrate both tools into tool calling dispatch (`ToolDispatcher.kt`)
+- [x] Add `ContextSourceManager.kt` — manages which context sources are active (AETHER + CODEX + OODA), persists enable flags + CODEX config to DataStore
+- [x] Create `ContextDashboard.kt` composable — unified multi-source indicator bar + collapsible bottom sheet (replaces Phase 3 AETHER-only indicator)
+- [x] Add conversation export to CODEX (ChatViewModel `exportToCodex()` + overflow menu in ChatScreen)
+- [ ] Wire Context Sources toggle UI into SettingsScreen (enable/disable per source, CODEX URL + key fields)
 
 Commit convention: `feat(phase-4): description`
 

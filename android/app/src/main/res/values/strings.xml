@@ -61,6 +61,31 @@
     <string name="chat_aether_anomalies_header">Anomalies (%1$d)</string>
     <string name="chat_aether_signal_dbm">%1$d dBm</string>
 
+    <!-- Chat screen — overflow menu + export -->
+    <string name="chat_menu">More options</string>
+    <string name="chat_export_to_codex">Export to CODEX</string>
+
+    <!-- Context sources indicator (Phase 4) -->
+    <string name="ctx_source_aether">RF · AETHER</string>
+    <string name="ctx_source_codex">CODEX</string>
+    <string name="ctx_source_ooda">OODA</string>
+
+    <!-- Context dashboard sheet (Phase 4) -->
+    <string name="ctx_dashboard_title">Context Sources</string>
+    <string name="ctx_dashboard_close">Close</string>
+    <string name="ctx_section_aether">AETHER — RF Environment</string>
+    <string name="ctx_section_codex">CODEX — Knowledge Graph</string>
+    <string name="ctx_section_ooda">OODA — Decision Loop</string>
+    <string name="ctx_codex_connected">Connected</string>
+    <string name="ctx_codex_offline">Offline</string>
+    <string name="ctx_codex_ready">CODEX backend is reachable. The model can query your knowledge graph using the codex_search tool.</string>
+    <string name="ctx_codex_offline_hint">CODEX is unreachable. Configure Supabase URL and key in Settings → Context Sources.</string>
+    <string name="ctx_ooda_unnamed_cycle">unnamed cycle</string>
+    <string name="ctx_ooda_observe">OBSERVE</string>
+    <string name="ctx_ooda_orient">ORIENT</string>
+    <string name="ctx_ooda_decide">DECIDE</string>
+    <string name="ctx_ooda_act">ACT</string>
+
     <!-- Settings screen -->
     <string name="settings_title">Settings</string>
     <string name="settings_inference_section">Inference</string>
@@ -85,4 +110,13 @@
     <string name="settings_clear_history_confirm_body">This will permanently delete all conversation history. This action cannot be undone.</string>
     <string name="settings_clear_confirm">Clear</string>
     <string name="settings_cancel">Cancel</string>
+
+    <!-- Settings — Context Sources section (Phase 4) -->
+    <string name="settings_context_sources_section">Context Sources</string>
+    <string name="settings_ctx_aether_label">AETHER RF Environment</string>
+    <string name="settings_ctx_codex_label">CODEX Knowledge Graph</string>
+    <string name="settings_ctx_ooda_label">OODA Decision Loop</string>
+    <string name="settings_ctx_codex_url_hint">Supabase URL (LAN or cloud)</string>
+    <string name="settings_ctx_codex_key_hint">Supabase anon key</string>
+    <string name="settings_ctx_codex_save">Save CODEX Config</string>
 </resources>

@@ -2,8 +2,9 @@ package ai.offgridmobile.ui.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import ai.offgridmobile.aether.AetherContextBridge
-import ai.offgridmobile.aether.AetherSnapshot
+import ai.offgridmobile.codex.CodexClient
+import ai.offgridmobile.context.ActiveSourcesState
+import ai.offgridmobile.context.ContextSourceManager
 import ai.offgridmobile.data.local.entities.Message
 import ai.offgridmobile.data.repository.ConversationRepository
 import ai.offgridmobile.data.repository.LlamaRepository
@@ -13,12 +14,12 @@ import ai.offgridmobile.tools.ToolDispatcher
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import javax.inject.Inject
 
 @HiltViewModel
@@ -26,7 +27,8 @@ class ChatViewModel @Inject constructor(
     private val conversationRepository: ConversationRepository,
     private val llamaRepository: LlamaRepository,
     val spenInputModule: SpenInputModule,
-    private val aetherContextBridge: AetherContextBridge,
+    private val contextSourceManager: ContextSourceManager,
+    private val codexClient: CodexClient,
     private val toolDispatcher: ToolDispatcher,
 ) : ViewModel() {
 
@@ -41,25 +43,22 @@ class ChatViewModel @Inject constructor(
         data class Error(val message: String) : ChatUiState()
     }
 
+    sealed class ExportState {
+        data object Idle : ExportState()
+        data object InProgress : ExportState()
+        data class Success(val message: String) : ExportState()
+        data class Error(val message: String) : ExportState()
+    }
+
     private val _uiState = MutableStateFlow<ChatUiState>(ChatUiState.Loading)
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
-    /** Live RF environment snapshot from AETHER (null when AETHER not installed). */
-    val aetherSnapshot: StateFlow<AetherSnapshot?> = aetherContextBridge.snapshotFlow
-        .catch { emit(AetherSnapshot(emptyList(), emptyList(), null, emptyList(), java.time.Instant.now())) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    private val _exportState = MutableStateFlow<ExportState>(ExportState.Idle)
+    val exportState: StateFlow<ExportState> = _exportState.asStateFlow()
 
-    /** Whether AETHER has data for the context sources indicator. */
-    val isAetherActive: StateFlow<Boolean> = MutableStateFlow(false).also { flow ->
-        viewModelScope.launch {
-            aetherSnapshot.collect { snapshot ->
-                flow.value = snapshot != null &&
-                    (snapshot.wifiNetworks.isNotEmpty() ||
-                        snapshot.bluetoothDevices.isNotEmpty() ||
-                        snapshot.cellularInfo != null)
-            }
-        }
-    }.asStateFlow()
+    /** Combined live snapshot of all enabled context sources (AETHER, CODEX, OODA). */
+    val activeSourcesState: StateFlow<ActiveSourcesState> =
+        contextSourceManager.activeSourcesState
 
     /** S Pen connection state forwarded from [SpenInputModule]. */
     val isStylusConnected: StateFlow<Boolean> = spenInputModule.isStylusConnected
@@ -170,6 +169,54 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Export the current conversation to CODEX as a knowledge-graph entry.
+     *
+     * Formats all user + assistant messages as a plain transcript and POSTs
+     * to the configured CODEX Supabase backend.
+     * Updates [exportState] with success/error for the snackbar.
+     */
+    fun exportToCodex() {
+        val config = contextSourceManager.codexConfig.value
+        if (!config.isConfigured) {
+            _exportState.value = ExportState.Error(
+                "CODEX is not configured. Set Supabase URL and key in Settings → Context Sources."
+            )
+            return
+        }
+
+        val messages = (_uiState.value as? ChatUiState.Success)?.messages
+        if (messages.isNullOrEmpty()) {
+            _exportState.value = ExportState.Error("No messages to export.")
+            return
+        }
+
+        _exportState.value = ExportState.InProgress
+
+        viewModelScope.launch {
+            val transcript = buildTranscript(messages)
+            val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date())
+            val title = "Conversation export — $dateStr"
+
+            val success = codexClient.exportEntry(
+                config = config,
+                title = title,
+                content = transcript,
+                tags = listOf("conversation", "off-grid-ai", "export"),
+            )
+
+            _exportState.value = if (success) {
+                ExportState.Success("Conversation exported to CODEX.")
+            } else {
+                ExportState.Error("Export failed. Check CODEX connection in Settings.")
+            }
+        }
+    }
+
+    fun clearExportState() {
+        _exportState.value = ExportState.Idle
+    }
+
     /** Called by ChatScreen when S Pen handwriting commits text into the input field. */
     fun onSpenHandwritingCommitted(text: String) {
         spenInputModule.onHandwritingCommitted(text)
@@ -191,5 +238,24 @@ class ChatViewModel @Inject constructor(
             )
             observeMessages()
         }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private fun buildTranscript(messages: List<Message>): String {
+        val sb = StringBuilder()
+        messages
+            .filter { it.role in listOf("user", "assistant") }
+            .forEach { msg ->
+                val roleLabel = when (msg.role) {
+                    "user" -> "USER"
+                    "assistant" -> "ASSISTANT"
+                    else -> msg.role.uppercase()
+                }
+                sb.appendLine("[$roleLabel]")
+                sb.appendLine(msg.content)
+                sb.appendLine()
+            }
+        return sb.toString().trim()
     }
 }

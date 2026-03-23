@@ -5,7 +5,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,21 +27,17 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.BluetoothSearching
-import androidx.compose.material.icons.filled.CellTower
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Create
-import androidx.compose.material.icons.filled.SignalWifi4Bar
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -52,7 +47,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -64,23 +58,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ai.offgridmobile.R
-import ai.offgridmobile.aether.AetherSnapshot
 import ai.offgridmobile.data.local.entities.Message
 import ai.offgridmobile.spen.SpenInputState
+import ai.offgridmobile.ui.components.ContextDashboardSheet
+import ai.offgridmobile.ui.components.ContextSourcesIndicator
 import ai.offgridmobile.ui.theme.OledBlack
 import ai.offgridmobile.ui.theme.OledSurface
 import ai.offgridmobile.ui.theme.OledSurfaceVariant
@@ -88,9 +81,6 @@ import ai.offgridmobile.ui.theme.TealDark
 import ai.offgridmobile.ui.theme.TealPrimary
 import ai.offgridmobile.ui.viewmodels.ChatViewModel
 import kotlinx.coroutines.launch
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -106,13 +96,14 @@ fun ChatScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val spenState by viewModel.spenInputState.collectAsStateWithLifecycle()
     val isStylusConnected by viewModel.isStylusConnected.collectAsStateWithLifecycle()
-    val isAetherActive by viewModel.isAetherActive.collectAsStateWithLifecycle()
-    val aetherSnapshot by viewModel.aetherSnapshot.collectAsStateWithLifecycle()
+    val activeSourcesState by viewModel.activeSourcesState.collectAsStateWithLifecycle()
+    val exportState by viewModel.exportState.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    var showAetherSheet by remember { mutableStateOf(false) }
+    var showContextDashboard by remember { mutableStateOf(false) }
+    var showOverflowMenu by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState) {
         val state = uiState
@@ -130,6 +121,17 @@ fun ChatScreen(
             snackbarHostState.showSnackbar(msg)
             viewModel.dismissError()
         }
+    }
+
+    LaunchedEffect(exportState) {
+        when (val s = exportState) {
+            is ChatViewModel.ExportState.Success ->
+                snackbarHostState.showSnackbar(s.message)
+            is ChatViewModel.ExportState.Error ->
+                snackbarHostState.showSnackbar(s.message)
+            else -> Unit
+        }
+        if (exportState !is ChatViewModel.ExportState.Idle) viewModel.clearExportState()
     }
 
     Scaffold(
@@ -153,18 +155,44 @@ fun ChatScreen(
                             )
                         }
                     },
+                    actions = {
+                        // Overflow menu: Export to CODEX
+                        Box {
+                            IconButton(onClick = { showOverflowMenu = true }) {
+                                Icon(
+                                    Icons.Filled.MoreVert,
+                                    contentDescription = stringResource(R.string.chat_menu),
+                                    tint = MaterialTheme.colorScheme.onBackground,
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showOverflowMenu,
+                                onDismissRequest = { showOverflowMenu = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.chat_export_to_codex)) },
+                                    leadingIcon = {
+                                        Icon(Icons.Filled.Upload, null, tint = TealPrimary)
+                                    },
+                                    onClick = {
+                                        showOverflowMenu = false
+                                        viewModel.exportToCodex()
+                                    },
+                                )
+                            }
+                        }
+                    },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = OledBlack,
                         titleContentColor = MaterialTheme.colorScheme.onBackground,
                         navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
                     ),
                 )
-                // Task 7 — Context sources indicator row
-                if (isAetherActive) {
-                    AetherContextIndicator(
-                        onClick = { showAetherSheet = true },
-                    )
-                }
+                // Phase 4 — Multi-source context indicator
+                ContextSourcesIndicator(
+                    state = activeSourcesState,
+                    onClick = { showContextDashboard = true },
+                )
             }
         },
     ) { innerPadding ->
@@ -206,215 +234,11 @@ fun ChatScreen(
         }
     }
 
-    // Task 7 — AETHER snapshot bottom sheet
-    if (showAetherSheet) {
-        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
-        ModalBottomSheet(
-            onDismissRequest = { showAetherSheet = false },
-            sheetState = sheetState,
-            containerColor = OledSurface,
-            dragHandle = { BottomSheetDefaults.DragHandle(color = MaterialTheme.colorScheme.outline) },
-        ) {
-            AetherSnapshotSheet(
-                snapshot = aetherSnapshot,
-                onDismiss = { showAetherSheet = false },
-            )
-        }
-    }
-}
-
-// ── Task 7: Context sources indicator ────────────────────────────────────────
-
-@Composable
-private fun AetherContextIndicator(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(OledSurface)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Icon(
-            imageVector = Icons.Filled.Wifi,
-            contentDescription = null,
-            tint = TealPrimary,
-            modifier = Modifier.size(14.dp),
-        )
-        Text(
-            text = stringResource(R.string.chat_aether_active_label),
-            style = MaterialTheme.typography.labelSmall,
-            color = TealPrimary,
-        )
-    }
-}
-
-// ── Task 7: AETHER bottom sheet ───────────────────────────────────────────────
-
-@Composable
-private fun AetherSnapshotSheet(
-    snapshot: AetherSnapshot?,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val formatter = remember {
-        DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault())
-    }
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .padding(bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.chat_aether_sheet_title),
-                style = MaterialTheme.typography.titleMedium,
-                color = TealPrimary,
-                fontWeight = FontWeight.SemiBold,
-            )
-            IconButton(onClick = onDismiss) {
-                Icon(
-                    Icons.Filled.Close,
-                    contentDescription = stringResource(R.string.chat_aether_sheet_close),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        if (snapshot == null) {
-            Text(
-                stringResource(R.string.chat_aether_no_data),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            return@Column
-        }
-
-        snapshot.capturedAt.let { ts ->
-            Text(
-                text = stringResource(R.string.chat_aether_captured_at, formatter.format(ts)),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-        // WiFi networks
-        if (snapshot.wifiNetworks.isNotEmpty()) {
-            AetherSectionHeader(
-                icon = { Icon(Icons.Filled.Wifi, null, tint = TealPrimary, modifier = Modifier.size(16.dp)) },
-                title = stringResource(R.string.chat_aether_wifi_header, snapshot.wifiNetworks.size),
-            )
-            snapshot.wifiNetworks.take(8).forEach { net ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(start = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        text = net.ssid.ifEmpty { net.bssid },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Text(
-                        text = stringResource(R.string.chat_aether_signal_dbm, net.level),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-
-        // Bluetooth devices
-        if (snapshot.bluetoothDevices.isNotEmpty()) {
-            AetherSectionHeader(
-                icon = { Icon(Icons.Filled.BluetoothSearching, null, tint = TealPrimary, modifier = Modifier.size(16.dp)) },
-                title = stringResource(R.string.chat_aether_bt_header, snapshot.bluetoothDevices.size),
-            )
-            snapshot.bluetoothDevices.take(6).forEach { dev ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(start = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        text = dev.deviceName.ifEmpty { dev.address },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Text(
-                        text = stringResource(R.string.chat_aether_signal_dbm, dev.rssi),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-
-        // Cellular
-        snapshot.cellularInfo?.let { cell ->
-            AetherSectionHeader(
-                icon = { Icon(Icons.Filled.CellTower, null, tint = TealPrimary, modifier = Modifier.size(16.dp)) },
-                title = stringResource(R.string.chat_aether_cellular_header),
-            )
-            Text(
-                text = stringResource(
-                    R.string.chat_aether_cellular_detail,
-                    cell.mcc, cell.mnc, cell.signalDbm,
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(start = 8.dp),
-            )
-        }
-
-        // Anomalies
-        if (snapshot.anomalies.isNotEmpty()) {
-            AetherSectionHeader(
-                icon = { },
-                title = stringResource(R.string.chat_aether_anomalies_header, snapshot.anomalies.size),
-            )
-            snapshot.anomalies.forEach { anomaly ->
-                Text(
-                    text = "• $anomaly",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(start = 8.dp),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun AetherSectionHeader(
-    icon: @Composable () -> Unit,
-    title: String,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        icon()
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelMedium,
-            color = TealPrimary,
-            fontWeight = FontWeight.SemiBold,
+    // Phase 4 — Context dashboard bottom sheet
+    if (showContextDashboard) {
+        ContextDashboardSheet(
+            state = activeSourcesState,
+            onDismiss = { showContextDashboard = false },
         )
     }
 }

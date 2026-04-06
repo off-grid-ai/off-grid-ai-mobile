@@ -150,6 +150,10 @@ class LLMService {
   supportsToolCalling(): boolean { return this.toolCallingSupported; }
   supportsThinking(): boolean { return this.thinkingSupported; }
   isThinkingEnabled(): boolean { return this.thinkingSupported && useAppStore.getState().settings.thinkingEnabled; }
+  isGemma4Model(): boolean {
+    const path = this.currentModelPath?.toLowerCase() ?? '';
+    return path.includes('gemma-4') || path.includes('gemma4');
+  }
   /** Disable ctx_shift on Android when GPU layers are active — the OpenCL backend SIGSEGVs on the ggml set op used by KV cache shifting. */
   private shouldDisableCtxShift(): boolean { return Platform.OS === 'android' && this.activeGpuLayers > 0; }
   private detectToolCallingSupport(): void {
@@ -200,7 +204,7 @@ class LLMService {
       const startTime = Date.now();
       let firstTokenMs = 0, tokenCount = 0, firstReceived = false;
       let fullContent = '', fullReasoningContent = '', streamedContentSoFar = '', streamedReasoningSoFar = '';
-      const completionParams = { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }), ...buildThinkingCompletionParams(this.isThinkingEnabled()) };
+      const completionParams = { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }), ...buildThinkingCompletionParams(this.isThinkingEnabled(), this.isGemma4Model()) };
       logger.log(`[LLM][THINKING] thinkingSupported=${this.thinkingSupported}, thinkingEnabled=${useAppStore.getState().settings.thinkingEnabled}, isThinkingEnabled=${this.isThinkingEnabled()}, enable_thinking=${(completionParams as any).enable_thinking}, reasoning_format=${(completionParams as any).reasoning_format}`);
       const completionResult = await safeCompletion(ctx, () => ctx.completion(completionParams, (data: any) => {
         if (!this.isGenerating || !data.token) return;
@@ -231,6 +235,7 @@ class LLMService {
     const work = generateWithToolsImpl({
       context: this.context, isGenerating: this.isGenerating,
       isThinkingEnabled: this.isThinkingEnabled(),
+      isGemma4Model: this.isGemma4Model(),
       disableCtxShift: this.shouldDisableCtxShift(),
       manageContextWindow: (msgs, extra?) => this.manageContextWindow(msgs, extra),
       convertToOAIMessages: (msgs) => this.convertToOAIMessages(msgs),

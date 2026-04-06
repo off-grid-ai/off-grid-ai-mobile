@@ -13,6 +13,68 @@ import logger from '../utils/logger';
 type ToolStreamCallback = (data: StreamToken) => void;
 type ToolCompleteCallback = (fullResponse: string) => void;
 
+/**
+ * Suppresses Gemma 4's native tool call tokens from the visible text stream.
+ * Gemma 4 wraps tool calls in <|tool_call>...<tool_call|> — llama.rn parses
+ * the structured call fine, but the raw tokens still flow through data.token.
+ * This filter buffers the stream and drops everything inside those tags.
+ */
+class ToolCallTokenFilter {
+  private inBlock = false;
+  private buffer = '';
+
+  process(token: string): string {
+    this.buffer += token;
+    return this.flush();
+  }
+
+  private flush(): string {
+    const openTag = '<|tool_call>';
+    const closeTag = '<tool_call|>';
+    let output = '';
+
+    while (this.buffer.length > 0) {
+      if (this.inBlock) {
+        const closeIdx = this.buffer.indexOf(closeTag);
+        if (closeIdx === -1) {
+          // Partial close tag may be at the end — hold it in the buffer
+          const partial = this.partialSuffix(this.buffer, closeTag);
+          this.buffer = partial > 0 ? this.buffer.slice(this.buffer.length - partial) : '';
+          break;
+        }
+        // Drop everything up to and including the close tag
+        this.buffer = this.buffer.slice(closeIdx + closeTag.length);
+        this.inBlock = false;
+      } else {
+        const openIdx = this.buffer.indexOf(openTag);
+        if (openIdx === -1) {
+          const partial = this.partialSuffix(this.buffer, openTag);
+          if (partial > 0) {
+            output += this.buffer.slice(0, this.buffer.length - partial);
+            this.buffer = this.buffer.slice(this.buffer.length - partial);
+          } else {
+            output += this.buffer;
+            this.buffer = '';
+          }
+          break;
+        }
+        output += this.buffer.slice(0, openIdx);
+        this.buffer = this.buffer.slice(openIdx + openTag.length);
+        this.inBlock = true;
+      }
+    }
+
+    return output;
+  }
+
+  private partialSuffix(text: string, tag: string): number {
+    for (let len = Math.min(tag.length - 1, text.length); len > 0; len--) {
+      if (text.endsWith(tag.slice(0, len))) return len;
+    }
+    return 0;
+  }
+}
+
 function parseToolCall(tc: any): ToolCall {
   const fn = tc.function || {};
   let args = fn.arguments || {};
@@ -26,6 +88,7 @@ export interface ToolGenerationDeps {
   context: any;
   isGenerating: boolean;
   isThinkingEnabled: boolean;
+  isGemma4Model: boolean;
   disableCtxShift: boolean;
   manageContextWindow: (messages: Message[], extraReserve?: number) => Promise<Message[]>;
   convertToOAIMessages: (messages: Message[]) => any[];
@@ -57,13 +120,15 @@ export async function generateWithToolsImpl(
     let fullResponse = '';
     let firstReceived = false;
     const collectedToolCalls: ToolCall[] = [];
+    // Gemma 4 emits <|tool_call>...<tool_call|> tokens in the stream; filter them out.
+    const toolCallFilter = deps.isGemma4Model ? new ToolCallTokenFilter() : null;
 
     const completionParams = {
       messages: oaiMessages,
       ...buildCompletionParams(settings, { disableCtxShift: deps.disableCtxShift }),
       tools: options.tools,
       tool_choice: 'auto',
-      ...buildThinkingCompletionParams(deps.isThinkingEnabled),
+      ...buildThinkingCompletionParams(deps.isThinkingEnabled, deps.isGemma4Model),
     };
     logger.log('[LLM-Tools] === INPUT ===');
     logger.log(JSON.stringify(completionParams, null, 2));
@@ -77,8 +142,9 @@ export async function generateWithToolsImpl(
       if (!data.token) return;
       if (!firstReceived) { firstReceived = true; firstTokenMs = Date.now() - startTime; }
       tokenCount++;
-      fullResponse += data.token;
-      options.onStream?.({ content: data.token });
+      const visibleToken = toolCallFilter ? toolCallFilter.process(data.token) : data.token;
+      fullResponse += visibleToken;
+      if (visibleToken) options.onStream?.({ content: visibleToken });
     }), 'generateWithTools');
     logger.log('[LLM-Tools] === OUTPUT ===');
     logger.log(JSON.stringify(completionResult, null, 2));

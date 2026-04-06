@@ -4,12 +4,36 @@ import type { ParsedContent } from './types';
 
 /**
  * Parse content that may contain thinking/reasoning sections.
- * Handles two formats:
- * 1. HLSL.. HLSL tags (used by llama models with thinking enabled)
- * 2. <|channel|>analysis<|message|>...<|channel|>final<|message|> (used by Qwen and similar models)
+ * Handles three formats:
+ * 1. <think>...</think> tags (DeepSeek-style, used by llama models with thinking enabled)
+ * 2. <|channel>thought\n...<channel|> (Gemma 4)
+ * 3. <|channel|>analysis<|message|>...<|channel|>final<|message|> (Qwen and similar models)
  */
 export function parseThinkingContent(content: string): ParsedContent {
-  // First, check for channel-based thinking format
+  // Gemma 4 thinking format: <|channel>thought\n[thinking]<channel|>[response]
+  // Note asymmetric tags: <|channel> opens (with channel name 'thought'), <channel|> closes.
+  const gemmaOpenMatch = content.match(/<\|channel>thought\n/i);
+  const gemmaCloseMatch = content.match(/<channel\|>/i);
+
+  if (gemmaOpenMatch) {
+    const thinkStart = gemmaOpenMatch.index! + gemmaOpenMatch[0].length;
+    if (gemmaCloseMatch && gemmaCloseMatch.index! >= thinkStart) {
+      const thinkEnd = gemmaCloseMatch.index!;
+      return {
+        thinking: content.slice(thinkStart, thinkEnd).trim(),
+        response: content.slice(thinkEnd + gemmaCloseMatch[0].length).trim(),
+        isThinkingComplete: true,
+      };
+    }
+    // Still streaming — thinking not yet closed
+    return {
+      thinking: content.slice(thinkStart).trim(),
+      response: '',
+      isThinkingComplete: false,
+    };
+  }
+
+  // Check for channel-based thinking format
   // Format: <|channel|>analysis<|message|>[thinking content]<|channel|>final<|message|>[response]
   const channelAnalysisMatch = content.match(/<\|channel\|>analysis<\|message\|>/i);
   const channelFinalMatch = content.match(/<\|channel\|>final<\|message\|>/i);

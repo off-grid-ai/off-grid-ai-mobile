@@ -189,8 +189,10 @@ export function supportsNativeThinking(context: LlamaContext | null): boolean {
     return false;
   }
 }
-export function buildThinkingCompletionParams(enableThinking: boolean): { enable_thinking: boolean; reasoning_format: 'none' | 'deepseek' } {
-  return { enable_thinking: enableThinking, reasoning_format: enableThinking ? 'deepseek' : 'none' };
+export function buildThinkingCompletionParams(enableThinking: boolean, isGemma4: boolean = false): { enable_thinking: boolean; reasoning_format: 'none' | 'deepseek' } {
+  // Gemma 4 uses its own <|channel>thought\n...<channel|> format — not DeepSeek's <think> tags.
+  // Set reasoning_format:'none' so llama.rn doesn't try to strip DeepSeek tags; we parse it ourselves.
+  return { enable_thinking: enableThinking, reasoning_format: (enableThinking && !isGemma4) ? 'deepseek' : 'none' };
 }
 export function getStreamingDelta(nextValue: string | undefined, previousValue: string): string | undefined {
   if (!nextValue) return undefined;

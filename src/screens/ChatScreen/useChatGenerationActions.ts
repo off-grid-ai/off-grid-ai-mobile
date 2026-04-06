@@ -223,6 +223,17 @@ async function injectRagContext(projectId: string | undefined, query: string, pr
   }
   return prompt;
 }
+/**
+ * Gemma 4 requires <|think|> at the start of the system prompt to activate thinking mode.
+ * For E2B/E4B variants (the mobile-sized models), omitting this token fully disables thinking.
+ */
+function applyGemma4ThinkToken(prompt: string, isRemote: boolean): string {
+  if (!isRemote && llmService.isGemma4Model() && llmService.isThinkingEnabled()) {
+    return `<|think|>\n${prompt}`;
+  }
+  return prompt;
+}
+
 function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any): { enabledTools: string[]; rawPrompt: string } {
   const project = conversation?.projectId ? useProjectStore.getState().getProject(conversation.projectId) : null;
   const { activeServerId, activeRemoteTextModelId } = useRemoteServerStore.getState();
@@ -254,7 +265,10 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   const basePrompt = await injectRagContext(conversation?.projectId, messageText, rawPrompt);
   const isRemote = !!useRemoteServerStore.getState().activeRemoteTextModelId;
   const activeTools = enabledTools;
-  const systemPrompt = (!isRemote && activeTools.length > 0) ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt;
+  const systemPrompt = applyGemma4ThinkToken(
+    (!isRemote && activeTools.length > 0) ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt,
+    isRemote,
+  );
   logger.log(`[ChatGen][DEBUG] isRemote=${isRemote}, tools=[${activeTools.join(', ')}], path=${activeTools.length > 0 ? 'withTools' : 'generate'}`);
   const messagesForContext = buildMessagesForContext(targetConversationId, messageText, systemPrompt);
   await prepareContext(setDebugInfo, systemPrompt, messagesForContext);
@@ -331,7 +345,10 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
   const isRemote = !!useRemoteServerStore.getState().activeRemoteTextModelId;
   const activeTools = enabledTools;
   const basePrompt = await injectRagContext(conversation?.projectId, messageText, rawPrompt);
-  const systemPrompt = (!isRemote && activeTools.length > 0) ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt;
+  const systemPrompt = applyGemma4ThinkToken(
+    (!isRemote && activeTools.length > 0) ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt,
+    isRemote,
+  );
   const { prefix, filtered } = applyCompactionPrefix(conversation, systemPrompt, messagesUpToUser);
   try {
     await generateWithCompactionRetry({ id: targetConversationId, prompt: systemPrompt, messages: [...prefix, ...filtered] }, activeTools, conversation?.projectId);

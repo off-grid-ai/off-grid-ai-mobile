@@ -240,12 +240,13 @@ export const useChatScreen = () => {
     ttsStreamRef.current = { nextPos: 0, pending: [], isPlaying: false };
     const tts = useTTSStore.getState();
     if (tts.settings.interfaceMode !== 'audio') return;
-    if (!tts.kokoroReady && !tts.isModelLoaded) return;
     const conv = useChatStore.getState().conversations.find((c) => c.id === activeConversationId);
     const last = (conv?.messages ?? []).at(-1);
     if (!last || last.role !== 'assistant' || last.isSystemInfo || last.toolCalls?.length || last.audioPath) return;
-    // Stamp the message as audio-mode and speak any remaining text not yet spoken
+    // Always stamp as audio-mode so the bubble renders correctly even if TTS engine isn't ready
     useChatStore.getState().updateMessageAudio(activeConversationId, last.id, { isAudioModeMessage: true });
+    // Only speak if a TTS engine is available
+    if (!tts.kokoroReady && !tts.isModelLoaded) return;
     const remaining = last.content.slice(alreadySpoken).trim();
     if (remaining) {
       useTTSStore.getState().speak(remaining, last.id);

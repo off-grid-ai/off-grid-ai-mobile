@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, TextInput, TouchableOpacity, Animated, StyleSheet } from 'react-native';
+import { View, TextInput, TouchableOpacity, Animated, StyleSheet, Text } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { ImageModeState, MediaAttachment } from '../../types';
@@ -196,6 +196,54 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     />
   );
 
+  // ─── Audio mode: simplified mic-only layout ─────────────────────────────────
+  if (isAudioMode) {
+    const audioStopButton = isGenerating && onStop ? (
+      <TouchableOpacity
+        testID="stop-button"
+        style={styles.circleButton}
+        onPress={handleStop}
+      >
+        <Icon name="square" size={18} color={colors.background} />
+      </TouchableOpacity>
+    ) : null;
+
+    return (
+      <View style={styles.container}>
+        <QueueRow
+          queueCount={queueCount}
+          queuedTexts={queuedTexts}
+          onClearQueue={onClearQueue}
+        />
+        <View style={styles.audioModeRow}>
+          <Text style={[styles.audioModeHint, isRecording && styles.audioModeHintRecording]}>
+            {isRecording ? 'Release to send' : isTranscribing ? 'Transcribing...' : 'Hold to speak'}
+          </Text>
+          {audioStopButton}
+          <VoiceRecordButton
+            isRecording={isRecording}
+            isAvailable={voiceAvailable}
+            isModelLoading={isModelLoading}
+            isTranscribing={isTranscribing}
+            partialResult={partialResult}
+            error={error}
+            disabled={disabled || !!(isGenerating && onStop)}
+            onStartRecording={startRecording}
+            onStopRecording={stopRecording}
+            onCancelRecording={cancelRecording}
+          />
+        </View>
+        <CustomAlert
+          visible={alertState.visible}
+          title={alertState.title}
+          message={alertState.message}
+          buttons={alertState.buttons}
+          onClose={() => setAlertState(hideAlert())}
+        />
+      </View>
+    );
+  }
+
   const content = (
     <View style={styles.container}>
       <AttachmentPreview attachments={attachments} onRemove={removeAttachment} />
@@ -307,4 +355,5 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 const spotlightStyles = StyleSheet.create({
   centered: { alignSelf: 'center' },
 });
+
 

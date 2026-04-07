@@ -232,6 +232,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     borderColor: colors.border,
     padding: SPACING.md,
     maxWidth: '88%' as const,
+    minWidth: 220,
     alignSelf: 'flex-start' as const,
     gap: SPACING.sm,
     overflow: 'hidden' as const,

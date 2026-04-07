@@ -4,7 +4,6 @@ import { ChatMessage } from '../../components';
 import { AudioMessageBubble } from '../../components/AudioMessageBubble';
 import { TTSButton } from '../../components/TTSButton';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
-import { useTTSStore } from '../../stores/ttsStore';
 import { stripControlTokens } from '../../utils/messageContent';
 import { Message } from '../../types';
 import '../../types/tts';
@@ -59,13 +58,12 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
   onGenerateImage,
   onImagePress,
 }) => {
-  const ttsMode = useTTSStore((s) => s.settings.interfaceMode);
   const msg = item as Message;
   const animateEntry = animateLastN > 0 && index >= displayMessagesLength - animateLastN;
   const isStreamingThis = item.id === 'streaming';
 
-  // Audio Mode: user voice message (audio attachment on user msg)
-  if (msg.role === 'user' && ttsMode === 'audio') {
+  // User voice message: always show as audio bubble (playable in both chat and audio mode)
+  if (msg.role === 'user') {
     const audioAtt = msg.attachments?.find((a) => a.type === 'audio');
     if (audioAtt) {
       const bubble = (

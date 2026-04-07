@@ -166,8 +166,9 @@ export const useChatScreen = () => {
   useEffect(() => {
     const { conversationId, projectId } = route.params || {};
     if (conversationId) { setActiveConversation(conversationId); }
-    // Use modelId from activeModelInfo for both local and remote models
+    // Use text model id if available; fall back to image model id for image-only users
     else if (activeModelInfo.modelId) { createConversation(activeModelInfo.modelId, undefined, projectId); }
+    else if (activeImageModelId) { createConversation(activeImageModelId, undefined, projectId); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.params?.conversationId, route.params?.projectId]);
 

@@ -420,7 +420,7 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
       </View>
 
       {/* Transcript toggle — only for user voice recordings */}
-      {isUser && transcript ? (
+      {transcript ? (
         <TouchableOpacity
           onPress={() => setShowTranscript((v) => !v)}
           style={styles.transcriptToggle}

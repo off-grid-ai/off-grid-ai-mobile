@@ -65,6 +65,7 @@ export const useChatScreen = () => {
   // Stop TTS when navigating away, app backgrounded, or screen locked
   useEffect(() => {
     const unsubscribe = navigation.addListener('blur', () => {
+      console.log('[ChatScreen] blur — stopping TTS');
       useTTSStore.getState().stop();
     });
     const appStateSub = AppState.addEventListener('change', (nextState) => {

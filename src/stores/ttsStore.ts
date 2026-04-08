@@ -238,6 +238,7 @@ export const useTTSStore = create<TTSState>()(
       },
 
       stop: () => {
+        logger.log('[TTS Store] stop() called, isSpeaking:', get().isSpeaking);
         kokoroRef.stop(true);
         ttsService.stop();
         set({ isSpeaking: false, isPaused: false, isAudioPlaying: false, currentAmplitude: 0, playbackElapsed: 0, isGeneratingAudio: false, currentMessageId: null });

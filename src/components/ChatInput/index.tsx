@@ -14,6 +14,7 @@ import { useVoiceInput } from './Voice';
 import { QuickSettingsPopover, AttachPickerPopover } from './Popovers';
 import { useKeyboardAwarePopover } from './useKeyboardAwarePopover';
 import { useTTSStore } from '../../stores/ttsStore';
+import { useAppStore } from '../../stores';
 
 interface ChatInputProps {
   onSend: (message: string, attachments?: MediaAttachment[], imageMode?: ImageModeState) => void;
@@ -116,6 +117,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     } : undefined,
   });
 
+  const { settings: appSettings, updateSettings: updateAppSettings } = useAppStore();
+  const thinkingEnabled = appSettings.thinkingEnabled;
+
+  const handleThinkingToggle = () => {
+    triggerHaptic('impactLight');
+    updateAppSettings({ thinkingEnabled: !thinkingEnabled });
+  };
+
   const canSend = (message.trim().length > 0 || attachments.length > 0) && !disabled;
 
   const handleSend = () => {
@@ -217,12 +226,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           onClearQueue={onClearQueue}
         />
         <View style={styles.audioModeRow}>
-          {/* Hint text — expands to fill space */}
-          <Text style={[styles.audioModeHint, isRecording && styles.audioModeHintRecording]}>
-            {isRecording ? 'Release to send' : isTranscribing ? 'Transcribing...' : 'Hold to speak'}
-          </Text>
-
-          {/* Attach + Settings — right side, next to mic so popovers open near them */}
+          {/* Flat settings — all directly accessible in the audio bar */}
           <TouchableOpacity
             ref={attachPicker.triggerRef}
             style={styles.pillIconButton}
@@ -232,14 +236,45 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           >
             <Icon name="plus" size={20} color={disabled ? colors.textMuted : colors.textSecondary} />
           </TouchableOpacity>
+          {/* TTS mode toggle — switch between audio and chat mode (always visible) */}
           <TouchableOpacity
-            ref={quickSettings.triggerRef}
             style={styles.pillIconButton}
-            onPress={handleQuickSettingsPress}
-            disabled={disabled}
+            onPress={() => {
+              triggerHaptic('impactLight');
+              useTTSStore.getState().updateSettings({ interfaceMode: 'chat' });
+            }}
             hitSlop={{ top: 4, bottom: 4, left: 8, right: 8 }}
           >
-            <Icon name="settings" size={18} color={disabled ? colors.textMuted : colors.textSecondary} />
+            <Icon name="message-square" size={18} color={colors.textSecondary} />
+          </TouchableOpacity>
+          {/* Image Gen — always visible; disabled when no image model loaded */}
+          <TouchableOpacity
+            style={styles.pillIconButton}
+            onPress={handleImageModeToggle}
+            disabled={disabled || !imageModelLoaded}
+            hitSlop={{ top: 4, bottom: 4, left: 8, right: 8 }}
+          >
+            <Icon name="image" size={18} color={imageMode === 'force' ? colors.primary : !imageModelLoaded ? colors.textMuted : colors.textSecondary} />
+          </TouchableOpacity>
+          {/* Thinking toggle — only when model supports it */}
+          {supportsThinking && (
+            <TouchableOpacity
+              style={styles.pillIconButton}
+              onPress={handleThinkingToggle}
+              disabled={disabled}
+              hitSlop={{ top: 4, bottom: 4, left: 8, right: 8 }}
+            >
+              <Icon name="zap" size={18} color={thinkingEnabled ? colors.primary : (disabled ? colors.textMuted : colors.textSecondary)} />
+            </TouchableOpacity>
+          )}
+          {/* Tools — always visible; disabled when model doesn't support tool calling */}
+          <TouchableOpacity
+            style={styles.pillIconButton}
+            onPress={() => { triggerHaptic('impactLight'); onToolsPress?.(); }}
+            disabled={disabled || !supportsToolCalling}
+            hitSlop={{ top: 4, bottom: 4, left: 8, right: 8 }}
+          >
+            <Icon name="tool" size={18} color={enabledToolCount > 0 ? colors.primary : !supportsToolCalling ? colors.textMuted : colors.textSecondary} />
           </TouchableOpacity>
 
           {/* Stop replaces mic while generating; mic shows otherwise */}
@@ -270,6 +305,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           onPhoto={handleVisionPress}
           onDocument={handlePickDocument}
         />
+        {/* QuickSettings kept for edge cases (popover opened before mode switch) */}
         <QuickSettingsPopover
           visible={quickSettings.visible}
           onClose={quickSettings.hide}
@@ -343,6 +379,19 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 color={disabled ? colors.textMuted : colors.textSecondary}
               />
             </TouchableOpacity>
+
+            {/* Thinking toggle — only when model supports it */}
+            {supportsThinking && (
+              <TouchableOpacity
+                testID="thinking-toggle-button"
+                style={styles.pillIconButton}
+                onPress={handleThinkingToggle}
+                disabled={disabled}
+                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+              >
+                <Icon name="zap" size={18} color={thinkingEnabled ? colors.primary : (disabled ? colors.textMuted : colors.textSecondary)} />
+              </TouchableOpacity>
+            )}
 
             {/* Quick settings button */}
             <TouchableOpacity

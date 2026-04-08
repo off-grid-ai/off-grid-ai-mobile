@@ -121,6 +121,7 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
   const handleTTSToggle = () => {
     triggerHaptic('impactLight');
     if (!ttsAvailable) { onClose(); navigation.navigate('TTSSettings'); return; }
+    onClose();
     const next = ttsMode === 'audio' ? 'chat' : 'audio';
     updateTTSSettings({ interfaceMode: next });
     if (next === 'audio' && !isModelLoaded) { loadModels(); }

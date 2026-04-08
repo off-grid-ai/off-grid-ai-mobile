@@ -52,6 +52,10 @@ function extractChannelThinking(rawContent: string): { reasoningContent: string 
   // Qwen channel format: <|channel|>analysis<|message|>[thinking]<|channel|>final<|message|>[response]
   const qwen = sliceThinkingBlock(rawContent, '<|channel|>analysis<|message|>', '<|channel|>final<|message|>');
   if (qwen) return qwen;
+  // <think>...</think> format (Qwen 3.5, DeepSeek, etc.)
+  const thinkTags = sliceThinkingBlock(rawContent, '<think>', '</think>');
+  if (thinkTags) return thinkTags;
+
   return { reasoningContent: undefined, responseContent: rawContent };
 }
 

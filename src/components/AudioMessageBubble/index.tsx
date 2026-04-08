@@ -404,22 +404,7 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
         )}
       </View>
 
-      {/* Full-width seekable progress bar */}
-      {isThisActive && (
-        <TouchableOpacity
-          activeOpacity={1}
-          onPress={handleSeekBarTap}
-          onLayout={(e) => { seekBarWidth.current = e.nativeEvent.layout.width; }}
-          style={styles.seekBarTouchable}
-        >
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` as any, backgroundColor: colors.primary }]} />
-          </View>
-          <View style={[styles.progressThumb, { left: `${Math.round(progress * 100)}%` as any, backgroundColor: colors.primary }]} />
-        </TouchableOpacity>
-      )}
-
-      {/* Transcript toggle — only for user voice recordings */}
+      {/* Transcript toggle */}
       {transcript ? (
         <TouchableOpacity
           onPress={() => setShowTranscript((v) => !v)}
@@ -441,6 +426,21 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
           <MarkdownText>{transcript}</MarkdownText>
         </View>
       ) : null}
+
+      {/* Full-width seekable progress bar — below transcript toggle */}
+      {isThisActive && (
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={handleSeekBarTap}
+          onLayout={(e) => { seekBarWidth.current = e.nativeEvent.layout.width; }}
+          style={styles.seekBarTouchable}
+        >
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` as any, backgroundColor: colors.primary }]} />
+          </View>
+          <View style={[styles.progressThumb, { left: `${Math.round(progress * 100)}%` as any, backgroundColor: colors.primary }]} />
+        </TouchableOpacity>
+      )}
     </View>
   );
 };

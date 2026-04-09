@@ -176,9 +176,8 @@ const createThinkingStyles = (colors: ThemeColors) => ({
   },
   /** Constrains the ThinkingBlock when rendered outside a message bubble (e.g. ToolCallWithThinking) */
   thinkingBlockWrapper: {
-    maxWidth: '85%' as const,
+    width: '88%' as const,
     alignSelf: 'flex-start' as const,
-    width: '100%' as const,
   },
   thinkingHeader: {
     flexDirection: 'row' as const,

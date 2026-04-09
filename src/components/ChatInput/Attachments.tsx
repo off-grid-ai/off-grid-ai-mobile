@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 let _attachmentIdSeq = 0;
 const nextAttachmentId = () => `${Date.now()}-${(++_attachmentIdSeq).toString(36)}`;
@@ -74,16 +74,10 @@ export const __resetAttachmentPickerForTests = () => {
 export function useAttachments(setAlertState: (state: AlertState) => void) {
   const [attachments, setAttachments] = useState<MediaAttachment[]>([]);
   const [isPickerActive, setIsPickerActive] = useState(Boolean(globalPickerRequest));
-  const activeRequestRef = useRef<ActivePickerRequest | null>(globalPickerRequest);
 
   useEffect(() => subscribePickerState((request) => {
-    activeRequestRef.current = request;
     setIsPickerActive(Boolean(request));
   }), []);
-
-  const logPicker = (message: string, extra?: Record<string, unknown>) => {
-    logger.log('[ChatInput][Attachments]', message, extra ?? {});
-  };
 
   const runPicker = async (source: string, action: (requestId: number) => Promise<void>) => {
     if (globalPickerRequest) {
@@ -94,7 +88,7 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
     }
 
     if (globalPickerRequest) {
-      logPicker('picker-blocked-busy', {
+      logger.warn('[ChatInput][Attachments]', 'picker-blocked-busy', {
         source,
         activeRequest: `${globalPickerRequest.source}#${globalPickerRequest.id}`,
         durationMs: Date.now() - globalPickerRequest.startedAt,
@@ -107,31 +101,14 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
     globalPickerRequest = request;
     notifyPickerState();
     startPickerWatchdog(request);
-    logPicker('picker-start', { requestId, source });
     try {
       await action(requestId);
-      logPicker('picker-settled', { requestId, source, durationMs: Date.now() - startedAt });
-    } catch (error) {
-      logPicker('picker-threw', {
-        requestId,
-        source,
-        durationMs: Date.now() - startedAt,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
     } finally {
-      const activeRequest = globalPickerRequest;
       clearPickerWatchdog();
       if (globalPickerRequest?.id === requestId) {
         globalPickerRequest = null;
         notifyPickerState();
       }
-      logPicker('picker-lock-released', {
-        requestId,
-        source,
-        durationMs: Date.now() - startedAt,
-        activeRequestAtRelease: activeRequest ? `${activeRequest.source}#${activeRequest.id}` : null,
-      });
     }
   };
 
@@ -147,35 +124,21 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
         height: asset.height,
         fileName: asset.fileName,
       }));
-    logPicker('attachments-added', {
-      count: newAttachments.length,
-      attachmentIds: newAttachments.map(attachment => attachment.id),
-      uris: newAttachments.map(attachment => attachment.uri),
-    });
     setAttachments(prev => [...prev, ...newAttachments]);
   };
 
   const removeAttachment = (id: string) => {
-    logPicker('attachment-removed', { attachmentId: id });
     setAttachments(prev => prev.filter(a => a.id !== id));
   };
 
   const pickFromLibrary = async () => {
     await runPicker('photo-library', async (requestId) => {
       try {
-        logPicker('launch-image-library', { requestId });
         const result = await launchImageLibrary({ mediaType: 'photo', quality: 0.8, maxWidth: 1024, maxHeight: 1024 });
-        logPicker('image-library-result', {
-          requestId,
-          didCancel: (result as any)?.didCancel,
-          assetCount: result.assets?.length ?? 0,
-          errorCode: (result as any)?.errorCode ?? null,
-          errorMessage: (result as any)?.errorMessage ?? null,
-        });
         if (result.assets && result.assets.length > 0) addAttachments(result.assets);
       } catch (pickError) {
         logger.error('Error picking image:', pickError);
-        logPicker('image-library-error', {
+        logger.warn('[ChatInput][Attachments]', 'image-library-error', {
           requestId,
           error: pickError instanceof Error ? pickError.message : String(pickError),
         });
@@ -186,19 +149,11 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
   const pickFromCamera = async () => {
     await runPicker('camera', async (requestId) => {
       try {
-        logPicker('launch-camera', { requestId });
         const result = await launchCamera({ mediaType: 'photo', quality: 0.8, maxWidth: 1024, maxHeight: 1024 });
-        logPicker('camera-result', {
-          requestId,
-          didCancel: (result as any)?.didCancel,
-          assetCount: result.assets?.length ?? 0,
-          errorCode: (result as any)?.errorCode ?? null,
-          errorMessage: (result as any)?.errorMessage ?? null,
-        });
         if (result.assets && result.assets.length > 0) addAttachments(result.assets);
       } catch (cameraError) {
         logger.error('Error taking photo:', cameraError);
-        logPicker('camera-error', {
+        logger.warn('[ChatInput][Attachments]', 'camera-error', {
           requestId,
           error: cameraError instanceof Error ? cameraError.message : String(cameraError),
         });
@@ -215,13 +170,12 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
     }
 
     if (globalPickerRequest) {
-      logPicker('image-alert-blocked-busy', {
+      logger.warn('[ChatInput][Attachments]', 'image-alert-blocked-busy', {
         activeRequest: `${globalPickerRequest.source}#${globalPickerRequest.id}`,
         durationMs: Date.now() - globalPickerRequest.startedAt,
       });
       return;
     }
-    logPicker('image-alert-open');
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         {
@@ -230,20 +184,12 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
         },
         (buttonIndex) => {
           if (buttonIndex === 0) {
-            logPicker('image-alert-camera-pressed');
-            setTimeout(() => {
-              logPicker('image-alert-camera-timeout-fired');
-              pickFromCamera();
-            }, 300);
+            setTimeout(pickFromCamera, 300);
             return;
           }
 
           if (buttonIndex === 1) {
-            logPicker('image-alert-library-pressed');
-            setTimeout(() => {
-              logPicker('image-alert-library-timeout-fired');
-              pickFromLibrary();
-            }, 300);
+            setTimeout(pickFromLibrary, 300);
           }
         },
       );
@@ -256,23 +202,15 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
         {
           text: 'Camera',
           onPress: () => {
-            logPicker('image-alert-camera-pressed');
             setAlertState(hideAlert());
-            setTimeout(() => {
-              logPicker('image-alert-camera-timeout-fired');
-              pickFromCamera();
-            }, 300);
+            setTimeout(pickFromCamera, 300);
           },
         },
         {
           text: 'Photo Library',
           onPress: () => {
-            logPicker('image-alert-library-pressed');
             setAlertState(hideAlert());
-            setTimeout(() => {
-              logPicker('image-alert-library-timeout-fired');
-              pickFromLibrary();
-            }, 300);
+            setTimeout(pickFromLibrary, 300);
           },
         },
       ],
@@ -282,22 +220,15 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
   const handlePickDocument = async () => {
     await runPicker('document', async (requestId) => {
       try {
-        logPicker('launch-document-picker', { requestId });
         const result = await pick({
           type: [types.allFiles],
           allowMultiSelection: false,
           presentationStyle: 'fullScreen',
         });
-        logPicker('document-picker-result', { requestId, resultCount: result.length });
         const file = result[0];
-        if (!file) {
-          logPicker('document-picker-empty', { requestId });
-          return;
-        }
+        if (!file) return;
         const fileName = file.name || 'document';
-        logPicker('document-picked', { requestId, fileName, uri: file.uri, type: file.type ?? null, size: file.size ?? null });
         if (!documentService.isSupported(fileName)) {
-          logPicker('document-unsupported', { requestId, fileName });
           setAlertState(showAlert(
             'Unsupported File',
             `"${fileName}" is not supported. Supported types: txt, md, csv, json, pdf, and code files.`,
@@ -306,24 +237,11 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
           return;
         }
         const attachment = await documentService.processDocumentFromPath(file.uri, fileName);
-        if (attachment) {
-          logPicker('document-processed', {
-            requestId,
-            attachmentId: attachment.id,
-            fileName: attachment.fileName ?? null,
-            uri: attachment.uri,
-          });
-          setAttachments(prev => [...prev, attachment]);
-        } else {
-          logPicker('document-processed-null', { requestId, fileName });
-        }
+        if (attachment) setAttachments(prev => [...prev, attachment]);
       } catch (pickError: any) {
-        if (isErrorWithCode(pickError) && pickError.code === errorCodes.OPERATION_CANCELED) {
-          logPicker('document-picker-cancelled', { requestId });
-          return;
-        }
+        if (isErrorWithCode(pickError) && pickError.code === errorCodes.OPERATION_CANCELED) return;
         logger.error('Error picking document:', pickError);
-        logPicker('document-picker-error', {
+        logger.warn('[ChatInput][Attachments]', 'document-picker-error', {
           requestId,
           message: pickError?.message || null,
           code: pickError?.code || null,
@@ -333,10 +251,7 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
     });
   };
 
-  const clearAttachments = () => {
-    logPicker('attachments-cleared', { count: attachments.length });
-    setAttachments([]);
-  };
+  const clearAttachments = () => setAttachments([]);
 
   return { attachments, isPickerActive, removeAttachment, clearAttachments, handlePickImage, handlePickDocument };
 }

@@ -968,7 +968,7 @@ describe('ChatInput', () => {
       });
 
       const onSend = jest.fn();
-      const { getByTestId, getByText, queryByTestId } = render(
+      const { getByTestId, queryByTestId } = render(
         <ChatInput {...defaultProps} onSend={onSend} supportsVision={true} />
       );
 
@@ -1252,7 +1252,7 @@ describe('ChatInput', () => {
       });
 
       const onSend = jest.fn();
-      const { getByTestId, getByText } = render(
+      const { getByTestId } = render(
         <ChatInput {...defaultProps} onSend={onSend} supportsVision={true} />
       );
 

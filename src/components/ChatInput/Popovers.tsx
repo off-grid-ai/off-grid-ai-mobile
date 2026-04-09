@@ -6,7 +6,6 @@ import { ImageModeState } from '../../types';
 import { useAppStore } from '../../stores';
 import { triggerHaptic } from '../../utils/haptics';
 import { FONTS } from '../../constants';
-import logger from '../../utils/logger';
 
 // ─── Shared Styles ──────────────────────────────────────────────────────────
 
@@ -208,11 +207,7 @@ export const AttachPickerPopover: React.FC<AttachPickerPopoverProps> = ({
               <TouchableOpacity
                 testID="attach-photo"
                 style={popoverStyles.row}
-                onPress={() => {
-                  logger.log('[ChatInput][AttachPopover]', 'photo-row-pressed');
-                  onClose();
-                  onPhoto();
-                }}
+                onPress={() => { onClose(); onPhoto(); }}
               >
                 <Icon name="camera" size={16} color={supportsVision ? colors.primary : colors.textMuted} />
                 <Text style={[popoverStyles.rowLabel, { color: colors.text }]}>Photo</Text>
@@ -220,11 +215,7 @@ export const AttachPickerPopover: React.FC<AttachPickerPopoverProps> = ({
               <TouchableOpacity
                 testID="attach-document"
                 style={popoverStyles.row}
-                onPress={() => {
-                  logger.log('[ChatInput][AttachPopover]', 'document-row-pressed');
-                  onClose();
-                  onDocument();
-                }}
+                onPress={() => { onClose(); onDocument(); }}
               >
                 <Icon name="file" size={16} color={colors.text} />
                 <Text style={[popoverStyles.rowLabel, { color: colors.text }]}>Document</Text>

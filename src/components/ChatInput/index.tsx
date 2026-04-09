@@ -13,7 +13,6 @@ import { AttachmentPreview, useAttachments } from './Attachments';
 import { useVoiceInput } from './Voice';
 import { QuickSettingsPopover, AttachPickerPopover } from './Popovers';
 import { useKeyboardAwarePopover } from './useKeyboardAwarePopover';
-import logger from '../../utils/logger';
 
 interface ChatInputProps {
   onSend: (message: string, attachments?: MediaAttachment[], imageMode?: ImageModeState) => void;
@@ -68,8 +67,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [message, setMessage] = useState('');
   const [imageMode, setImageMode] = useState<ImageModeState>('auto');
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
-  const quickSettings = useKeyboardAwarePopover(undefined, 'quick-settings-popover');
-  const attachPicker = useKeyboardAwarePopover(undefined, 'attach-popover');
+  const quickSettings = useKeyboardAwarePopover();
+  const attachPicker = useKeyboardAwarePopover();
   const inputRef = useRef<TextInput>(null);
   const hasText = message.length > 0;
   const iconsAnim = useRef(new Animated.Value(0)).current;
@@ -117,7 +116,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handleVisionPress = () => {
-    logger.log('[ChatInput]', 'handle-vision-press', { supportsVision, isPickerActive });
     if (!supportsVision) {
       setAlertState(showAlert(
         'Vision Not Supported',
@@ -140,12 +138,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handleQuickSettingsPress = () => {
-    logger.log('[ChatInput]', 'quick-settings-pressed');
     quickSettings.show();
   };
 
   const handleAttachPress = () => {
-    logger.log('[ChatInput]', 'attach-pressed', { disabled: !!disabled, isPickerActive, hasText });
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         {
@@ -154,13 +150,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         },
         (buttonIndex) => {
           if (buttonIndex === 0) {
-            logger.log('[ChatInput][AttachPopover]', 'photo-row-pressed');
             handleVisionPress();
             return;
           }
 
           if (buttonIndex === 1) {
-            logger.log('[ChatInput][AttachPopover]', 'document-row-pressed');
             handlePickDocument();
           }
         },

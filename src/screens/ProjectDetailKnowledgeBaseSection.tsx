@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, Switch, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, Switch, ActivityIndicator, ScrollView, Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
-import { pick } from '@react-native-documents/picker';
 import { Button } from '../components/Button';
 import { showAlert, AlertState } from '../components/CustomAlert';
 import { ragService } from '../services/rag';
 import type { RagDocument } from '../services/rag';
+import { pickDocumentWithCoordinator } from '../utils/documentPickerCoordinator';
 
 
 function decodeFilePath(filePath: string): string {
@@ -43,7 +43,11 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colo
 
   const handleAddDocument = async () => {
     try {
-      const files = await pick({ mode: 'import', allowMultiSelection: true });
+      const files = await pickDocumentWithCoordinator('project-knowledge-base', {
+        mode: 'import',
+        allowMultiSelection: true,
+        ...(Platform.OS === 'ios' ? { presentationStyle: 'fullScreen' as const } : {}),
+      });
       if (!files?.length) return;
 
       for (let i = 0; i < files.length; i++) {

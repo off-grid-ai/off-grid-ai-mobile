@@ -1,19 +1,29 @@
+diff --git a/node_modules/whisper.rn/android/.settings/org.eclipse.buildship.core.prefs b/node_modules/whisper.rn/android/.settings/org.eclipse.buildship.core.prefs
+new file mode 100644
+index 0000000..1675490
+--- /dev/null
++++ b/node_modules/whisper.rn/android/.settings/org.eclipse.buildship.core.prefs
+@@ -0,0 +1,2 @@
++connection.project.dir=../../../android
++eclipse.preferences.version=1
 diff --git a/node_modules/whisper.rn/android/src/main/java/com/rnwhisper/WhisperContext.java b/node_modules/whisper.rn/android/src/main/java/com/rnwhisper/WhisperContext.java
-index 1234567..abcdefg 100644
+index a056c22..f4781e9 100644
 --- a/node_modules/whisper.rn/android/src/main/java/com/rnwhisper/WhisperContext.java
 +++ b/node_modules/whisper.rn/android/src/main/java/com/rnwhisper/WhisperContext.java
-@@ -466,7 +466,13 @@ public class WhisperContext {
-
+@@ -465,6 +465,16 @@ public class WhisperContext {
+ 
    public void release() {
      stopCurrentTranscribe();
--    freeContext(id, context);
 +    try {
 +      if (rootFullHandler != null) rootFullHandler.join();
 +      if (fullHandler != null) fullHandler.join();
 +    } catch (InterruptedException e) {
++      // join() interrupted before threads finished — freeing context anyway to avoid
++      // a memory leak. The race window here is extremely unlikely in practice since
++      // nothing in this codebase calls Thread.interrupt() on the release thread.
++      Log.w(NAME, "release: thread join interrupted, freeing context anyway");
 +      Thread.currentThread().interrupt();
 +    }
-+    freeContext(id, context);
+     freeContext(id, context);
    }
-
-   static {
+ 

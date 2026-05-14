@@ -38,8 +38,12 @@ export const ChatScreen: React.FC = () => {
   useEffect(() => subscribeSharePrompt(() => setSharePromptVisible(true)), []);
 
   const [proAhaVisible, setProAhaVisible] = useState(false);
-  // Session cap: max 1 PRO sheet per ChatScreen mount
   const proAhaShownThisSession = useRef(false);
+  useEffect(() => {
+    // Reset cycle on each new chat session so PRO sheet can fire again
+    useAppStore.getState().setProAhaTriggeredBy(null);
+    proAhaShownThisSession.current = false;
+  }, []);
   useEffect(() => subscribeProPrompt(() => {
     if (proAhaShownThisSession.current) return;
     proAhaShownThisSession.current = true;

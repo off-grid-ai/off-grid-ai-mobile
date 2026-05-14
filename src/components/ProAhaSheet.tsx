@@ -1,11 +1,10 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AppSheet } from './AppSheet';
 import { useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
-import { useAppStore } from '../stores/appStore';
 
 interface ProAhaSheetProps {
   visible: boolean;
@@ -15,15 +14,6 @@ interface ProAhaSheetProps {
 
 export const ProAhaSheet: React.FC<ProAhaSheetProps> = ({ visible, onClose, onRegister }) => {
   const styles = useThemedStyles(createStyles);
-  const incrementProAhaShowCount = useAppStore(s => s.incrementProAhaShowCount);
-  const setLastProAhaShownAt = useAppStore(s => s.setLastProAhaShownAt);
-
-  useEffect(() => {
-    if (visible) {
-      incrementProAhaShowCount();
-      setLastProAhaShownAt(Date.now());
-    }
-  }, [visible]);
 
   const handleCta = () => {
     onClose();

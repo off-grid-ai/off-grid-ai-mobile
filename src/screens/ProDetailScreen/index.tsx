@@ -1,23 +1,13 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import React from 'react';
+import { View, Text, TouchableOpacity, ScrollView, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors, ThemeShadows } from '../../theme';
 import { SPACING, TYPOGRAPHY } from '../../constants';
-import { useAppStore } from '../../stores/appStore';
 import { MadeWithLove } from '../../components/MadeWithLove';
-import { submitProEmail } from '../../utils/proPrompt';
-import logger from '../../utils/logger';
+import { PRO_URL } from '../../utils/proPrompt';
 
 const FEATURES = [
   { icon: 'mic', title: 'Voice AI + Personas', desc: 'Talk to named AI assistants with personality and memory.' },
@@ -31,104 +21,44 @@ export const ProDetailScreen: React.FC = () => {
   const navigation = useNavigation();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const setHasRegisteredPro = useAppStore(s => s.setHasRegisteredPro);
-
-  const [email, setEmail] = useState('');
-  const [submitted, setSubmitted] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  const isValidEmail = email.includes('@') && email.includes('.');
-
-  const handleSubmit = async () => {
-    if (!isValidEmail || loading) return;
-    setLoading(true);
-    logger.log('[ProDetail] Submitting email:', email);
-    try {
-      const result = await submitProEmail(email);
-      logger.log('[ProDetail] Submit success:', JSON.stringify(result));
-    } catch (err) {
-      logger.error('[ProDetail] Submit failed:', err);
-    } finally {
-      setHasRegisteredPro(true);
-      setSubmitted(true);
-      setLoading(false);
-    }
-  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Icon name="arrow-left" size={20} color={colors.text} />
-          </TouchableOpacity>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Icon name="arrow-left" size={20} color={colors.text} />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={styles.flex} contentContainerStyle={styles.content}>
+        <Text style={styles.title}>Off Grid PRO</Text>
+        <Text style={styles.subtitle}>Lifetime access - Coming soon</Text>
+
+        <View style={styles.featureList}>
+          {FEATURES.map(f => (
+            <View key={f.title} style={styles.featureRow}>
+              <View style={styles.featureIconWrap}>
+                <Icon name={f.icon} size={14} color={colors.textSecondary} />
+              </View>
+              <View style={styles.featureText}>
+                <Text style={styles.featureTitle}>{f.title}</Text>
+                <Text style={styles.featureDesc}>{f.desc}</Text>
+              </View>
+            </View>
+          ))}
         </View>
 
-        <ScrollView
-          style={styles.flex}
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Title */}
-          <Text style={styles.title}>Off Grid PRO</Text>
-          <Text style={styles.subtitle}>Lifetime access - Coming soon</Text>
+        <Text style={styles.pitch}>
+          The first 100 get lifetime PRO at the lowest price we'll ever offer.
+          Register now - we'll send your purchase link when it's live.
+        </Text>
 
-          {/* Features */}
-          <View style={styles.featureList}>
-            {FEATURES.map(f => (
-              <View key={f.title} style={styles.featureRow}>
-                <View style={styles.featureIconWrap}>
-                  <Icon name={f.icon} size={14} color={colors.textSecondary} />
-                </View>
-                <View style={styles.featureText}>
-                  <Text style={styles.featureTitle}>{f.title}</Text>
-                  <Text style={styles.featureDesc}>{f.desc}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
+        <TouchableOpacity style={styles.ctaButton} onPress={() => Linking.openURL(PRO_URL)}>
+          <Text style={styles.ctaText}>I am in 🔥</Text>
+        </TouchableOpacity>
 
-          {/* Pitch */}
-          <Text style={styles.pitch}>
-            The first 100 get lifetime PRO at the lowest price we'll ever offer.
-            Register now - we'll send your purchase link when it's live.
-          </Text>
-
-          {/* Email input or confirmation */}
-          {submitted ? (
-            <View style={styles.successRow}>
-              <Icon name="check-circle" size={16} color={colors.primary} />
-              <Text style={styles.successText}>You're in. We'll be in touch.</Text>
-            </View>
-          ) : (
-            <View style={styles.inputSection}>
-              <TextInput
-                style={styles.input}
-                placeholder="your@email.com"
-                placeholderTextColor={colors.textMuted}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              <TouchableOpacity
-                style={[styles.ctaButton, (!isValidEmail || loading) && styles.ctaButtonDisabled]}
-                onPress={handleSubmit}
-                disabled={!isValidEmail || loading}
-              >
-                <Text style={styles.ctaText}>{loading ? 'Registering...' : 'I am in 🔥'}</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          <MadeWithLove />
-        </ScrollView>
-      </KeyboardAvoidingView>
+        <MadeWithLove />
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -171,9 +101,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     alignItems: 'center' as const,
     paddingTop: 2,
   },
-  featureText: {
-    flex: 1,
-  },
+  featureText: { flex: 1 },
   featureTitle: {
     ...TYPOGRAPHY.body,
     color: colors.text,
@@ -189,40 +117,15 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     lineHeight: 20,
     marginBottom: SPACING.xl,
   },
-  inputSection: {
-    gap: SPACING.sm,
-  },
-  input: {
-    ...TYPOGRAPHY.body,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
-    backgroundColor: colors.surface,
-  },
   ctaButton: {
     paddingVertical: SPACING.md,
     backgroundColor: colors.primary,
     borderRadius: 8,
     alignItems: 'center' as const,
-  },
-  ctaButtonDisabled: {
-    opacity: 0.4,
+    marginBottom: SPACING.xl,
   },
   ctaText: {
     ...TYPOGRAPHY.body,
     color: colors.background,
-  },
-  successRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: SPACING.sm,
-    paddingVertical: SPACING.md,
-  },
-  successText: {
-    ...TYPOGRAPHY.body,
-    color: colors.primary,
   },
 });

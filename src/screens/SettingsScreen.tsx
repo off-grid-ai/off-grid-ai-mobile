@@ -42,7 +42,6 @@ export const SettingsScreen: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const setOnboardingComplete = useAppStore((s) => s.setOnboardingComplete);
-  const hasRegisteredPro = useAppStore((s) => s.hasRegisteredPro);
   const [proAhaVisible, setProAhaVisible] = useState(false);
   const themeMode = useAppStore((s) => s.themeMode);
   const setThemeMode = useAppStore((s) => s.setThemeMode);
@@ -182,30 +181,19 @@ export const SettingsScreen: React.FC = () => {
         <AnimatedEntry index={6} staggerMs={40} trigger={focusTrigger}>
           <TouchableOpacity
             style={styles.proCard}
-            onPress={() => !hasRegisteredPro && navigation.navigate('ProDetail')}
-            activeOpacity={hasRegisteredPro ? 1 : 0.75}
+            onPress={() => navigation.navigate('ProDetail')}
+            activeOpacity={0.75}
           >
             <View style={styles.proCardContent}>
               <View style={styles.proIconContainer}>
                 <Icon name="award" size={16} color={styles.proIcon.color} />
               </View>
               <View style={styles.proCardText}>
-                {hasRegisteredPro ? (
-                  <>
-                    <Text style={styles.proTitle}>You're in. Welcome.</Text>
-                    <Text style={styles.proDesc}>Off Grid PRO supporter</Text>
-                  </>
-                ) : (
-                  <>
-                    <Text style={styles.proTitle}>Off Grid PRO</Text>
-                    <Text style={styles.proDesc}>Voice. MCPs. Calendar. WhatsApp.</Text>
-                    <Text style={styles.proCtaLink}>I am in 🔥</Text>
-                  </>
-                )}
+                <Text style={styles.proTitle}>Off Grid PRO</Text>
+                <Text style={styles.proDesc}>Voice. MCPs. Calendar. WhatsApp.</Text>
+                <Text style={styles.proCtaLink}>I am in 🔥</Text>
               </View>
-              {!hasRegisteredPro && (
-                <Icon name="chevron-right" size={16} color={styles.proChevron.color} />
-              )}
+              <Icon name="chevron-right" size={16} color={styles.proChevron.color} />
             </View>
           </TouchableOpacity>
         </AnimatedEntry>
@@ -295,8 +283,6 @@ export const SettingsScreen: React.FC = () => {
               const s = useAppStore.getState();
               s.setHasRegisteredPro(false);
               s.setProAhaTriggeredBy(null);
-              s.setLastProAhaShownAt(0);
-              useAppStore.setState({ proAhaShowCount: 0 });
             }}>
               <Icon name="refresh-cw" size={14} color={colors.textMuted} />
               <Text style={styles.devButtonText}>Reset PRO State</Text>

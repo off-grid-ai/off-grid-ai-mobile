@@ -104,10 +104,6 @@ interface AppState {
   setHasRegisteredPro: (v: boolean) => void;
   proAhaTriggeredBy: 'image' | 'text' | null;
   setProAhaTriggeredBy: (by: 'image' | 'text' | null) => void;
-  proAhaShowCount: number;
-  incrementProAhaShowCount: () => number;
-  lastProAhaShownAt: number | null;
-  setLastProAhaShownAt: (ts: number) => void;
   loadedSettings: Partial<AppSettings> | null;
   setLoadedSettings: (settings: Partial<AppSettings> | null) => void;
 }
@@ -291,10 +287,6 @@ export const useAppStore = create<AppState>()(
       setHasRegisteredPro: (v) => set({ hasRegisteredPro: v }),
       proAhaTriggeredBy: null,
       setProAhaTriggeredBy: (by) => set({ proAhaTriggeredBy: by }),
-      proAhaShowCount: 0,
-      incrementProAhaShowCount: () => { const c = get().proAhaShowCount + 1; set({ proAhaShowCount: c }); return c; },
-      lastProAhaShownAt: null,
-      setLastProAhaShownAt: (ts) => set({ lastProAhaShownAt: ts }),
       loadedSettings: null,
       setLoadedSettings: (settings) => set({ loadedSettings: settings }),
     }),
@@ -316,8 +308,6 @@ export const useAppStore = create<AppState>()(
         hasEngagedSharePrompt: state.hasEngagedSharePrompt,
         hasRegisteredPro: state.hasRegisteredPro,
         proAhaTriggeredBy: state.proAhaTriggeredBy,
-        proAhaShowCount: state.proAhaShowCount,
-        lastProAhaShownAt: state.lastProAhaShownAt,
         loadedSettings: state.loadedSettings,
       }),
     }

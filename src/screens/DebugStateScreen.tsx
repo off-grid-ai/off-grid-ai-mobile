@@ -7,9 +7,23 @@ import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
 import { useAppStore } from '../stores/appStore';
+import { shouldShowProAha } from '../utils/proPrompt';
 
-const PRO_AHA_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
-const PRO_AHA_MAX_SHOWS = 5;
+const PRO_AHA_THRESHOLD = 3;
+const PRO_AHA_REPEAT_START = 15;
+const PRO_AHA_REPEAT_INTERVAL = 10;
+
+function nextFireCount(current: number): number {
+  if (current < PRO_AHA_THRESHOLD) return PRO_AHA_THRESHOLD;
+  if (current < PRO_AHA_REPEAT_START) return PRO_AHA_REPEAT_START;
+  const passed = current - PRO_AHA_REPEAT_START;
+  return PRO_AHA_REPEAT_START + (Math.floor(passed / PRO_AHA_REPEAT_INTERVAL) + 1) * PRO_AHA_REPEAT_INTERVAL;
+}
+
+function nextShareFireCount(current: number): number {
+  if (current < 2) return 2;
+  return Math.ceil((current + 1) / 10) * 10;
+}
 
 export const DebugStateScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -20,43 +34,19 @@ export const DebugStateScreen: React.FC = () => {
   const imageGenerationCount = useAppStore(s => s.imageGenerationCount);
   const hasRegisteredPro = useAppStore(s => s.hasRegisteredPro);
   const proAhaTriggeredBy = useAppStore(s => s.proAhaTriggeredBy);
-  const proAhaShowCount = useAppStore(s => s.proAhaShowCount);
-  const lastProAhaShownAt = useAppStore(s => s.lastProAhaShownAt);
   const hasEngagedSharePrompt = useAppStore(s => s.hasEngagedSharePrompt);
 
   const setHasRegisteredPro = useAppStore(s => s.setHasRegisteredPro);
   const setProAhaTriggeredBy = useAppStore(s => s.setProAhaTriggeredBy);
-  const setLastProAhaShownAt = useAppStore(s => s.setLastProAhaShownAt);
-  const incrementProAhaShowCount = useAppStore(s => s.incrementProAhaShowCount);
 
-  const now = Date.now();
-  const cooldownRemaining = lastProAhaShownAt !== null
-    ? Math.max(0, PRO_AHA_COOLDOWN_MS - (now - lastProAhaShownAt))
-    : null;
-  const cooldownDays = cooldownRemaining !== null
-    ? (cooldownRemaining / (1000 * 60 * 60 * 24)).toFixed(1)
-    : null;
-  const lastShownDate = lastProAhaShownAt !== null
-    ? new Date(lastProAhaShownAt).toLocaleString()
-    : 'Never';
-
-  const handleResetAll = () => {
-    setHasRegisteredPro(false);
-    setProAhaTriggeredBy(null);
-    setLastProAhaShownAt(0);
-    // Reset show count via store directly
-    useAppStore.setState({ proAhaShowCount: 0 });
-  };
-
-  const handleSimulateCooldownExpired = () => {
-    // Set lastProAhaShownAt to 8 days ago so cooldown appears expired
-    const eightDaysAgo = Date.now() - (8 * 24 * 60 * 60 * 1000);
-    setLastProAhaShownAt(eightDaysAgo);
-    setProAhaTriggeredBy(null);
-  };
-
-  const handleIncrementShowCount = () => {
-    incrementProAhaShowCount();
+  const getPrediction = (): string => {
+    if (hasRegisteredPro) return 'PRO sheet will never show - user registered. Share sheet unaffected.';
+    if (proAhaTriggeredBy !== null) return `PRO sheet blocked this session (triggered by ${proAhaTriggeredBy}). Reopen the chat to reset.`;
+    const nextText = textGenerationCount + 1;
+    const nextImage = imageGenerationCount + 1;
+    if (shouldShowProAha(nextText)) return `PRO sheet WILL show on next text generation (count ${nextText}).`;
+    if (shouldShowProAha(nextImage)) return `PRO sheet WILL show on next image generation (count ${nextImage}).`;
+    return `PRO sheet will not show yet. Next text fire at count ${nextFireCount(textGenerationCount)}.`;
   };
 
   return (
@@ -71,93 +61,64 @@ export const DebugStateScreen: React.FC = () => {
 
       <ScrollView contentContainerStyle={styles.content}>
 
-        {/* Generation Counts */}
         <Text style={styles.sectionTitle}>Generation Counts</Text>
         <View style={styles.card}>
           <Row label="Text generations" value={String(textGenerationCount)} colors={colors} />
           <Row label="Image generations" value={String(imageGenerationCount)} colors={colors} />
-          <Row
-            label="Share prompt engaged"
-            value={hasEngagedSharePrompt ? 'Yes' : 'No'}
-            colors={colors}
-            highlight={hasEngagedSharePrompt}
-          />
+          <Row label="Share prompt engaged" value={hasEngagedSharePrompt ? 'Yes' : 'No'} colors={colors} highlight={hasEngagedSharePrompt} />
         </View>
 
-        {/* PRO Aha State */}
-        <Text style={styles.sectionTitle}>PRO Aha Sheet</Text>
+        <Text style={styles.sectionTitle}>Share Sheet</Text>
         <View style={styles.card}>
-          <Row
-            label="Registered PRO"
-            value={hasRegisteredPro ? 'Yes' : 'No'}
-            colors={colors}
-            highlight={hasRegisteredPro}
-          />
-          <Row
-            label="Triggered by"
-            value={proAhaTriggeredBy ?? 'null (eligible)'}
-            colors={colors}
-            highlight={proAhaTriggeredBy !== null}
-          />
-          <Row
-            label="Show count"
-            value={`${proAhaShowCount} / ${PRO_AHA_MAX_SHOWS}`}
-            colors={colors}
-            highlight={proAhaShowCount >= PRO_AHA_MAX_SHOWS}
-          />
-          <Row
-            label="Max shows reached"
-            value={proAhaShowCount >= PRO_AHA_MAX_SHOWS ? 'Yes - will never show' : 'No'}
-            colors={colors}
-            highlight={proAhaShowCount >= PRO_AHA_MAX_SHOWS}
-          />
+          <Row label="Fires at (text + image)" value="2, 10, 20, 30..." colors={colors} />
+          <Row label="Next text fire" value={String(nextShareFireCount(textGenerationCount))} colors={colors} />
         </View>
 
-        {/* Cooldown */}
-        <Text style={styles.sectionTitle}>Cooldown (7 days)</Text>
+        <Text style={styles.sectionTitle}>PRO Sheet</Text>
         <View style={styles.card}>
-          <Row label="Last shown at" value={lastShownDate} colors={colors} />
-          <Row
-            label="Cooldown active"
-            value={cooldownRemaining !== null && cooldownRemaining > 0 ? 'Yes' : 'No'}
-            colors={colors}
-            highlight={cooldownRemaining !== null && cooldownRemaining > 0}
-          />
-          <Row
-            label="Cooldown remaining"
-            value={cooldownDays !== null && Number(cooldownDays) > 0 ? `${cooldownDays} days` : 'Expired / not started'}
-            colors={colors}
-          />
+          <Row label="Registered PRO" value={hasRegisteredPro ? 'Yes - never shows again' : 'No'} colors={colors} highlight={hasRegisteredPro} />
+          <Row label="Triggered this session" value={proAhaTriggeredBy ?? 'No - eligible'} colors={colors} highlight={proAhaTriggeredBy !== null} />
+          <Row label="Fires at (text + image)" value="3, 15, 25, 35..." colors={colors} />
+          <Row label="Next text fire" value={hasRegisteredPro ? 'Never' : String(nextFireCount(textGenerationCount))} colors={colors} />
+          <Row label="Next image fire" value={hasRegisteredPro ? 'Never' : String(nextFireCount(imageGenerationCount))} colors={colors} />
+          <Row label="Text hits PRO now?" value={shouldShowProAha(textGenerationCount) ? 'Yes' : 'No'} colors={colors} highlight={shouldShowProAha(textGenerationCount)} />
+          <Row label="Image hits PRO now?" value={shouldShowProAha(imageGenerationCount) ? 'Yes' : 'No'} colors={colors} highlight={shouldShowProAha(imageGenerationCount)} />
         </View>
 
-        {/* What will happen next */}
         <Text style={styles.sectionTitle}>Next Generation Will...</Text>
         <View style={styles.card}>
-          <Text style={styles.prediction}>{getNextGenPrediction({
-            hasRegisteredPro,
-            proAhaShowCount,
-            proAhaTriggeredBy,
-            lastProAhaShownAt,
-            textGenerationCount,
-            imageGenerationCount,
-            now,
-          })}</Text>
+          <Text style={styles.prediction}>{getPrediction()}</Text>
         </View>
 
-        {/* Actions */}
         <Text style={styles.sectionTitle}>Debug Actions</Text>
         <View style={styles.actionGroup}>
-          <TouchableOpacity style={styles.actionButton} onPress={handleResetAll}>
-            <Text style={styles.actionText}>Reset all PRO state</Text>
+          <TouchableOpacity style={styles.actionButton} onPress={() => {
+            setHasRegisteredPro(false);
+            setProAhaTriggeredBy(null);
+          }}>
+            <Text style={styles.actionText}>Reset PRO state (keep counts)</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton} onPress={handleSimulateCooldownExpired}>
-            <Text style={styles.actionText}>Simulate cooldown expired (set last shown to 8 days ago)</Text>
+          <TouchableOpacity style={styles.actionButton} onPress={() => {
+            setHasRegisteredPro(false);
+            setProAhaTriggeredBy(null);
+            useAppStore.setState({ textGenerationCount: 0, imageGenerationCount: 0 });
+          }}>
+            <Text style={styles.actionText}>Reset everything (PRO + counts)</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton} onPress={handleIncrementShowCount}>
-            <Text style={styles.actionText}>Increment show count (+1)</Text>
+          <TouchableOpacity style={styles.actionButton} onPress={() => {
+            useAppStore.setState({ textGenerationCount: PRO_AHA_THRESHOLD - 1 });
+          }}>
+            <Text style={styles.actionText}>Set text count to 2 (PRO fires on next text gen)</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton} onPress={() => useAppStore.setState({ proAhaShowCount: PRO_AHA_MAX_SHOWS })}>
-            <Text style={styles.actionText}>Max out show count (force permanent block)</Text>
+          <TouchableOpacity style={styles.actionButton} onPress={() => {
+            useAppStore.setState({ imageGenerationCount: PRO_AHA_THRESHOLD - 1 });
+          }}>
+            <Text style={styles.actionText}>Set image count to 2 (PRO fires on next image gen)</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionButton} onPress={() => {
+            useAppStore.setState({ textGenerationCount: 1 });
+          }}>
+            <Text style={styles.actionText}>Set text count to 1 (share fires on next text gen)</Text>
           </TouchableOpacity>
         </View>
 
@@ -166,28 +127,10 @@ export const DebugStateScreen: React.FC = () => {
   );
 };
 
-function getNextGenPrediction(s: {
-  hasRegisteredPro: boolean;
-  proAhaShowCount: number;
-  proAhaTriggeredBy: string | null;
-  lastProAhaShownAt: number | null;
-  textGenerationCount: number;
-  imageGenerationCount: number;
-  now: number;
-}): string {
-  if (s.hasRegisteredPro) return 'PRO sheet will NOT show (user registered). Share sheet unaffected.';
-  if (s.proAhaShowCount >= PRO_AHA_MAX_SHOWS) return 'PRO sheet will NOT show (max 5 shows reached permanently). Share sheet unaffected.';
-  const cooldownActive = s.lastProAhaShownAt !== null && s.now - s.lastProAhaShownAt < PRO_AHA_COOLDOWN_MS;
-  if (cooldownActive) return 'PRO sheet will NOT show (cooldown active). Share sheet may show at gen 10, 20, etc.';
-  if (s.proAhaTriggeredBy !== null) return 'PRO sheet will NOT show (already fired this cycle, cooldown not yet expired). Share sheet unaffected.';
-  if (s.textGenerationCount < 3) return `PRO sheet will NOT show yet (need ${3 - s.textGenerationCount} more text gens). Share sheet shows at gen 2.`;
-  return 'PRO sheet WILL show on next text or image generation (threshold met, cooldown clear, cycle open).';
-}
-
 const Row: React.FC<{ label: string; value: string; colors: ThemeColors; highlight?: boolean }> = ({ label, value, colors, highlight }) => (
   <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-    <Text style={{ ...TYPOGRAPHY.bodySmall as object, color: colors.textSecondary, flex: 1 }}>{label}</Text>
-    <Text style={{ ...TYPOGRAPHY.bodySmall as object, color: highlight ? colors.primary : colors.text, fontWeight: '400', flex: 1, textAlign: 'right' }}>{value}</Text>
+    <Text style={{ ...(TYPOGRAPHY.bodySmall as object), color: colors.textSecondary, flex: 1 }}>{label}</Text>
+    <Text style={{ ...(TYPOGRAPHY.bodySmall as object), color: highlight ? colors.primary : colors.text, flex: 1, textAlign: 'right' }}>{value}</Text>
   </View>
 );
 

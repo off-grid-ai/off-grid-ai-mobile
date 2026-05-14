@@ -22,7 +22,7 @@ function CodeBlock({ language, code, colors }: { language: string; code: string;
 
   return (
     <View style={[codeBlockStyles.container, { backgroundColor: colors.surfaceLight, borderColor: colors.border }]}>
-      <View style={codeBlockStyles.header}>
+      <View style={[codeBlockStyles.header, { borderBottomColor: colors.borderLight }]}>
         <Text style={[codeBlockStyles.lang, { color: colors.textMuted }]}>{language}</Text>
         <Pressable onPress={handleCopy} style={codeBlockStyles.copyBtn} hitSlop={8}>
           <Icon name={copied ? 'check' : 'copy'} size={13} color={copied ? colors.primary : colors.textMuted} />
@@ -52,7 +52,6 @@ const codeBlockStyles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     paddingVertical: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(128,128,128,0.2)',
   },
   lang: {
     fontSize: 11,

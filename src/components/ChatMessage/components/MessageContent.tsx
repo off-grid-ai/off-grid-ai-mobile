@@ -32,6 +32,7 @@ export function MessageContent({
     logger.log(
       `[Structure] MessageContent mounted — role=${isUser ? 'user' : 'assistant'} isThinking=${isThinking} isStreaming=${isStreaming} contentLen=${content?.length ?? 0} hasThinking=${!!parsedContent.thinking} hasResponse=${!!parsedContent.response}`
     );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (isThinking) {

@@ -302,7 +302,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         styles={styles}
         onCopy={handleCopy}
         onEdit={handleEdit}
-        onRetry={!!onRetry ? handleRetry : undefined}
+        onRetry={onRetry ? handleRetry : undefined}
         onGenerateImage={handleGenerateImage}
       />
       <EditSheet

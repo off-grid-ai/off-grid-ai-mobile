@@ -71,7 +71,8 @@ export function getModelType(model: ModelInfo): ModelTypeFilter {
 export function isPhiModel(modelName: string, modelId: string): boolean {
   const name = modelName.toLowerCase();
   const id = modelId.toLowerCase();
-  return name.includes('phi') || id.includes('phi');
+  const phiPattern = /\bphi[-_]?\d/i;
+  return phiPattern.test(name) || phiPattern.test(id);
 }
 
 export function getTextModelCompatibility(

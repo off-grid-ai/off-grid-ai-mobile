@@ -135,7 +135,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   cacheType: 'q8_0' as CacheType,
   showGenerationDetails: false,
   enabledTools: ['web_search', 'calculator', 'get_current_datetime', 'get_device_info', 'read_url', 'search_knowledge_base'],
-  thinkingEnabled: true,
+  thinkingEnabled: false,
 };
 
 function migrateEnabledTools(merged: any): void {

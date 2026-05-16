@@ -1,4 +1,5 @@
 /** ImageGenerationService - Handles image generation independently of UI lifecycle */
+import { Platform } from 'react-native';
 import { localDreamGeneratorService as onnxImageGeneratorService } from './localDreamGenerator';
 import { activeModelService } from './activeModelService';
 import { llmService } from './llm';
@@ -8,6 +9,7 @@ import logger from '../utils/logger';
 import { shouldShowSharePrompt, emitSharePrompt } from '../utils/sharePrompt';
 import { checkProPromptForImage } from '../utils/proPrompt';
 import { buildEnhancementMessages, getConversationContext, cleanEnhancedPrompt, buildImageGenMeta } from './imageGenerationHelpers';
+import { detectTurboModel, resolveEffectiveSteps, meeCacheManager } from './mee';
 
 const SHARE_PROMPT_DELAY_MS = 2000;
 
@@ -302,10 +304,7 @@ class ImageGenerationService {
     const activeImageModel = downloadedImageModels.find(m => m.id === activeImageModelId);
     if (!activeImageModel) { this.updateState({ error: 'No image model selected' }); return null; }
 
-    const steps = params.steps || settings.imageSteps || 8;
-    const guidanceScale = params.guidanceScale || settings.imageGuidanceScale || 2.0;
-    const imageWidth = settings.imageWidth || 256;
-    const imageHeight = settings.imageHeight || 256;
+    const { turboConfig, steps, guidanceScale, imageWidth, imageHeight } = this._resolveGenerationParams(params, settings, activeImageModel);
 
     const enhancedPrompt = await this._enhancePrompt(params, steps);
     logger.log('[ImageGen] enhanceImagePrompts setting:', settings.enhanceImagePrompts);
@@ -314,18 +313,24 @@ class ImageGenerationService {
     if (!settings.enhanceImagePrompts) {
       this.updateState({
         isGenerating: true, prompt: params.prompt, conversationId: params.conversationId || null,
-        status: 'Preparing image generation...', previewPath: null,
+        status: turboConfig.isTurbo ? `${turboConfig.label} mode — ${steps} steps...` : 'Preparing image generation...',
+        previewPath: null,
         progress: { step: 0, totalSteps: steps }, error: null, result: null,
       });
     } else {
-      this.updateState({ status: 'Preparing image generation...' });
+      this.updateState({ status: turboConfig.isTurbo ? `${turboConfig.label} mode — ${steps} steps...` : 'Preparing image generation...' });
     }
 
     const loaded = await this._ensureImageModelLoaded(activeImageModelId, activeImageModel, settings.imageThreads ?? 4);
     if (!loaded) return null;
     if (this.cancelRequested) { this.resetState(); return null; }
 
-    return this._runGenerationAndSave({ params, enhancedPrompt, activeImageModel, steps, guidanceScale, imageWidth, imageHeight, useOpenCL: settings.imageUseOpenCL ?? true });
+    const result = await this._runGenerationAndSave({ params, enhancedPrompt, activeImageModel, steps, guidanceScale, imageWidth, imageHeight, useOpenCL: settings.imageUseOpenCL ?? true });
+
+    // MEE: flush cache after image generation
+    meeCacheManager.flushAfterImageGeneration().catch(() => {});
+
+    return result;
   }
 
   async cancelGeneration(): Promise<void> {
@@ -333,6 +338,24 @@ class ImageGenerationService {
     this.cancelRequested = true;
     try { await onnxImageGeneratorService.cancelGeneration(); } catch { /* Ignore */ }
     this.resetState();
+  }
+
+  private _resolveGenerationParams(params: GenerateImageParams, settings: any, activeImageModel: any) {
+    const turboConfig = detectTurboModel(activeImageModel.name || activeImageModel.id);
+    const platformDefault = Platform.OS === 'ios' ? 20 : 8;
+    const userSteps = params.steps || settings.imageSteps || platformDefault;
+    const steps = settings.meeAutoOptimize
+      ? resolveEffectiveSteps(userSteps, platformDefault, turboConfig)
+      : userSteps;
+    const guidanceScale = (settings.meeAutoOptimize && turboConfig.isTurbo)
+      ? (params.guidanceScale || turboConfig.recommendedGuidanceScale)
+      : (params.guidanceScale || settings.imageGuidanceScale || 2.0);
+
+    if (turboConfig.isTurbo) {
+      logger.log(`[ImageGen][MEE] Turbo model detected (${turboConfig.label}): steps=${steps}, guidance=${guidanceScale}`);
+    }
+
+    return { turboConfig, steps, guidanceScale, imageWidth: settings.imageWidth || 256, imageHeight: settings.imageHeight || 256 };
   }
 
   private resetState(): void {

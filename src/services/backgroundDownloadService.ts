@@ -15,6 +15,7 @@ class BackgroundDownloadService {
   private errorListeners: Map<string, DownloadErrorCallback> = new Map();
   private subscriptions: { remove: () => void }[] = [];
   private isPolling = false;
+  private isPausedByMEE = false;
 
   constructor() {
     if (this.isAvailable()) {
@@ -134,6 +135,7 @@ class BackgroundDownloadService {
 
   startProgressPolling(): void {
     if (!this.isAvailable() || this.isPolling) return;
+    if (this.isPausedByMEE) return; // MEE has paused background work
     this.isPolling = true;
     DownloadManagerModule.startProgressPolling();
   }
@@ -142,6 +144,33 @@ class BackgroundDownloadService {
     if (!this.isAvailable() || !this.isPolling) return;
     this.isPolling = false;
     DownloadManagerModule.stopProgressPolling();
+  }
+
+  /**
+   * MEE: Pause background download polling during inference.
+   * Downloads continue natively but JS progress events are suspended.
+   */
+  pauseForInference(): void {
+    if (this.isPausedByMEE) return;
+    this.isPausedByMEE = true;
+    if (this.isPolling) {
+      this.stopProgressPolling();
+    }
+    logger.log('[BackgroundDownload] Paused by MEE for inference');
+  }
+
+  /**
+   * MEE: Resume background download polling after inference completes.
+   */
+  resumeAfterInference(): void {
+    if (!this.isPausedByMEE) return;
+    this.isPausedByMEE = false;
+    logger.log('[BackgroundDownload] Resumed after MEE inference');
+  }
+
+  /** Whether MEE has paused polling. */
+  isPaused(): boolean {
+    return this.isPausedByMEE;
   }
 
   async isBatteryOptimizationIgnored(): Promise<boolean> {

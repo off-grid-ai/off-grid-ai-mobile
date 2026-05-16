@@ -8,6 +8,8 @@ import type { Message, GenerationMeta } from '../types';
 import { runToolLoop } from './generationToolLoop';
 import type { ToolResult } from './tools/types';
 import type { GenerationOptions, CompletionResult } from './providers/types';
+import { meeCacheManager } from './mee';
+import { backgroundDownloadService } from './backgroundDownloadService';
 import logger from '../utils/logger';
 
 export const FLUSH_INTERVAL_MS = 50; // ~20 updates/sec
@@ -114,8 +116,14 @@ export async function prepareGenerationImpl(svc: any, conversationId: string): P
   if (!svc.state.isGenerating) return false; // stop called during drain
   svc.abortRequested = false;
 
+  // MEE: pause background downloads during local inference on low-mid devices
+  if (!svc.isUsingRemoteProvider() && useAppStore.getState().settings.meeAutoOptimize) {
+    backgroundDownloadService.pauseForInference();
+  }
+
   // Check provider readiness
   const failPrepare = (msg: string) => {
+    backgroundDownloadService.resumeAfterInference();
     svc.resetState();
     useChatStore.getState().clearStreamingMessage();
     throw new Error(msg);
@@ -176,9 +184,15 @@ export async function generateResponseImpl(
         chatStore.finalizeStreamingMessage(conversationId, generationTime, buildGenerationMetaImpl(svc));
         svc.checkSharePrompt();
         svc.resetState();
+        // MEE: flush cache + resume background after generation
+        backgroundDownloadService.resumeAfterInference();
+        meeCacheManager.flushAfterTextGeneration().catch(() => {});
       },
     );
   } catch (error) {
+    // MEE: always resume background on error
+    backgroundDownloadService.resumeAfterInference();
+    meeCacheManager.flushAfterTextGeneration().catch(() => {});
     if (svc.abortRequested) return;
     logger.error('[GenerationService] Generation error:', error);
     if (svc.flushTimer) { clearTimeout(svc.flushTimer); svc.flushTimer = null; }

@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Linking,
   Alert,
+  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
@@ -47,6 +48,8 @@ export const SettingsScreen: React.FC = () => {
   const completeChecklistStep = useAppStore((s) => s.completeChecklistStep);
   const resetChecklist = useAppStore((s) => s.resetChecklist);
   const deviceInfo = useAppStore((s) => s.deviceInfo);
+  const settings = useAppStore((s) => s.settings);
+  const updateSettings = useAppStore((s) => s.updateSettings);
 
   useEffect(() => {
     completeChecklistStep('exploredSettings');
@@ -139,6 +142,60 @@ export const SettingsScreen: React.FC = () => {
                   />
                 </TouchableOpacity>
               ))}
+            </View>
+          </View>
+        </AnimatedEntry>
+
+        {/* MEE Resource Saver */}
+        <AnimatedEntry index={1} staggerMs={40} trigger={focusTrigger}>
+          <View style={styles.navSection}>
+            <View style={styles.navItem}>
+              <View style={styles.navItemIcon}>
+                <Icon name="activity" size={16} color={colors.textSecondary} />
+              </View>
+              <View style={styles.navItemContent}>
+                <Text style={styles.navItemTitle}>RAM Health Monitor</Text>
+                <Text style={styles.navItemDesc}>Show real-time memory usage overlay</Text>
+              </View>
+              <Switch
+                value={settings.showHealthMonitor}
+                onValueChange={(v) => updateSettings({ showHealthMonitor: v })}
+                trackColor={{ false: colors.border, true: colors.primary }}
+              />
+            </View>
+            <View style={styles.navItem}>
+              <View style={styles.navItemIcon}>
+                <Icon name="cpu" size={16} color={colors.textSecondary} />
+              </View>
+              <View style={styles.navItemContent}>
+                <Text style={styles.navItemTitle}>MEE Auto-Optimize</Text>
+                <Text style={styles.navItemDesc}>Auto-tune steps, cache, and background tasks per device</Text>
+              </View>
+              <Switch
+                value={settings.meeAutoOptimize}
+                onValueChange={(v) => updateSettings({ meeAutoOptimize: v })}
+                trackColor={{ false: colors.border, true: colors.primary }}
+              />
+            </View>
+            <View style={[styles.navItem, styles.navItemLast]}>
+              <View style={styles.navItemIcon}>
+                <Icon name="battery-charging" size={16} color={colors.textSecondary} />
+              </View>
+              <View style={styles.navItemContent}>
+                <Text style={styles.navItemTitle}>Resource Saver</Text>
+                <Text style={styles.navItemDesc}>Disable reasoning &amp; tools to save ~30% battery/RAM</Text>
+              </View>
+              <Switch
+                value={settings.meeResourceSaver}
+                onValueChange={(v) => {
+                  updateSettings({
+                    meeResourceSaver: v,
+                    thinkingEnabled: v ? false : true,
+                    enabledTools: v ? [] : ['web_search', 'calculator', 'get_current_datetime', 'get_device_info', 'read_url', 'search_knowledge_base'],
+                  });
+                }}
+                trackColor={{ false: colors.border, true: '#F59E0B' }}
+              />
             </View>
           </View>
         </AnimatedEntry>

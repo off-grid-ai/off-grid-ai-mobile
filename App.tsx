@@ -19,6 +19,7 @@ import { useDownloads } from './src/hooks/useDownloads';
 import { LockScreen } from './src/screens';
 import { useAppState } from './src/hooks/useAppState';
 import { useDownloadStore } from './src/stores/downloadStore';
+import { HealthMonitor } from './src/components/HealthMonitor';
 
 LogBox.ignoreAllLogs(); // Suppress all logs
 
@@ -255,6 +256,7 @@ function App() {
           }}
         >
           <AppNavigator />
+          <HealthMonitor />
         </NavigationContainer>
       </SafeAreaProvider>
     </GestureHandlerRootView>

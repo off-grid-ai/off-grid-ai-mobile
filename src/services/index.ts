@@ -31,3 +31,6 @@ export type { LLMProvider, ProviderType, ProviderCapabilities, GenerationOptions
 export { fetchWithTimeout, createStreamingRequest, imageToBase64DataUrl, testEndpoint, isPrivateNetworkEndpoint } from './httpClient';
 // Remote Server Manager
 export { remoteServerManager } from './remoteServerManager';
+// MEE — Multimodal Efficiency Engine
+export { getDeviceProfile, meeCacheManager, detectTurboModel, resolveEffectiveSteps, verifyDownloadIntegrity } from './mee';
+export type { MEEDeviceTier, MEEQuantizationHint, MEEDeviceProfile, TurboModelConfig, VerificationResult } from './mee';

@@ -48,6 +48,7 @@ const mockSetOnboardingComplete = jest.fn();
 const mockSetThemeMode = jest.fn();
 const mockCompleteChecklistStep = jest.fn();
 const mockResetChecklist = jest.fn();
+const mockUpdateSettings = jest.fn();
 jest.mock('../../../src/stores', () => ({
   useAppStore: jest.fn((selector?: any) => {
     const state = {
@@ -56,6 +57,12 @@ jest.mock('../../../src/stores', () => ({
       setThemeMode: mockSetThemeMode,
       completeChecklistStep: mockCompleteChecklistStep,
       resetChecklist: mockResetChecklist,
+      settings: {
+        showHealthMonitor: false,
+        meeAutoOptimize: true,
+        meeResourceSaver: false,
+      },
+      updateSettings: mockUpdateSettings,
     };
     return selector ? selector(state) : state;
   }),

@@ -829,6 +829,9 @@ describe('ModelSettingsScreen', () => {
           enhanceImagePrompts: undefined as any,
           enabledTools: undefined as any,
           thinkingEnabled: undefined as any,
+          showHealthMonitor: undefined as any,
+          meeAutoOptimize: undefined as any,
+          meeResourceSaver: undefined as any,
         },
       });
 

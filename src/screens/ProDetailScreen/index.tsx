@@ -39,7 +39,7 @@ export const ProDetailScreen: React.FC = () => {
 
       <ScrollView style={styles.flex} contentContainerStyle={styles.content}>
         <Text style={styles.title}>Off Grid PRO</Text>
-        <Text style={styles.subtitle}>Lifetime access - Coming soon</Text>
+        <Text style={styles.subtitle}>Coming soon</Text>
 
         <View style={styles.featureList}>
           {FEATURES.map(f => (

@@ -264,7 +264,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             testID="onboarding-next"
           />
           <TouchableOpacity
-            onPress={() => Linking.openURL('https://www.wednesday.is/?utm_source=off-grid-mobile-app')}
+            onPress={() => Linking.openURL('https://mobile.wednesday.is/hire-ai-native-mobile-squad?utm_source=off-grid-mobile-app&utm_medium=onboarding&utm_campaign=in-app')}
             style={styles.madeWithLove}
           >
             <View style={styles.madeWithLoveRow}>

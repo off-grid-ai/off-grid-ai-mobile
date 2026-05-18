@@ -937,9 +937,11 @@ extension DownloadManagerModule {
 
   func pollProgress() {
     guard hasListeners else { return }
-    queue.sync(flags: .barrier) {
-      let activeDownloads = downloads.filter { $0.value.status == "running" || $0.value.status == "pending" || $0.value.status == "paused" }
-      for (downloadId, var info) in activeDownloads {
+    queue.async(flags: .barrier) { [weak self] in
+      guard let self = self else { return }
+      let activeDownloads = self.downloads.filter { $0.value.status == "running" || $0.value.status == "pending" || $0.value.status == "paused" }
+      var events: [[String: Any]] = []
+      for (_, var info) in activeDownloads {
         if info.isMultiFile {
           var aggregateBytes: Int64 = 0
           var aggregateTotal: Int64 = 0
@@ -961,17 +963,24 @@ extension DownloadManagerModule {
           if task.countOfBytesExpectedToReceive > 0 {
             info.totalBytes = task.countOfBytesExpectedToReceive
           }
-          info.status = statusString(from: task.state)
+          info.status = self.statusString(from: task.state)
         }
-        downloads[downloadId] = info
-        sendEvent(withName: "DownloadProgress", body: [
-            "downloadId": info.downloadId,
-            "fileName": info.fileName,
-            "modelId": info.modelId,
-            "bytesDownloaded": NSNumber(value: info.bytesDownloaded),
-            "totalBytes": NSNumber(value: info.totalBytes),
-            "status": info.status
-          ] as [String: Any])
+        self.downloads[info.downloadId] = info
+        events.append([
+          "downloadId": info.downloadId,
+          "fileName": info.fileName,
+          "modelId": info.modelId,
+          "bytesDownloaded": NSNumber(value: info.bytesDownloaded),
+          "totalBytes": NSNumber(value: info.totalBytes),
+          "status": info.status
+        ] as [String: Any])
+      }
+      if !events.isEmpty {
+        DispatchQueue.main.async { [weak self] in
+          for event in events {
+            self?.sendEvent(withName: "DownloadProgress", body: event)
+          }
+        }
       }
     }
   }

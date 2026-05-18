@@ -237,6 +237,17 @@ describe('OnboardingScreen', () => {
     expect(mockDiscoverLANServers).toHaveBeenCalled();
   });
 
+  it('opens correct Wednesday URL when tapping Made with love', () => {
+    const { Linking } = require('react-native');
+    const spy = jest.spyOn(Linking, 'openURL').mockImplementation(() => Promise.resolve());
+    const { getByText } = render(<OnboardingScreen navigation={navigation} />);
+    fireEvent.press(getByText('Wednesday'));
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining('mobile.wednesday.is/hire-ai-native-mobile-squad'),
+    );
+    spy.mockRestore();
+  });
+
   it('completes onboarding when Get Started pressed on last slide', async () => {
     const { act: reactAct } = require('@testing-library/react-native');
     const { Dimensions } = require('react-native');

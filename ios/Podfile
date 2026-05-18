@@ -40,6 +40,11 @@ target 'OffgridMobile' do
       target.build_configurations.each do |config|
         config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++20'
         config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '17.0'
+        # Suppress fmt consteval errors on newer Xcode/clang
+        if target.name == 'fmt'
+          config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+          config.build_settings['OTHER_CPLUSPLUSFLAGS'] = '$(inherited) -Wno-error'
+        end
       end
     end
   end

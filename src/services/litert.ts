@@ -29,6 +29,7 @@ export interface LiteRTBenchmarkStats {
   decodeTokensPerSecond: number;
   prefillTokensPerSecond: number;
   prefillTokenCount: number;
+  initTimeSeconds: number;
 }
 
 export interface LiteRTMemoryInfo {

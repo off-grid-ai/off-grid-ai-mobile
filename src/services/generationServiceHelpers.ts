@@ -72,9 +72,11 @@ export function buildGenerationMetaImpl(svc: any): GenerationMeta {
         gpu: backend !== 'cpu',
         gpuBackend: backend.toUpperCase(),
         modelName,
-        tokensPerSecond: stats.decodeTokensPerSecond,
-        timeToFirstToken: stats.ttft * 1000,
+        decodeTokensPerSecond: stats.decodeTokensPerSecond,
+        prefillTokensPerSecond: stats.prefillTokensPerSecond,
+        timeToFirstToken: stats.ttft,
         tokenCount: stats.prefillTokenCount,
+        modelLoadTimeSeconds: stats.initTimeSeconds > 0 ? stats.initTimeSeconds : undefined,
       };
     }
     // Fallback estimate if BenchmarkInfo unavailable

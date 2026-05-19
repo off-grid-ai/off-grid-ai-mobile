@@ -242,7 +242,7 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                     @OptIn(ExperimentalApi::class)
                     val benchmarkJson = try {
                         val b = conv.getBenchmarkInfo()
-                        """{"ttft":${b.timeToFirstTokenInSecond},"decodeTokensPerSecond":${b.lastDecodeTokensPerSecond},"prefillTokensPerSecond":${b.lastPrefillTokensPerSecond},"prefillTokenCount":${b.lastPrefillTokenCount}}"""
+                        """{"ttft":${b.timeToFirstTokenInSecond},"decodeTokensPerSecond":${b.lastDecodeTokensPerSecond},"prefillTokensPerSecond":${b.lastPrefillTokensPerSecond},"prefillTokenCount":${b.lastPrefillTokenCount},"initTimeSeconds":${b.initTimeInSecond}}"""
                     } catch (e: Exception) {
                         Log.w(TAG, "getBenchmarkInfo failed: ${e.message}")
                         ""

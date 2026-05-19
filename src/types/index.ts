@@ -160,10 +160,14 @@ export interface GenerationMeta {
   tokensPerSecond?: number;
   /** Tokens per second — decode only, excluding prefill (text generation only) */
   decodeTokensPerSecond?: number;
-  /** Time to first token in seconds (text generation only) */
+  /** Tokens per second — prefill/prompt processing speed (LiteRT only) */
+  prefillTokensPerSecond?: number;
+  /** Time to first token in milliseconds (text generation only) */
   timeToFirstToken?: number;
   /** Token count (text generation only) */
   tokenCount?: number;
+  /** Model load/init time in seconds */
+  modelLoadTimeSeconds?: number;
   /** Image generation steps */
   steps?: number;
   /** Image guidance scale */

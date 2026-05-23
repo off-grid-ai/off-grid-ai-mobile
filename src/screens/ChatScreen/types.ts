@@ -1,4 +1,5 @@
 import { Message } from '../../types';
+import { useDebugLogsStore } from '../../stores/debugLogsStore';
 
 export type ChatMessageItem = {
   id: string;
@@ -17,22 +18,35 @@ export type StreamingState = {
   isStreamingForThisConversation: boolean;
 };
 
+let _lastDisplayBranch = '';
 export function getDisplayMessages(
   allMessages: Message[],
   streaming: StreamingState,
 ): (Message | ChatMessageItem)[] {
   const { isThinking, streamingMessage, streamingReasoningContent, isStreamingForThisConversation } = streaming;
   if (isThinking && isStreamingForThisConversation) {
+    if (_lastDisplayBranch !== 'thinking') {
+      _lastDisplayBranch = 'thinking';
+      useDebugLogsStore.getState().addLog('log', `[Display] branch=thinking — reasoningLen=${streamingReasoningContent.length} msgLen=${streamingMessage.length}`);
+    }
     return [
       ...allMessages,
       { id: 'thinking', role: 'assistant' as const, content: '', timestamp: Date.now(), isThinking: true },
     ];
   }
   if ((streamingMessage || streamingReasoningContent) && isStreamingForThisConversation) {
+    if (_lastDisplayBranch !== 'streaming') {
+      _lastDisplayBranch = 'streaming';
+      useDebugLogsStore.getState().addLog('log', `[Display] branch=streaming — reasoningLen=${streamingReasoningContent.length} msgLen=${streamingMessage.length}`);
+    }
     return [
       ...allMessages,
       { id: 'streaming', role: 'assistant' as const, content: streamingMessage, reasoningContent: streamingReasoningContent || undefined, timestamp: Date.now(), isStreaming: true },
     ];
+  }
+  if (_lastDisplayBranch !== 'done') {
+    _lastDisplayBranch = 'done';
+    useDebugLogsStore.getState().addLog('log', `[Display] branch=done — finalMessages=${allMessages.length}`);
   }
   return allMessages;
 }

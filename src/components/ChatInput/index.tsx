@@ -8,7 +8,6 @@ import { AttachStep } from 'react-native-spotlight-tour';
 import { triggerHaptic } from '../../utils/haptics';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../CustomAlert';
 import { createStyles, PILL_ICONS_WIDTH, ANIM_DURATION_IN, ANIM_DURATION_OUT } from './styles';
-import { ContextRing } from '../ContextRing';
 import { QueueRow } from './Toolbar';
 import { AttachmentPreview, useAttachments } from './Attachments';
 import { useVoiceInput } from './Voice';
@@ -36,8 +35,6 @@ interface ChatInputProps {
   onRepairVision?: () => void;
   /** When set, mounts a single AttachStep for that index. Only one at a time to avoid waypoint dots. */
   activeSpotlight?: number | null;
-  /** LiteRT context fill level. Renders a small ring indicator inside the pill when non-zero. */
-  contextUsage?: { used: number; max: number };
 }
 
 const IMAGE_MODE_CYCLE: ImageModeState[] = ['auto', 'force', 'disabled'];
@@ -64,7 +61,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   supportsThinking = false,
   onRepairVision,
   activeSpotlight = null,
-  contextUsage,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -221,11 +217,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             blurOnSubmit={false}
             returnKeyType="default"
           />
-          {contextUsage && contextUsage.used > 0 && contextUsage.max > 0 && (
-            <View style={styles.contextRingWrapper}>
-              <ContextRing used={contextUsage.used} max={contextUsage.max} />
-            </View>
-          )}
           {/* Icons collapse when user starts typing, reappear when input is empty */}
           <Animated.View
             pointerEvents={hasText ? 'none' : 'auto'}

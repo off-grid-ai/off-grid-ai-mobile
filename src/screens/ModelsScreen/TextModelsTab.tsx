@@ -247,8 +247,8 @@ const ModelDetailView: React.FC<DetailProps> = ({
       </Card>
       {selectedModel.id === LITERT_PARENT_ID && Platform.OS === 'android' && DeviceInfo.getModel().toLowerCase().includes('pixel 10') && (
         <Card style={styles.deviceBanner}>
-          <Icon name="info" size={14} color={colors.primary} />
-          <Text style={styles.deviceBannerText}>{'GPU acceleration is not yet supported on Pixel 10. Models will run on CPU.'}</Text>
+          <Icon name="info" size={14} color={colors.trending} />
+          <Text style={styles.deviceBannerText}>{'GPU acceleration is not yet supported on Pixel 10. Models will run on CPU. Support coming soon.'}</Text>
         </Card>
       )}
       <Text style={styles.sectionTitle}>Available Files</Text>

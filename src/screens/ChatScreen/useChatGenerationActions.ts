@@ -302,7 +302,33 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   } catch (error: any) {
     const msg = error?.message || error?.toString?.() || 'Failed to generate response';
     logger.error('[ChatGen] Generation failed:', msg, error);
-    deps.setAlertState(showAlert('Generation Error', msg));
+    const isContextOverflow = msg.includes('too long') || msg.includes('Exceeding the maximum number of tokens') || msg.includes('Input token ids');
+    if (isContextOverflow) {
+      deps.setAlertState(showAlert(
+        'Context window full',
+        'The conversation is too long for this model\'s context window.\n\nIncrease the context limit in Settings, reduce the number of enabled tools, or start a new chat.',
+        [
+          {
+            text: 'Settings',
+            onPress: () => { deps.setAlertState({ visible: false, title: '', message: '', buttons: [] }); deps.setShowSettingsPanel?.(true); },
+          },
+          {
+            text: 'New chat',
+            onPress: () => {
+              deps.setAlertState({ visible: false, title: '', message: '', buttons: [] });
+              const modelId = deps.activeModelInfo?.modelId;
+              if (modelId) {
+                const newId = deps.createConversation(modelId);
+                deps.setActiveConversation(newId);
+              }
+            },
+          },
+        ],
+        { prominentMessage: true },
+      ));
+    } else {
+      deps.setAlertState(showAlert('Generation Error', msg));
+    }
     deps.generatingForConversationRef.current = null;
     return;
   }
@@ -395,7 +421,34 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
   try {
     await generateWithCompactionRetry({ id: targetConversationId, prompt: systemPrompt, messages: [...prefix, ...filtered] }, activeTools, conversation?.projectId);
   } catch (error: any) {
-    deps.setAlertState(showAlert('Generation Error', error.message || 'Failed to generate response'));
+    const msg = error?.message || 'Failed to generate response';
+    const isContextOverflow = msg.includes('too long') || msg.includes('Exceeding the maximum number of tokens') || msg.includes('Input token ids');
+    if (isContextOverflow) {
+      deps.setAlertState(showAlert(
+        'Context window full',
+        'The conversation is too long for this model\'s context window.\n\nIncrease the context limit in Settings, reduce the number of enabled tools, or start a new chat.',
+        [
+          {
+            text: 'Settings',
+            onPress: () => { deps.setAlertState({ visible: false, title: '', message: '', buttons: [] }); deps.setShowSettingsPanel?.(true); },
+          },
+          {
+            text: 'New chat',
+            onPress: () => {
+              deps.setAlertState({ visible: false, title: '', message: '', buttons: [] });
+              const modelId = deps.activeModelInfo?.modelId;
+              if (modelId) {
+                const newId = deps.createConversation(modelId);
+                deps.setActiveConversation(newId);
+              }
+            },
+          },
+        ],
+        { prominentMessage: true },
+      ));
+    } else {
+      deps.setAlertState(showAlert('Generation Error', msg));
+    }
   }
   deps.generatingForConversationRef.current = null;
 }

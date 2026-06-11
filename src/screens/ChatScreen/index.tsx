@@ -132,6 +132,7 @@ export const ChatScreen: React.FC = () => {
       title={chat.alertState.title}
       message={chat.alertState.message}
       buttons={chat.alertState.buttons}
+      prominentMessage={chat.alertState.prominentMessage}
       onClose={() => chat.setAlertState(hideAlert())}
     />
   );

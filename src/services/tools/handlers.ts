@@ -59,7 +59,13 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       if (!title) throw new Error('Missing required parameter: title');
       if (!startDate) throw new Error('Missing required parameter: start_date');
       if (!endDate) throw new Error('Missing required parameter: end_date');
-      return handleCreateCalendarEvent(title, startDate, endDate, call.arguments.location, call.arguments.notes);
+      return handleCreateCalendarEvent({
+        title,
+        startDate,
+        endDate,
+        location: call.arguments.location as string | undefined,
+        notes: call.arguments.notes as string | undefined,
+      });
     }
     case 'read_calendar_events': {
       return handleReadCalendarEvents(call.arguments.start_date, call.arguments.end_date);
@@ -420,12 +426,9 @@ async function handleSendEmail(to: string, subject?: string, body?: string): Pro
 }
 
 async function handleCreateCalendarEvent(
-  title: string,
-  startDate: string,
-  endDate: string,
-  location?: string,
-  notes?: string,
+  event: { title: string; startDate: string; endDate: string; location?: string; notes?: string },
 ): Promise<string> {
+  const { title, startDate, endDate, location, notes } = event;
   if (!(RNAddCalendarEvent as any)?.presentEventCreatingDialog) {
     throw new Error('Calendar package not available. Rebuild the app to use this tool.');
   }

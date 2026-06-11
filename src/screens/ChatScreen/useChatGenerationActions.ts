@@ -304,28 +304,30 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
     logger.error('[ChatGen] Generation failed:', msg, error);
     const isContextOverflow = msg.includes('too long') || msg.includes('Exceeding the maximum number of tokens') || msg.includes('Input token ids');
     if (isContextOverflow) {
-      deps.setAlertState(showAlert(
-        'Context window full',
-        'The conversation is too long for this model\'s context window.\n\nIncrease the context limit in Settings, reduce the number of enabled tools, or start a new chat.',
-        [
-          {
-            text: 'Settings',
-            onPress: () => { deps.setAlertState({ visible: false, title: '', message: '', buttons: [] }); deps.setShowSettingsPanel?.(true); },
-          },
-          {
-            text: 'New chat',
-            onPress: () => {
-              deps.setAlertState({ visible: false, title: '', message: '', buttons: [] });
-              const modelId = deps.activeModelInfo?.modelId;
-              if (modelId) {
-                const newId = deps.createConversation(modelId);
-                deps.setActiveConversation(newId);
-              }
+      deps.setAlertState({
+        ...showAlert(
+          'Context window full',
+          'The conversation is too long for this model\'s context window.\n\nIncrease the context limit in Settings, reduce the number of enabled tools, or start a new chat.',
+          [
+            {
+              text: 'Settings',
+              onPress: () => { deps.setAlertState({ visible: false, title: '', message: '', buttons: [] }); deps.setShowSettingsPanel?.(true); },
             },
-          },
-        ],
-        { prominentMessage: true },
-      ));
+            {
+              text: 'New chat',
+              onPress: () => {
+                deps.setAlertState({ visible: false, title: '', message: '', buttons: [] });
+                const modelId = deps.activeModelInfo?.modelId;
+                if (modelId) {
+                  const newId = deps.createConversation(modelId);
+                  deps.setActiveConversation(newId);
+                }
+              },
+            },
+          ],
+        ),
+        prominentMessage: true,
+      });
     } else {
       deps.setAlertState(showAlert('Generation Error', msg));
     }
@@ -424,28 +426,30 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
     const msg = error?.message || 'Failed to generate response';
     const isContextOverflow = msg.includes('too long') || msg.includes('Exceeding the maximum number of tokens') || msg.includes('Input token ids');
     if (isContextOverflow) {
-      deps.setAlertState(showAlert(
-        'Context window full',
-        'The conversation is too long for this model\'s context window.\n\nIncrease the context limit in Settings, reduce the number of enabled tools, or start a new chat.',
-        [
-          {
-            text: 'Settings',
-            onPress: () => { deps.setAlertState({ visible: false, title: '', message: '', buttons: [] }); deps.setShowSettingsPanel?.(true); },
-          },
-          {
-            text: 'New chat',
-            onPress: () => {
-              deps.setAlertState({ visible: false, title: '', message: '', buttons: [] });
-              const modelId = deps.activeModelInfo?.modelId;
-              if (modelId) {
-                const newId = deps.createConversation(modelId);
-                deps.setActiveConversation(newId);
-              }
+      deps.setAlertState({
+        ...showAlert(
+          'Context window full',
+          'The conversation is too long for this model\'s context window.\n\nIncrease the context limit in Settings, reduce the number of enabled tools, or start a new chat.',
+          [
+            {
+              text: 'Settings',
+              onPress: () => { deps.setAlertState({ visible: false, title: '', message: '', buttons: [] }); deps.setShowSettingsPanel?.(true); },
             },
-          },
-        ],
-        { prominentMessage: true },
-      ));
+            {
+              text: 'New chat',
+              onPress: () => {
+                deps.setAlertState({ visible: false, title: '', message: '', buttons: [] });
+                const modelId = deps.activeModelInfo?.modelId;
+                if (modelId) {
+                  const newId = deps.createConversation(modelId);
+                  deps.setActiveConversation(newId);
+                }
+              },
+            },
+          ],
+        ),
+        prominentMessage: true,
+      });
     } else {
       deps.setAlertState(showAlert('Generation Error', msg));
     }

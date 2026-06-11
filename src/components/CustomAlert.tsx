@@ -109,14 +109,12 @@ export const showAlert = (
   title: string,
   message?: string,
   buttons?: AlertButton[],
-  options?: { prominentMessage?: boolean },
 ): AlertState => ({
   visible: true,
   title,
   message,
   buttons,
   loading: false,
-  prominentMessage: options?.prominentMessage,
 });
 
 // Helper function to show loading alert (returns state to set)

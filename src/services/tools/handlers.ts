@@ -421,7 +421,11 @@ async function handleSendEmail(to: string, subject?: string, body?: string): Pro
   if (subject) parts.push(`subject=${encodeURIComponent(subject)}`);
   if (body) parts.push(`body=${encodeURIComponent(body)}`);
   const url = `mailto:${encodeURIComponent(to)}${parts.length ? `?${parts.join('&')}` : ''}`;
-  await Linking.openURL(url);
+  try {
+    await Linking.openURL(url);
+  } catch (err) {
+    throw new Error('Could not open the mail app. Please ensure a mail client is configured on your device.');
+  }
   return `Mail app opened with a draft to ${to}${subject ? ` (subject: "${subject}")` : ''}.`;
 }
 
@@ -432,10 +436,15 @@ async function handleCreateCalendarEvent(
   if (!(RNAddCalendarEvent as any)?.presentEventCreatingDialog) {
     throw new Error('Calendar package not available. Rebuild the app to use this tool.');
   }
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    throw new Error('Invalid date format. Please provide valid ISO 8601 dates.');
+  }
   const result = await RNAddCalendarEvent.presentEventCreatingDialog({
     title,
-    startDate: new Date(startDate).toISOString(),
-    endDate: new Date(endDate).toISOString(),
+    startDate: start.toISOString(),
+    endDate: end.toISOString(),
     ...(location ? { location } : {}),
     ...(notes ? { notes } : {}),
   });
@@ -452,7 +461,13 @@ async function handleReadCalendarEvents(startDateStr?: string, endDateStr?: stri
   const status = await RNCalendarEvents.requestPermissions(true);
   if (status !== 'authorized') throw new Error('Calendar permission denied');
   const startDt = startDateStr ? new Date(startDateStr) : new Date();
+  if (isNaN(startDt.getTime())) {
+    throw new Error('Invalid start date format.');
+  }
   const endDt = endDateStr ? new Date(endDateStr) : new Date(startDt.getTime() + 7 * 24 * 60 * 60 * 1000);
+  if (isNaN(endDt.getTime())) {
+    throw new Error('Invalid end date format.');
+  }
   const events = await RNCalendarEvents.fetchAllEvents(startDt.toISOString(), endDt.toISOString());
   if (events.length === 0) {
     return `No calendar events found between ${startDt.toDateString()} and ${endDt.toDateString()}.`;

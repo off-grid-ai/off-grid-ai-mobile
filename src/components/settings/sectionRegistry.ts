@@ -3,7 +3,9 @@ import type { ComponentType } from 'react';
 const sections: ComponentType<any>[] = [];
 
 export function registerSettingsSection(component: ComponentType<any>): void {
-  sections.push(component);
+  if (!sections.includes(component)) {
+    sections.push(component);
+  }
 }
 
 export function getSettingsSections(): ComponentType<any>[] {

@@ -1,70 +1,67 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  refreshProStatus,
-  isPro,
-  onProStatusChange,
-  _resetForTesting,
+  readProFromKeychain,
+  checkProStatus,
 } from '../../../src/services/proLicenseService';
 
-const mockedGetItem = AsyncStorage.getItem as jest.Mock;
+jest.mock('react-native-purchases', () => ({
+  default: { setLogLevel: jest.fn(), configure: jest.fn(), getCustomerInfo: jest.fn() },
+  LOG_LEVEL: { DEBUG: 'debug', ERROR: 'error' },
+}));
+
+jest.mock('react-native-purchases-ui', () => ({
+  default: { presentPaywall: jest.fn() },
+  PAYWALL_RESULT: { PURCHASED: 'PURCHASED', RESTORED: 'RESTORED', NOT_PRESENTED: 'NOT_PRESENTED', ERROR: 'ERROR', CANCELLED: 'CANCELLED' },
+}));
+
+const mockGetGenericPassword = jest.fn();
+const mockSetGenericPassword = jest.fn();
+const mockResetGenericPassword = jest.fn();
+
+jest.mock('react-native-keychain', () => ({
+  getGenericPassword: (...args: any[]) => mockGetGenericPassword(...args),
+  setGenericPassword: (...args: any[]) => mockSetGenericPassword(...args),
+  resetGenericPassword: (...args: any[]) => mockResetGenericPassword(...args),
+  ACCESSIBLE: { AFTER_FIRST_UNLOCK: 'AfterFirstUnlock' },
+}));
 
 describe('proLicenseService', () => {
   beforeEach(() => {
-    _resetForTesting();
     jest.clearAllMocks();
   });
 
-  describe('isPro()', () => {
-    it('returns false before refreshProStatus has been called', () => {
-      expect(isPro()).toBe(false);
+  describe('readProFromKeychain()', () => {
+    it('returns false when no keychain entry exists', async () => {
+      mockGetGenericPassword.mockResolvedValueOnce(false);
+      expect(await readProFromKeychain()).toBe(false);
     });
 
-    it('returns false when no receipt is stored', async () => {
-      mockedGetItem.mockResolvedValueOnce(null);
-      await refreshProStatus();
-      expect(isPro()).toBe(false);
+    it('returns false when keychain entry has isPro=false', async () => {
+      mockGetGenericPassword.mockResolvedValueOnce({ password: JSON.stringify({ isPro: false, verifiedAt: Date.now() }) });
+      expect(await readProFromKeychain()).toBe(false);
     });
 
-    it('returns false when stored receipt is too short (<= 10 chars)', async () => {
-      mockedGetItem.mockResolvedValueOnce('short');
-      await refreshProStatus();
-      expect(isPro()).toBe(false);
+    it('returns true when keychain entry has isPro=true', async () => {
+      mockGetGenericPassword.mockResolvedValueOnce({ password: JSON.stringify({ isPro: true, verifiedAt: Date.now() }) });
+      expect(await readProFromKeychain()).toBe(true);
     });
 
-    it('returns true when a valid receipt is stored', async () => {
-      mockedGetItem.mockResolvedValueOnce('valid-receipt-longer-than-ten-chars');
-      await refreshProStatus();
-      expect(isPro()).toBe(true);
+    it('returns false when keychain entry is malformed', async () => {
+      mockGetGenericPassword.mockResolvedValueOnce({ password: 'not-json' });
+      expect(await readProFromKeychain()).toBe(false);
     });
   });
 
-  describe('refreshProStatus()', () => {
-    it('returns the resolved boolean', async () => {
-      mockedGetItem.mockResolvedValueOnce('valid-receipt-longer-than-ten-chars');
-      const result = await refreshProStatus();
+  describe('checkProStatus()', () => {
+    it('returns the cached keychain value immediately', async () => {
+      mockGetGenericPassword.mockResolvedValueOnce({ password: JSON.stringify({ isPro: true, verifiedAt: Date.now() }) });
+      const result = await checkProStatus();
       expect(result).toBe(true);
     });
 
-    it('notifies all listeners after refresh', async () => {
-      mockedGetItem.mockResolvedValue('valid-receipt-longer-than-ten-chars');
-      const cb1 = jest.fn();
-      const cb2 = jest.fn();
-      onProStatusChange(cb1);
-      onProStatusChange(cb2);
-      await refreshProStatus();
-      expect(cb1).toHaveBeenCalledTimes(1);
-      expect(cb2).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('onProStatusChange()', () => {
-    it('returns an unsubscribe function that stops future notifications', async () => {
-      mockedGetItem.mockResolvedValue(null);
-      const cb = jest.fn();
-      const unsub = onProStatusChange(cb);
-      unsub();
-      await refreshProStatus();
-      expect(cb).not.toHaveBeenCalled();
+    it('returns false when keychain is empty', async () => {
+      mockGetGenericPassword.mockResolvedValueOnce(false);
+      const result = await checkProStatus();
+      expect(result).toBe(false);
     });
   });
 });

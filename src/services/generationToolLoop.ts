@@ -83,7 +83,6 @@ function parseGemmaColonArgs(name: string, colonArgs: string): Record<string, an
 function parseGemmaToolCallBody(raw: string, toolCalls: ToolCall[]): void {
   const nameMatch = (/^(?:call:)?(\w+)/).exec(raw);
   if (!nameMatch) {
-    logger.warn(`[ToolLoop] Gemma tool call body did not match expected format: "${raw.substring(0, 100)}"`);
     return;
   }
   const name = nameMatch[1];
@@ -94,9 +93,7 @@ function parseGemmaToolCallBody(raw: string, toolCalls: ToolCall[]): void {
   if (argsStr) {
     try {
       args = JSON.parse(fixUnquotedKeys(argsStr));
-    } catch {
-      logger.warn(`[ToolLoop] Failed to parse Gemma tool args: ${argsStr.substring(0, 100)}`);
-    }
+    } catch { /* fall through */ }
   } else if (rest.startsWith(':')) {
     args = parseGemmaColonArgs(name, rest.slice(1));
   }
@@ -105,7 +102,6 @@ function parseGemmaToolCallBody(raw: string, toolCalls: ToolCall[]): void {
     args = { ...args, query: Array.isArray(args.queries) ? args.queries[0] : args.queries };
   }
   toolCalls.push({ id: `gemma-tc-${Date.now()}-${toolCalls.length}`, name, arguments: args });
-  logger.log(`[ToolLoop] Parsed Gemma native tool call: ${name}(${JSON.stringify(args).substring(0, 100)})`);
 }
 
 /** Parse Gemma 4's native tool call format: <|tool_call>call:NAME{...}<tool_call|> and <tool_call:NAME{...}<tool_call|> */
@@ -147,7 +143,6 @@ export function parseToolCallsFromText(text: string): { cleanText: string; toolC
     matchedRanges.push([match.index, match.index + match[0].length]);
     const call = parseToolCallBody(match[1].trim(), toolCalls.length);
     if (call) { toolCalls.push(call); }
-    else { logger.log(`[ToolLoop] Failed to parse tool_call tag: ${match[1].trim().substring(0, 100)}`); }
   }
   // Also match unclosed <tool_call> at end of text (model hit EOS without closing tag)
   const unclosedMatch = /<tool_call>([\s\S]+)$/.exec(text);
@@ -201,16 +196,13 @@ async function executeToolCalls(ctx: ToolLoopContext, toolCalls: import('./tools
     if (tc.name === 'web_search' && (!tc.arguments.query || typeof tc.arguments.query !== 'string' || !tc.arguments.query.trim())) {
       const fallbackQuery = getLastUserQuery(loopMessages);
       if (fallbackQuery) {
-        logger.log(`[ToolLoop] web_search called with empty query, using user message: "${fallbackQuery.substring(0, 80)}"`);
         tc.arguments = { ...tc.arguments, query: fallbackQuery };
       }
     }
-    logger.log(`[ToolLoop][DEBUG] Executing tool: ${tc.name}, args: ${JSON.stringify(tc.arguments).substring(0, 200)}`);
     if (ctx.projectId) tc.context = { projectId: ctx.projectId };
     ctx.callbacks?.onToolCallStart?.(tc.name, tc.arguments);
     const ext = exts.find(e => e.canHandle(tc.name));
     const result = ext ? await ext.execute(tc) : await executeToolCall(tc);
-    logger.log(`[ToolLoop][DEBUG] Tool ${tc.name} result: error=${result.error || 'none'}, content length=${result.content?.length || 0}, duration=${result.durationMs}ms`);
     ctx.callbacks?.onToolCallComplete?.(tc.name, result);
     const toolResultMsg: Message = {
       id: `tool-result-${Date.now()}-${tc.id || tc.name}`, role: 'tool',
@@ -239,7 +231,6 @@ async function callRemoteLLMWithTools(
   const settings = useAppStore.getState().settings;
   const thinkingEnabled = !opts?.disableThinking && settings.thinkingEnabled && provider.capabilities.supportsThinking;
   const options: GenerationOptions = { temperature: settings.temperature, maxTokens: settings.maxTokens, topP: settings.topP, tools, enableThinking: thinkingEnabled };
-  logger.log(`[ToolLoop] callRemoteLLM — server=${activeServerId}, tools=${tools.length}, thinking=${thinkingEnabled}`);
   let _fullContent = '', toolCalls: ToolCall[] = [];
   const onStream = opts?.onStream;
   return new Promise((resolve, reject) => {
@@ -252,7 +243,6 @@ async function callRemoteLLMWithTools(
         onStream?.({ reasoningContent: content });
       },
       onComplete: (result: CompletionResult) => {
-        logger.log(`[ToolLoop] onComplete — content=${result.content?.length || 0}, toolCalls=${result.toolCalls?.length || 0}`);
         if (result.toolCalls && result.toolCalls.length > 0) {
           toolCalls = result.toolCalls.map(tc => ({
             id: tc.id || `call-${Date.now()}`,
@@ -285,7 +275,6 @@ async function callLocalWithRetry(
       lastError = e;
       const msg = e?.message || String(e) || '';
       if (isNonRetryableError(msg) || attempt >= MAX_LLM_RETRIES - 1) break;
-      logger.log(`[ToolLoop] Error: "${msg.substring(0, 120) || '(no message)'}", stopping context and retrying (attempt ${attempt + 1}/${MAX_LLM_RETRIES})`);
       await llmService.stopGeneration().catch(() => { });
       await new Promise<void>(resolve => setTimeout(resolve, (attempt + 1) * RETRY_BACKOFF_MS));
     }
@@ -336,10 +325,8 @@ function buildLiteRTToolCallHandler(ctx: ToolLoopContext, conversationId: string
     if (ctx.isAborted()) return 'Aborted';
     toolCallCount++;
     if (toolCallCount > MAX_LITERT_TOOL_CALLS) {
-      logger.log(`[ToolLoop][LiteRT] tool call cap reached (${MAX_LITERT_TOOL_CALLS}) — refusing "${name}", instructing model to answer`);
       return `Tool call limit reached (${MAX_LITERT_TOOL_CALLS} per response). Do not call any more tools. Answer now using the information you already have.`;
     }
-    logger.log(`[ToolLoop][LiteRT] native tool call ${toolCallCount}/${MAX_LITERT_TOOL_CALLS} — name=${name}, args=${JSON.stringify(args).substring(0, 200)}`);
     ctx.callbacks?.onToolCallStart?.(name, args as Record<string, any>);
     const toolCall: ToolCall = { id: `native-tc-${Date.now()}`, name, arguments: args as Record<string, any> };
     if (ctx.projectId) (toolCall as any).context = { projectId: ctx.projectId };
@@ -354,7 +341,6 @@ function buildLiteRTToolCallHandler(ctx: ToolLoopContext, conversationId: string
       toolCallId: toolCall.id, toolName: name, timestamp: Date.now() };
     useChatStore.getState().addMessage(conversationId, toolCallMsg);
     useChatStore.getState().addMessage(conversationId, toolResultMsg);
-    logger.log(`[ToolLoop][LiteRT] tool ${name} completed — resultLen=${resultContent.length}, first200="${resultContent.substring(0, 200)}"`);
     return resultContent;
   };
 }
@@ -379,12 +365,7 @@ async function callLiteRTForLoop(
     topK: 40,
     topP: liteRTSettings.liteRTTopP,
   };
-  logger.log(`[ToolLoop][LiteRT] callLiteRTForLoop — convId=${conversationId}, text=${text.length}ch, sysPrompt=${systemPrompt.length}ch, tools=${tools.length}, history=${history.length}, imageCount=${imageUris?.length ?? 0}`);
-  logger.log(`[ToolLoop][LiteRT] samplerConfig — temperature=${samplerConfig.temperature} topK=${samplerConfig.topK} topP=${samplerConfig.topP}`);
-  logger.log(`[ToolLoop][LiteRT] sysPrompt first500: "${systemPrompt.substring(0, 500)}"`);
-  logger.log(`[ToolLoop][LiteRT] sending text: "${text.substring(0, 300)}"`);
   if (!text) {
-    logger.warn('[ToolLoop][LiteRT] no message text — aborting');
     return { fullResponse: '', toolCalls: [] };
   }
   await liteRTService.prepareConversation(conversationId, systemPrompt, { samplerConfig, tools, history });
@@ -398,7 +379,6 @@ async function callLiteRTForLoop(
       onReasoning: token => onStream?.({ reasoningContent: token }),
     },
   );
-  logger.log(`[ToolLoop][LiteRT] raw response (${fullResponse.length}ch): "${fullResponse.substring(0, 400)}"`);
   // Native SDK handles all tool→model cycles internally; toolCalls always empty here
   return { fullResponse, toolCalls: [] };
 }
@@ -436,7 +416,6 @@ async function callLLMWithRetry(
   }
   const activeServerId = useRemoteServerStore.getState().activeServerId;
   const useRemote = forceRemote || (!!activeServerId && providerRegistry.hasProvider(activeServerId) && !llmService.isModelLoaded());
-  logger.log(`[ToolLoop] callLLM — remote=${useRemote}, tools=${tools.length}`);
   if (useRemote) {
     try { return await callRemoteLLMWithTools(augmentedMessages, tools, { onStream, disableThinking }); }
     catch (e: any) { throw new Error(e?.message || String(e) || 'Remote LLM error'); }
@@ -454,14 +433,12 @@ function resolveToolCalls(fullResponse: string, toolCalls: ToolCall[]) {
     if (fullResponse.includes('<tool_call>')) {
       const parsed = parseToolCallsFromText(fullResponse);
       if (parsed.toolCalls.length > 0) {
-        logger.log(`[ToolLoop] Parsed ${parsed.toolCalls.length} tool call(s) from <tool_call> tags`);
         effectiveToolCalls = parsed.toolCalls;
         displayResponse = parsed.cleanText;
       }
     } else if (fullResponse.includes('<|tool_call>') || fullResponse.includes('<tool_call:')) {
       const parsed = parseGemmaNativeToolCalls(fullResponse);
       if (parsed.toolCalls.length > 0) {
-        logger.log(`[ToolLoop] Parsed ${parsed.toolCalls.length} tool call(s) from Gemma native format`);
         effectiveToolCalls = parsed.toolCalls;
         displayResponse = parsed.cleanText;
       }
@@ -472,7 +449,6 @@ function resolveToolCalls(fullResponse: string, toolCalls: ToolCall[]) {
   for (const ext of getToolExtensions()) {
     const extCalls = ext.parseToolCalls(displayResponse);
     if (extCalls.length > 0) {
-      logger.log(`[ToolLoop] Extension ${ext.id} parsed ${extCalls.length} tool call(s)`);
       effectiveToolCalls.push(...extCalls);
     }
     displayResponse = ext.stripFromVisibleText(displayResponse);
@@ -506,9 +482,7 @@ function buildStreamHandler(ctx: ToolLoopContext, state: ToolLoopState): ((data:
 }
 
 function emitFinalResponse(ctx: ToolLoopContext, state: ToolLoopState, displayResponse: string): void {
-  if (state.streamedContent) {
-    logger.log(`[ToolLoop][DEBUG] emitFinalResponse — already streamed (${state.streamedContent.length} chars), skipping`);
-  } else {
+  if (!state.streamedContent) {
     if (!state.thinkingDoneFired) {
       ctx.onThinkingDone();
       ctx.callbacks?.onFirstToken?.();
@@ -519,13 +493,11 @@ function emitFinalResponse(ctx: ToolLoopContext, state: ToolLoopState, displayRe
 
 /** Force a final text-only generation (no tools) when iteration/call caps are hit. */
 async function forceFinalTextResponse(ctx: ToolLoopContext, state: ToolLoopState, loopMessages: Message[]): Promise<void> {
-  logger.log(`[ToolLoop] Hit cap — forcing final text response`);
   state.streamedContent = '';
   state.reasoningContent = '';
   state.firstTokenFired = false;
   const forcedOnStream = buildStreamHandler(ctx, state);
   const { fullResponse: forcedResponse } = await callLLMWithRetry(loopMessages, [], { onStream: forcedOnStream, forceRemote: ctx.forceRemote, disableThinking: true, conversationId: ctx.conversationId, ctx });
-  logger.log(`[ToolLoop][DEBUG] Forced response — length=${forcedResponse.length}, streamedContent=${state.streamedContent.length}, reasoning=${state.reasoningContent.length}`);
   emitFinalResponse(ctx, state, forcedResponse);
 }
 
@@ -542,10 +514,8 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
   const loopMessages = [...ctx.messages];
   let totalToolCalls = 0;
   const state: ToolLoopState = { firstTokenFired: false, thinkingDoneFired: false, streamedContent: '', reasoningContent: '' };
-  logger.log(`[ToolLoop][DEBUG] === runToolLoop START === enabledToolIds=[${ctx.enabledToolIds.join(', ')}], toolSchemas=${toolSchemas.length}, messages=${ctx.messages.length}, forceRemote=${ctx.forceRemote}`);
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
     if (ctx.isAborted()) {
-      logger.log(`[ToolLoop][DEBUG] Aborted at iteration ${iteration}`);
       break;
     }
 
@@ -557,24 +527,18 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
 
     state.streamedContent = '';
     state.reasoningContent = '';
-    logger.log(`[ToolLoop][DEBUG] === Iteration ${iteration} === messages=${loopMessages.length}, tools=${toolSchemas.length}, totalCalls=${totalToolCalls}`);
 
     const onStream = buildStreamHandler(ctx, state);
     const { fullResponse, toolCalls } = await callLLMWithRetry(loopMessages, toolSchemas, { onStream, forceRemote: ctx.forceRemote, conversationId: ctx.conversationId, ctx });
 
-    logger.log(`[ToolLoop][DEBUG] LLM returned — response=${fullResponse.length}, toolCalls=${toolCalls.length}, streamed=${state.streamedContent.length}, reasoning=${state.reasoningContent.length}`);
-    if (fullResponse.length === 0 && state.streamedContent.length === 0) {
-      logger.log(`[ToolLoop][DEBUG] *** EMPTY RESPONSE *** reasoning=${state.reasoningContent.length}: "${state.reasoningContent.substring(0, 200)}"`);
-    }
     const { effectiveToolCalls, displayResponse } = resolveToolCalls(fullResponse, toolCalls);
     const cappedToolCalls = effectiveToolCalls.slice(0, MAX_TOTAL_TOOL_CALLS - totalToolCalls);
     totalToolCalls += cappedToolCalls.length;
-    logger.log(`[ToolLoop][DEBUG] After resolve — toolCalls=${cappedToolCalls.length}, displayResponse=${displayResponse.length}`);
+
     // No tool calls → model gave a final text response
     if (cappedToolCalls.length === 0) {
       // Empty response with tools — retry once without tools (some models choke on tool schemas)
       if (!state.streamedContent && !displayResponse) {
-        logger.log(`[ToolLoop][DEBUG] *** EMPTY RESPONSE WITH TOOLS — retrying WITHOUT tools ***`);
         state.streamedContent = '';
         state.reasoningContent = '';
         state.firstTokenFired = false;
@@ -590,7 +554,6 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
     }
 
     // Execute the tool calls
-    logger.log(`[ToolLoop][DEBUG] Executing ${cappedToolCalls.length} tool calls: ${cappedToolCalls.map(tc => tc.name).join(', ')}`);
     if (state.streamedContent) { ctx.onStreamReset?.(); chatStore.setStreamingMessage(''); }
 
     const assistantMsg: Message = {
@@ -606,5 +569,4 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
     chatStore.setIsThinking(true);
     await new Promise<void>(resolve => setTimeout(resolve, CONTEXT_RELEASE_PAUSE_MS));
   }
-  logger.log(`[ToolLoop][DEBUG] === runToolLoop END ===`);
 }

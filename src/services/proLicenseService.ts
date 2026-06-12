@@ -1,36 +1,85 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+import Purchases, { LOG_LEVEL } from 'react-native-purchases';
+import RevenueCatUI, { PAYWALL_RESULT } from 'react-native-purchases-ui';
+import * as Keychain from 'react-native-keychain';
 
-const KEY = 'user_pro_receipt';
-let cached: boolean | null = null;
-const listeners = new Set<() => void>();
+const KEYCHAIN_SERVICE = 'off-grid-pro-license';
+const ENTITLEMENT_ID = 'offgrid Pro';
+const RC_API_KEY_IOS = 'test_UDUmOVwoEWFUtYONRUfQOOjVisB';
+const RC_API_KEY_ANDROID = 'test_UDUmOVwoEWFUtYONRUfQOOjVisB';
 
-export async function refreshProStatus(): Promise<boolean> {
-  cached = await validateStoredReceipt();
-  listeners.forEach(l => l());
+type ProLicense = { isPro: boolean; verifiedAt: number };
+
+export function configureRevenueCat(): void {
+  Purchases.setLogLevel(__DEV__ ? LOG_LEVEL.DEBUG : LOG_LEVEL.ERROR);
+  Purchases.configure({
+    apiKey: Platform.OS === 'ios' ? RC_API_KEY_IOS : RC_API_KEY_ANDROID,
+  });
+}
+
+async function writeLicense(isPro: boolean): Promise<void> {
+  const license: ProLicense = { isPro, verifiedAt: Date.now() };
+  await Keychain.setGenericPassword('license', JSON.stringify(license), {
+    service: KEYCHAIN_SERVICE,
+    accessible: Keychain.ACCESSIBLE.AFTER_FIRST_UNLOCK,
+  });
+}
+
+export async function readProFromKeychain(): Promise<boolean> {
+  try {
+    const result = await Keychain.getGenericPassword({ service: KEYCHAIN_SERVICE });
+    if (!result) return false;
+    const license: ProLicense = JSON.parse(result.password);
+    return license.isPro ?? false;
+  } catch {
+    return false;
+  }
+}
+
+export async function checkProStatus(): Promise<boolean> {
+  const cached = await readProFromKeychain();
+  syncWithRevenueCat().catch(() => {});
   return cached;
 }
 
-export function isPro(): boolean {
-  return cached === true;
+async function syncWithRevenueCat(): Promise<void> {
+  try {
+    const info = await Purchases.getCustomerInfo();
+    const isPro = typeof info.entitlements.active[ENTITLEMENT_ID] !== 'undefined';
+    await writeLicense(isPro);
+    const { useAppStore } = require('../stores/appStore');
+    useAppStore.getState().setHasRegisteredPro(isPro);
+  } catch {
+    // No network — cached value stands
+  }
 }
 
-export function onProStatusChange( cb: () => void): () => void {
-  listeners.add(cb);
-  return () => listeners.delete(cb);
+export async function presentProPaywall(): Promise<boolean> {
+  const result: PAYWALL_RESULT = await RevenueCatUI.presentPaywall();
+  switch (result) {
+    case PAYWALL_RESULT.PURCHASED:
+    case PAYWALL_RESULT.RESTORED: {
+      await writeLicense(true);
+      const { useAppStore } = require('../stores/appStore');
+      useAppStore.getState().setHasRegisteredPro(true);
+      return true;
+    }
+    default:
+      return false;
+  }
 }
 
-// TODO: remove before shipping — bypasses receipt check for local dev.
-// Disabled under Jest so the real receipt-validation logic is exercised by tests.
-const DEV_BYPASS_PRO = __DEV__ && process.env.JEST_WORKER_ID === undefined;
-
-// production: validate the Apple/Google receipt signature (react-native-iap)
-async function validateStoredReceipt(): Promise<boolean> {
-  if (DEV_BYPASS_PRO) return true;
-  const raw = await AsyncStorage.getItem(KEY);
-  return !!raw && raw.length > 10;
+export async function restorePro(): Promise<boolean> {
+  const info = await Purchases.restorePurchases();
+  const isPro = typeof info.entitlements.active[ENTITLEMENT_ID] !== 'undefined';
+  await writeLicense(isPro);
+  const { useAppStore } = require('../stores/appStore');
+  useAppStore.getState().setHasRegisteredPro(isPro);
+  return isPro;
 }
 
-export function _resetForTesting(): void {
-  cached = null;
-  listeners.clear();
+export async function clearProForTesting(): Promise<void> {
+  await Keychain.resetGenericPassword({ service: KEYCHAIN_SERVICE });
+  const { useAppStore } = require('../stores/appStore');
+  useAppStore.getState().setHasRegisteredPro(false);
 }

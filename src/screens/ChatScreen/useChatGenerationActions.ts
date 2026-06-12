@@ -123,7 +123,6 @@ export async function shouldRouteToImageGenerationFn(
     }
     return intent === 'image';
   } catch (error) {
-    logger.warn('[ChatScreen] Intent classification failed:', error);
     deps.setIsClassifying(false);
     deps.setAppImageGenerationStatus(null);
     deps.setAppIsGeneratingImage(false);
@@ -169,11 +168,10 @@ async function prepareContext(setDebugInfo: SetState<any>, systemPrompt: string,
   try {
     const contextDebug = await llmService.getContextDebugInfo(messages);
     setDebugInfo({ systemPrompt, ...contextDebug });
-    logger.log(`[ChatGen] Context prepared: ${contextDebug.contextUsagePercent}% used, ${contextDebug.truncatedCount} truncated`);
     if (contextDebug.truncatedCount > 0 || contextDebug.contextUsagePercent > 70) {
       await llmService.clearKVCache(false).catch(() => { });
     }
-  } catch (e) { logger.log('Debug info error:', e); }
+  } catch { /* ignore */ }
 }
 /** Run generation; if context is full, compact old messages and retry once. */
 async function generateWithCompactionRetry(
@@ -187,12 +185,10 @@ async function generateWithCompactionRetry(
     : generationService.generateResponse(opts.id, msgs);
   try { await gen(opts.messages); } catch (error: any) {
     if (!contextCompactionService.isContextFullError(error)) throw error;
-    logger.log('[ChatGen] Context full — compacting');
     await llmService.stopGeneration().catch(() => { });
     const conversation = useChatStore.getState().conversations.find(c => c.id === opts.id);
     const previousSummary = conversation?.compactionSummary;
     const compacted = await contextCompactionService.compact({ conversationId: opts.id, systemPrompt: opts.prompt, allMessages: opts.messages, previousSummary }).catch(async () => {
-      logger.log(`[ChatGen] Compaction failed — falling back to last ${FALLBACK_RECENT_MESSAGE_COUNT} messages`);
       await llmService.clearKVCache(true).catch(() => { });
       const recent = opts.messages.filter(m => m.role !== 'system').slice(-FALLBACK_RECENT_MESSAGE_COUNT);
       return [{ id: 'system', role: 'system', content: opts.prompt, timestamp: 0 } as Message, ...recent];
@@ -246,7 +242,6 @@ function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any, _message
   }
 
   const rawPrompt = project?.systemPrompt || deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt;
-  logger.log(`[ChatGen][resolveTools] isLiteRT=${isLiteRT}, canUseTools=${canUseTools}, enabledTools=[${enabledTools.join(', ')}]`);
   return { enabledTools, rawPrompt, isLiteRT };
 }
 export async function startGenerationFn(deps: GenerationDeps, call: StartGenerationCall): Promise<void> {
@@ -280,10 +275,7 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   // Collect extension hints (MCP tools etc.) and append when using text-hint mode
   const extensions = getToolExtensions();
   const extHints = extensions.map(e => e.getSystemPromptHint()).filter(Boolean);
-  logger.log(`[ChatGen][EXT] ${extensions.length} extension(s) registered, ${extHints.length} with non-empty hints`);
-  if (extHints.length > 0) {
-    logger.log(`[ChatGen][EXT] hints: ${extHints.map((h, i) => `ext[${i}]=${h.length}ch`).join(', ')}`);
-  }
+
   const extHintBlock = extHints.join('');
 
   const systemPrompt = applyGemma4ThinkToken(
@@ -293,8 +285,6 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
     isRemote,
     { isLiteRT, thinkingEnabled: deps.settings.thinkingEnabled },
   );
-  logger.log(`[ChatGen][DEBUG] isRemote=${isRemote}, isLiteRT=${isLiteRT}, useTextHint=${useTextHint}, tools=[${activeTools.join(', ')}], extHints=${extHints.length}`);
-  logger.log(`[ChatGen][PROMPT] systemPrompt (${systemPrompt.length}ch): "${systemPrompt.substring(0, 800)}"`);
   const messagesForContext = buildMessagesForContext(targetConversationId, messageText, systemPrompt);
   await prepareContext(setDebugInfo, systemPrompt, messagesForContext);
   try {

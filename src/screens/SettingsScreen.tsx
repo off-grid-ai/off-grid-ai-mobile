@@ -253,9 +253,6 @@ export const SettingsScreen: React.FC = () => {
           </TouchableOpacity>
         </AnimatedEntry>
 
-        {/* Pro feature sections registered at runtime by @offgrid/pro */}
-        {getSettingsSections().map((Section, i) => <Section key={i} />)}
-
         {/* Community */}
         <AnimatedEntry index={7} staggerMs={40} trigger={focusTrigger}>
           <View style={styles.navSection}>

@@ -1,5 +1,7 @@
 import { Platform } from 'react-native';
+// @ts-ignore — remove after: npm install react-native-purchases react-native-purchases-ui
 import Purchases, { LOG_LEVEL } from 'react-native-purchases';
+// @ts-ignore
 import RevenueCatUI, { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import * as Keychain from 'react-native-keychain';
 

@@ -423,7 +423,7 @@ async function handleSendEmail(to: string, subject?: string, body?: string): Pro
   const url = `mailto:${encodeURIComponent(to)}${parts.length ? `?${parts.join('&')}` : ''}`;
   try {
     await Linking.openURL(url);
-  } catch (err) {
+  } catch {
     throw new Error('Could not open the mail app. Please ensure a mail client is configured on your device.');
   }
   return `Mail app opened with a draft to ${to}${subject ? ` (subject: "${subject}")` : ''}.`;

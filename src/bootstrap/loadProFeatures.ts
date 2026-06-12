@@ -5,8 +5,7 @@ import { registerSettingsSection } from '../components/settings/sectionRegistry'
 export async function loadProFeatures(): Promise<void> {
   let pro: any;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    pro = require('@offgrid/pro');
+    pro = require('@offgrid/pro'); // eslint-disable-line @typescript-eslint/no-var-requires
   } catch {
     return; // free / contributor build: package not installed
   }

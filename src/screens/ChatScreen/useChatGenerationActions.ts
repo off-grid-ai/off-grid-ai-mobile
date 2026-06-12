@@ -1,4 +1,4 @@
-import { Dispatch, MutableRefObject, SetStateAction } from 'react';
+ import { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import {
   AlertState,
   showAlert,
@@ -122,7 +122,7 @@ export async function shouldRouteToImageGenerationFn(
       deps.setAppIsGeneratingImage(false);
     }
     return intent === 'image';
-  } catch (error) {
+  } catch {
     deps.setIsClassifying(false);
     deps.setAppImageGenerationStatus(null);
     deps.setAppIsGeneratingImage(false);

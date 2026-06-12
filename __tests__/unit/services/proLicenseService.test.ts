@@ -6,12 +6,12 @@ import {
 jest.mock('react-native-purchases', () => ({
   default: { setLogLevel: jest.fn(), configure: jest.fn(), getCustomerInfo: jest.fn() },
   LOG_LEVEL: { DEBUG: 'debug', ERROR: 'error' },
-}));
+}), { virtual: true });
 
 jest.mock('react-native-purchases-ui', () => ({
   default: { presentPaywall: jest.fn() },
   PAYWALL_RESULT: { PURCHASED: 'PURCHASED', RESTORED: 'RESTORED', NOT_PRESENTED: 'NOT_PRESENTED', ERROR: 'ERROR', CANCELLED: 'CANCELLED' },
-}));
+}), { virtual: true });
 
 const mockGetGenericPassword = jest.fn();
 const mockSetGenericPassword = jest.fn();

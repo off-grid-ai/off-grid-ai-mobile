@@ -8,9 +8,7 @@ export interface RegisteredScreen {
 const screens: RegisteredScreen[] = [];
 
 export function registerScreen(screen: RegisteredScreen): void {
-  if (!screens.some(s => s.name === screen.name)) {
-    screens.push(screen);
-  }
+  screens.push(screen);
 }
 
 export function getRegisteredScreens(): RegisteredScreen[] {

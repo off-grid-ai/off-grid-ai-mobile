@@ -12,6 +12,12 @@ import {
 const KEYCHAIN_SERVICE = 'off-grid-pro-license';
 const ENTITLEMENT_ID = 'pro';
 
+// react-native-purchases only ships native modules for iOS and Android. On any
+// other platform (e.g. React Native Web) configure is skipped and this stays
+// false, so the RC-backed entry points below no-op or fail loudly instead of
+// throwing native "module not found" errors.
+let isConfigured = false;
+
 type ProLicense = { isPro: boolean; verifiedAt: number };
 
 function setProInStore(isPro: boolean): void {
@@ -20,6 +26,10 @@ function setProInStore(isPro: boolean): void {
 }
 
 export function configureRevenueCat(): void {
+  if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
+    logger.log(`[RC] configure skipped: unsupported platform ${Platform.OS}`);
+    return;
+  }
   try {
     Purchases.setLogLevel(__DEV__ ? LOG_LEVEL.DEBUG : LOG_LEVEL.ERROR);
     const useTestStore = __DEV__ && USE_RC_TEST_STORE;
@@ -28,6 +38,7 @@ export function configureRevenueCat(): void {
       : Platform.OS === 'ios' ? RC_API_KEY_IOS : RC_API_KEY_ANDROID;
     logger.log(`[RC] configure platform=${Platform.OS} store=${useTestStore ? 'TEST' : Platform.OS} key=${apiKey.slice(0, 12)}...`);
     Purchases.configure({ apiKey });
+    isConfigured = true;
     logger.log('[RC] configure: SDK configured OK');
   } catch (e: any) {
     logger.error(`[RC] configure FAILED: ${e?.message ?? e}`);
@@ -79,6 +90,10 @@ export async function checkProStatus(): Promise<boolean> {
 }
 
 async function syncWithRevenueCat(): Promise<void> {
+  if (!isConfigured) {
+    logger.log('[RC] syncWithRevenueCat skipped: SDK not configured');
+    return;
+  }
   try {
     logger.log('[RC] syncWithRevenueCat: invalidating cache + fetching...');
     await Purchases.invalidateCustomerInfoCache();
@@ -102,6 +117,10 @@ async function syncWithRevenueCat(): Promise<void> {
 }
 
 export async function presentProPaywall(): Promise<boolean> {
+  if (!isConfigured) {
+    logger.error('[RC] presentProPaywall ABORT: SDK not configured');
+    throw new Error('RevenueCat is not configured');
+  }
   try {
     logger.log('[RC] presentProPaywall: fetching offerings...');
     const offerings = await Purchases.getOfferings();
@@ -156,6 +175,10 @@ export async function presentProPaywall(): Promise<boolean> {
 }
 
 export async function restorePro(): Promise<boolean> {
+  if (!isConfigured) {
+    logger.error('[RC] restorePro ABORT: SDK not configured');
+    throw new Error('RevenueCat is not configured');
+  }
   logger.log('[RC] restorePro: start');
   const info = await Purchases.restorePurchases();
   const activeKeys = Object.keys(info.entitlements.active);
@@ -173,6 +196,10 @@ export async function clearProForTesting(): Promise<void> {
 }
 
 export async function resetProIdentityForTesting(): Promise<void> {
+  if (!isConfigured) {
+    logger.log('[RC] resetProIdentityForTesting skipped: SDK not configured');
+    return;
+  }
   logger.log('[RC] resetProIdentityForTesting: start');
   logger.log('[RC] resetProIdentityForTesting: invalidating RC cache...');
   await Purchases.invalidateCustomerInfoCache();

@@ -52,4 +52,20 @@ describe('loadProFeatures()', () => {
       }),
     );
   });
+
+  it('reuses a passed isPro=true without re-reading the keychain', async () => {
+    const mockActivate = jest.fn();
+    jest.mock('@offgrid/pro', () => ({ activate: mockActivate }), { virtual: true });
+    await loadProFeatures(true);
+    expect(mockActivate).toHaveBeenCalledTimes(1);
+    expect(mockReadProFromKeychain).not.toHaveBeenCalled();
+  });
+
+  it('reuses a passed isPro=false without re-reading the keychain', async () => {
+    const mockActivate = jest.fn();
+    jest.mock('@offgrid/pro', () => ({ activate: mockActivate }), { virtual: true });
+    await loadProFeatures(false);
+    expect(mockActivate).not.toHaveBeenCalled();
+    expect(mockReadProFromKeychain).not.toHaveBeenCalled();
+  });
 });

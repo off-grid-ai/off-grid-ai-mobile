@@ -181,10 +181,11 @@ function App() {
       // whole block is isolated and only logs on error.
       try {
         configureRevenueCat();
-        await checkProStatus();
+        const isPro = await checkProStatus();
 
         // Load pro features — only activates if the keychain entitlement is set.
-        await loadProFeatures();
+        // Reuse the entitlement read above to avoid a second keychain round-trip.
+        await loadProFeatures(isPro);
       } catch (proError) {
         logger.error('[App] Pro initialization failed, continuing without Pro:', proError);
       }

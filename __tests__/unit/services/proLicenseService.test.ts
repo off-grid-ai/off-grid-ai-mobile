@@ -53,6 +53,15 @@ const ENTITLEMENT_ACTIVE = { pro: { productIdentifier: 'pro_monthly' } };
 const ENTITLEMENT_EMPTY = {};
 
 describe('proLicenseService', () => {
+  beforeAll(() => {
+    // configureRevenueCat sets the module-level isConfigured flag that the
+    // purchase/restore/reset entry points require. Pin Platform.OS first since
+    // its default varies in the RN test environment.
+    const Platform = require('react-native').Platform;
+    Platform.OS = 'ios';
+    configureRevenueCat();
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -202,10 +211,56 @@ describe('proLicenseService', () => {
     });
 
     it('rethrows when the RC SDK fails to configure', () => {
+      const Platform = require('react-native').Platform;
+      Platform.OS = 'ios';
       Purchases.configure.mockImplementationOnce(() => {
         throw new Error('native module missing');
       });
       expect(() => configureRevenueCat()).toThrow('native module missing');
+    });
+
+    it('skips configuration on unsupported platforms (e.g. web)', () => {
+      const Platform = require('react-native').Platform;
+      Platform.OS = 'web';
+      configureRevenueCat();
+      expect(Purchases.configure).not.toHaveBeenCalled();
+      Platform.OS = 'ios';
+    });
+  });
+
+  describe('guards when the SDK is not configured', () => {
+    // A fresh module instance where configureRevenueCat() never ran, so the
+    // module-level isConfigured flag is false.
+    let svc: typeof import('../../../src/services/proLicenseService');
+    let isolatedKeychain: { getGenericPassword: jest.Mock; resetGenericPassword: jest.Mock };
+    let isolatedPurchases: { getCustomerInfo: jest.Mock };
+
+    beforeEach(() => {
+      jest.isolateModules(() => {
+        svc = require('../../../src/services/proLicenseService');
+        isolatedKeychain = require('react-native-keychain');
+        isolatedPurchases = require('react-native-purchases').default;
+      });
+    });
+
+    it('presentProPaywall throws', async () => {
+      await expect(svc.presentProPaywall()).rejects.toThrow('RevenueCat is not configured');
+    });
+
+    it('restorePro throws', async () => {
+      await expect(svc.restorePro()).rejects.toThrow('RevenueCat is not configured');
+    });
+
+    it('resetProIdentityForTesting no-ops without touching the keychain', async () => {
+      await svc.resetProIdentityForTesting();
+      expect(isolatedKeychain.resetGenericPassword).not.toHaveBeenCalled();
+    });
+
+    it('checkProStatus does not fire a background sync', async () => {
+      isolatedKeychain.getGenericPassword.mockResolvedValue(false);
+      expect(await svc.checkProStatus()).toBe(false);
+      await new Promise(resolve => setImmediate(resolve));
+      expect(isolatedPurchases.getCustomerInfo).not.toHaveBeenCalled();
     });
   });
 

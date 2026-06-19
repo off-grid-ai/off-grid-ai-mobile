@@ -113,6 +113,21 @@ class WhisperService {
     return destPath;
   }
 
+  /** List every downloaded ggml whisper model on disk (for the Download Manager). */
+  async listDownloadedModels(): Promise<Array<{ modelId: string; fileName: string; sizeBytes: number; filePath: string }>> {
+    const dir = this.getModelsDir();
+    if (!(await RNFS.exists(dir))) return [];
+    const entries = await RNFS.readDir(dir);
+    return entries
+      .filter(f => f.isFile() && f.name.startsWith('ggml-') && f.name.endsWith('.bin'))
+      .map(f => ({
+        modelId: f.name.replace(/^ggml-/, '').replace(/\.bin$/, ''),
+        fileName: f.name,
+        sizeBytes: Number(f.size) || 0,
+        filePath: f.path,
+      }));
+  }
+
   async deleteModel(modelId: string): Promise<void> {
     if (this.activeDownloadId !== null) {
       await backgroundDownloadService.cancelDownload(this.activeDownloadId).catch(() => {});

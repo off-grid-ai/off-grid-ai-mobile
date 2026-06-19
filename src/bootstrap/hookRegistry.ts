@@ -49,4 +49,9 @@ export const HOOKS = {
   audioOnAppForeground: 'audio.onAppForeground',
   /** (basePrompt: string) => string — augment the prompt when in voice mode. */
   audioAugmentPrompt: 'audio.augmentPrompt',
+  /** () => Promise<Array<{ engineId: string; name: string; sizeBytes: number }>>
+   *  — downloaded TTS (voice) models, surfaced in the Download Manager. */
+  downloadsListVoiceModels: 'downloads.listVoiceModels',
+  /** (engineId: string) => Promise<void> — delete a downloaded TTS voice model. */
+  downloadsDeleteVoiceModel: 'downloads.deleteVoiceModel',
 } as const;

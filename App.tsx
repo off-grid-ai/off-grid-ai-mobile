@@ -180,13 +180,20 @@ function App() {
       // Pro is optional: a failure here (missing native module, keychain locked,
       // bad RC config) must never abort app init or hang the splash screen, so the
       // whole block is isolated and only logs on error.
+      // RevenueCat is isolated in its own try: a failure here (no billing on a
+      // simulator, bad RC config, no network) must NOT prevent pro features from
+      // loading — otherwise the dev unlock below would never run.
+      let isPro = false;
       try {
         configureRevenueCat();
-        const isPro = await checkProStatus();
+        isPro = await checkProStatus();
+      } catch (rcError) {
+        logger.error('[App] RevenueCat init failed, continuing without entitlement:', rcError);
+      }
 
+      try {
         // Load pro features — only activates if the keychain entitlement is set
-        // (or in dev, where loadProFeatures force-unlocks). Reuse the entitlement
-        // read above to avoid a second keychain round-trip.
+        // (or in dev, where loadProFeatures force-unlocks).
         await loadProFeatures(isPro);
 
         // DEV ONLY: treat dev builds as Pro so the upsell banner hides and pro
@@ -195,7 +202,7 @@ function App() {
           useAppStore.getState().setHasRegisteredPro(true);
         }
       } catch (proError) {
-        logger.error('[App] Pro initialization failed, continuing without Pro:', proError);
+        logger.error('[App] Pro feature load failed, continuing without Pro:', proError);
       }
 
       // Show the UI immediately

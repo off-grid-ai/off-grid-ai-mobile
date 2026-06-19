@@ -665,13 +665,8 @@ describe('ModelSelectorModal', () => {
       expect(activeModelService.loadImageModel).toHaveBeenCalledWith('img1');
     });
 
-    it('offers an unload-and-load recovery instead of loading when blocked by other models', async () => {
-      activeModelService.checkMemoryForModel.mockResolvedValue({
-        canLoad: false,
-        severity: 'critical',
-        resolvableByUnload: true,
-        message: 'Cannot load SD Model while other models are loaded.',
-      });
+    // Shared setup for the blocked-load recovery tests below.
+    const blockedImageStore = () =>
       mockUseAppStore.mockReturnValue({
         downloadedModels: [],
         downloadedImageModels: [
@@ -679,11 +674,21 @@ describe('ModelSelectorModal', () => {
         ],
         activeImageModelId: null,
       });
+    const mockMemoryCheck = (resolvableByUnload: boolean, message: string) =>
+      activeModelService.checkMemoryForModel.mockResolvedValue({
+        canLoad: false,
+        severity: 'critical',
+        resolvableByUnload,
+        message,
+      });
+    const renderImageTab = () =>
+      render(<ModelSelectorModal {...defaultProps} initialTab="image" />);
 
-      const { getByText } = render(
-        <ModelSelectorModal {...defaultProps} initialTab="image" />
-      );
+    it('offers an unload-and-load recovery instead of loading when blocked by other models', async () => {
+      mockMemoryCheck(true, 'Cannot load SD Model while other models are loaded.');
+      blockedImageStore();
 
+      const { getByText } = renderImageTab();
       await act(async () => {
         fireEvent.press(getByText('SD Model'));
       });
@@ -694,24 +699,10 @@ describe('ModelSelectorModal', () => {
     });
 
     it('unloads other models then loads the image model when recovery action is pressed', async () => {
-      activeModelService.checkMemoryForModel.mockResolvedValue({
-        canLoad: false,
-        severity: 'critical',
-        resolvableByUnload: true,
-        message: 'Cannot load SD Model while other models are loaded.',
-      });
-      mockUseAppStore.mockReturnValue({
-        downloadedModels: [],
-        downloadedImageModels: [
-          { id: 'img1', name: 'SD Model', size: 2000000000, style: 'Creative' },
-        ],
-        activeImageModelId: null,
-      });
+      mockMemoryCheck(true, 'Cannot load SD Model while other models are loaded.');
+      blockedImageStore();
 
-      const { getByText } = render(
-        <ModelSelectorModal {...defaultProps} initialTab="image" />
-      );
-
+      const { getByText } = renderImageTab();
       await act(async () => {
         fireEvent.press(getByText('SD Model'));
       });
@@ -724,24 +715,10 @@ describe('ModelSelectorModal', () => {
     });
 
     it('shows an informational alert with no recovery when the model is too large to load at all', async () => {
-      activeModelService.checkMemoryForModel.mockResolvedValue({
-        canLoad: false,
-        severity: 'critical',
-        resolvableByUnload: false,
-        message: 'SD Model is too large for your device. Choose a smaller model.',
-      });
-      mockUseAppStore.mockReturnValue({
-        downloadedModels: [],
-        downloadedImageModels: [
-          { id: 'img1', name: 'SD Model', size: 2000000000, style: 'Creative' },
-        ],
-        activeImageModelId: null,
-      });
+      mockMemoryCheck(false, 'SD Model is too large for your device. Choose a smaller model.');
+      blockedImageStore();
 
-      const { getByText, queryByText } = render(
-        <ModelSelectorModal {...defaultProps} initialTab="image" />
-      );
-
+      const { getByText, queryByText } = renderImageTab();
       await act(async () => {
         fireEvent.press(getByText('SD Model'));
       });

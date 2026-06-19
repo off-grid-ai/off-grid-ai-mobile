@@ -104,6 +104,7 @@ export async function initiateModelLoad(
               text: 'Unload others & load', style: 'default' as const, onPress: () => {
                 startLoad()
                   .then(() => activeModelService.unloadAllModels())
+                  .catch(err => logger.error('Failed to unload models before load:', err))
                   .then(() => doLoadTextModel(deps));
               },
             },
@@ -225,7 +226,9 @@ export async function handleModelSelectFn(
           {
             text: 'Unload others & load', style: 'default' as const, onPress: () => {
               deps.setAlertState(hideAlert());
-              activeModelService.unloadAllModels().then(() => proceedWithModelLoadFn(deps, model));
+              activeModelService.unloadAllModels()
+                .catch(err => logger.error('Failed to unload models before load:', err))
+                .then(() => proceedWithModelLoadFn(deps, model));
             },
           },
         ]

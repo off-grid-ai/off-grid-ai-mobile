@@ -7,7 +7,7 @@ import { VoiceRecordButton } from '../VoiceRecordButton';
 import { AttachStep } from 'react-native-spotlight-tour';
 import { triggerHaptic } from '../../utils/haptics';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../CustomAlert';
-import { createStyles, PILL_ICONS_WIDTH, ANIM_DURATION_IN, ANIM_DURATION_OUT } from './styles';
+import { createStyles, PILL_ICON_SIZE, ANIM_DURATION_IN, ANIM_DURATION_OUT } from './styles';
 import { QueueRow } from './Toolbar';
 import { AttachmentPreview, useAttachments } from './Attachments';
 import { useVoiceInput } from './Voice';
@@ -43,6 +43,15 @@ interface ChatInputProps {
 }
 
 const IMAGE_MODE_CYCLE: ImageModeState[] = ['auto', 'force', 'disabled'];
+
+/**
+ * Expanded width of the collapsing pill-icons row. '+' and the settings gear
+ * are always present; the thinking toggle and the pro mode-toggle are
+ * conditional. Sizing to the real count prevents the rightmost icons from
+ * being clipped by the row's `overflow: hidden`.
+ */
+const computePillIconsWidth = (supportsThinking: boolean, hasModeToggle: boolean): number =>
+  PILL_ICON_SIZE * (2 + (supportsThinking ? 1 : 0) + (hasModeToggle ? 1 : 0));
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 
@@ -244,6 +253,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     );
   }
 
+  // Pro-only inline Chat↔Audio toggle (empty slot in free builds → null).
+  const ModeToggle = getSlot(SLOTS.chatInputModeToggle);
+  const pillIconsExpandedWidth = computePillIconsWidth(!!supportsThinking, !!ModeToggle);
+
   const actionButton = canSend ? (
     <TouchableOpacity
       testID="send-button"
@@ -303,7 +316,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <Animated.View
             pointerEvents={hasText ? 'none' : 'auto'}
             style={[styles.pillIcons, {
-              width: iconsAnim.interpolate({ inputRange: [0, 1], outputRange: [PILL_ICONS_WIDTH, 0] }),
+              width: iconsAnim.interpolate({ inputRange: [0, 1], outputRange: [pillIconsExpandedWidth, 0] }),
               opacity: iconsAnim.interpolate({ inputRange: [0, 0.4], outputRange: [1, 0], extrapolate: 'clamp' }),
               overflow: 'hidden' as const,
             }]}
@@ -342,6 +355,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 {showSettingsDot && <View style={styles.toolWarningDot} />}
               </View>
             </TouchableOpacity>
+            {/* Pro-only: one-tap switch into Audio (voice) interface mode.
+                Empty slot in free builds → nothing renders. */}
+            {ModeToggle && <ModeToggle styles={styles} disabled={disabled} />}
           </Animated.View>
         </View>
 

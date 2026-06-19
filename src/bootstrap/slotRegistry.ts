@@ -41,6 +41,10 @@ export const SLOTS = {
   messageSpeakButton: 'message.speakButton',
   /** Extra row in the chat-input quick-settings popover (voice mode toggle). */
   quickSettingsAudioRow: 'quickSettings.audioRow',
+  /** One-tap Chat↔Audio interface toggle in the chat-input pill icon row.
+   *  Mirrors the Audio-mode "back to chat" button so the switch is reachable
+   *  directly from the bar (not only via the quick-settings popover). */
+  chatInputModeToggle: 'chatInput.modeToggle',
   /** The "Text to Speech" body in the Chat Settings modal (TTS section). */
   generationSettingsTts: 'generationSettings.tts',
 } as const;

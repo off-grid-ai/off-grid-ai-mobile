@@ -9,8 +9,8 @@ jest.mock('../../../src/stores', () => ({
   useWhisperStore: { getState: () => mockWhisperState },
 }));
 
-const mockLoadText = jest.fn(() => Promise.resolve());
-const mockLoadImage = jest.fn(() => Promise.resolve());
+const mockLoadText = jest.fn((..._a: any[]) => Promise.resolve());
+const mockLoadImage = jest.fn((..._a: any[]) => Promise.resolve());
 const mockGetActiveModels = jest.fn(() => ({ text: { isLoaded: false }, image: { isLoaded: false } }));
 jest.mock('../../../src/services/activeModelService', () => ({
   activeModelService: {
@@ -28,12 +28,12 @@ jest.mock('../../../src/services/whisperService', () => ({
   WHISPER_MODELS: [{ id: 'w1', size: 150 }],
 }));
 
-const mockCanLoad = jest.fn(() => true);
+const mockCanLoad = jest.fn((_spec?: any) => true);
 jest.mock('../../../src/services/modelResidency', () => ({
   modelResidencyManager: { canLoadWithoutEviction: (...a: any[]) => mockCanLoad(...a) },
 }));
 
-const mockCallHook = jest.fn(() => Promise.resolve());
+const mockCallHook = jest.fn((..._a: any[]) => Promise.resolve());
 jest.mock('../../../src/bootstrap/hookRegistry', () => ({
   callHook: (...a: any[]) => mockCallHook(...a),
   HOOKS: { audioPreload: 'audio.preload' },

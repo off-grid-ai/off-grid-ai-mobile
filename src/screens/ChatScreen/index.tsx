@@ -20,6 +20,11 @@ import { MessageRenderer } from './MessageRenderer';
 import { NoModelScreen, ChatHeader } from './ChatScreenComponents';
 import { ChatModalSection } from './ChatModalSection';
 import { ChatMessageArea } from './ChatMessageArea';
+import { ModelsManagerSheet, ModelRowType } from '../HomeScreen/components/ModelsManagerSheet';
+import { WhisperPickerSheet } from '../HomeScreen/components/WhisperPickerSheet';
+import { VoiceModelsSheet } from '../HomeScreen/components/VoiceModelsSheet';
+import { useWhisperStore } from '../../stores/whisperStore';
+import { WHISPER_MODELS } from '../../services';
 
 function countConversationImages(conv: Conversation | undefined): number {
   return (conv?.messages || []).reduce((n: number, m: Message) =>
@@ -33,6 +38,25 @@ export const ChatScreen: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const chat = useChatScreen();
   const { goTo, current } = useSpotlightTour();
+
+  // Collapsed Models control (shared with home): header "Models" → manager sheet.
+  const [modelsManagerOpen, setModelsManagerOpen] = useState(false);
+  const [whisperOpen, setWhisperOpen] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const voiceSummary = useUiModeStore((s) => s.voiceSummary);
+  const whisperModelId = useWhisperStore((s) => s.downloadedModelId);
+  const modelLabels: Record<ModelRowType, string> = {
+    text: chat.activeModelName ?? chat.activeModel?.name ?? '—',
+    image: chat.activeImageModel?.name ?? '—',
+    voice: voiceSummary ?? '—',
+    speech: WHISPER_MODELS.find((m) => m.id === whisperModelId)?.name ?? '—',
+  };
+  const openModelRow = (type: ModelRowType) => {
+    setModelsManagerOpen(false);
+    if (type === 'text' || type === 'image') chat.setShowModelSelector(true);
+    else if (type === 'speech') setWhisperOpen(true);
+    else setVoiceOpen(true);
+  };
   const pendingNextRef = useRef<number | null>(null);
 
   // Android keyboard avoidance. We can't use KeyboardAvoidingView behavior="padding"
@@ -235,16 +259,25 @@ export const ChatScreen: React.FC = () => {
         <ChatHeader
           styles={styles} colors={colors}
           activeConversation={chat.activeConversation}
-          activeModel={chat.activeModel}
-          activeModelName={chat.activeModelName}
-          activeImageModel={chat.activeImageModel}
           activeProject={chat.activeProject}
           navigation={chat.navigation}
-          setShowModelSelector={chat.setShowModelSelector}
+          onOpenModels={() => setModelsManagerOpen(true)}
           setShowSettingsPanel={chat.setShowSettingsPanel}
           setShowProjectSelector={chat.setShowProjectSelector}
           isRemote={chat.activeModelInfo?.isRemote}
         />
+        <ModelsManagerSheet
+          visible={modelsManagerOpen}
+          onClose={() => setModelsManagerOpen(false)}
+          labels={modelLabels}
+          loadingState={{ isLoading: !!chat.isModelLoading, type: 'text' }}
+          isEjecting={false}
+          hasActiveModel={false}
+          onOpenRow={openModelRow}
+          onEject={() => {}}
+        />
+        <WhisperPickerSheet visible={whisperOpen} onClose={() => setWhisperOpen(false)} />
+        <VoiceModelsSheet visible={voiceOpen} onClose={() => setVoiceOpen(false)} />
         <ChatMessageArea
           flatListRef={flatListRef}
           isNearBottomRef={isNearBottomRef}

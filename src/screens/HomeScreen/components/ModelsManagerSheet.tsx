@@ -6,9 +6,11 @@ import { AnimatedPressable } from '../../../components/AnimatedPressable';
 import { useTheme, useThemedStyles } from '../../../theme';
 import type { ThemeColors } from '../../../theme';
 import { TYPOGRAPHY, SPACING } from '../../../constants';
-import { LoadingState } from '../hooks/useHomeScreen';
 
 export type ModelRowType = 'text' | 'image' | 'voice' | 'speech';
+
+/** Minimal loading shape so this sheet is screen-agnostic (home + chat). */
+type LoadingState = { isLoading: boolean; type?: string | null };
 
 type RowDef = { type: ModelRowType; icon: string; label: string };
 

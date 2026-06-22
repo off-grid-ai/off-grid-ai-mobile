@@ -18,19 +18,23 @@ import 'react-native-get-random-values'; // side-effect: installs global.crypto.
 import { sha256 } from 'js-sha256';
 import InAppBrowser from 'react-native-inappbrowser-reborn';
 import * as Keychain from 'react-native-keychain';
+import logger from './../utils/logger';
 
 /** Must match the scheme registered in Info.plist / AndroidManifest. */
 export const MCP_OAUTH_REDIRECT_URI = 'offgrid://oauth/callback';
 
 const browser = {
   async authorize(authUrl: string, redirectScheme: string): Promise<string> {
-    if (!(await InAppBrowser.isAvailable())) {
+    const available = await InAppBrowser.isAvailable();
+    logger.log(`[MCP OAuth] browser.authorize — available=${available}, redirect=${redirectScheme}`);
+    if (!available) {
       throw new Error('No system browser available for sign-in');
     }
     const result = await InAppBrowser.openAuth(authUrl, redirectScheme, {
       ephemeralWebSession: false,
       showInRecents: false,
     });
+    logger.log(`[MCP OAuth] browser.authorize — result type=${result.type}`);
     if (result.type === 'success' && result.url) return result.url;
     throw new Error('Sign-in was cancelled');
   },

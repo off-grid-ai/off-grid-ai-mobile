@@ -337,15 +337,22 @@ export const SettingsScreen: React.FC = () => {
               <Icon name="list" size={14} color={colors.textMuted} />
               <Text style={styles.devButtonText}>Reset Onboarding Checklist</Text>
             </TouchableOpacity>
+          </View>
+        </AnimatedEntry>
+        )}
+
+        {/* Debug logs — available in release builds so issues can be captured and shared */}
+        <AnimatedEntry index={11} staggerMs={40} trigger={focusTrigger}>
+          <View style={styles.devButtonGroup}>
             <TouchableOpacity style={styles.devButton} onPress={() => setShowDebugLogs(true)}>
               <Icon name="terminal" size={14} color={colors.textMuted} />
               <Text style={styles.devButtonText}>Debug Logs</Text>
             </TouchableOpacity>
           </View>
         </AnimatedEntry>
-        )}
+
         <MadeWithLove />
-        {__DEV__ && <DebugLogsScreen visible={showDebugLogs} onClose={() => setShowDebugLogs(false)} />}
+        <DebugLogsScreen visible={showDebugLogs} onClose={() => setShowDebugLogs(false)} />
       </ScrollView>
     </SafeAreaView>
   );

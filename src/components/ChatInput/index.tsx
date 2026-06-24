@@ -227,6 +227,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         thinkingEnabled={thinkingEnabled}
         attachments={attachments}
         onRemoveAttachment={removeAttachment}
+        onClearAttachments={clearAttachments}
         queueCount={queueCount}
         queuedTexts={queuedTexts}
         onClearQueue={onClearQueue}

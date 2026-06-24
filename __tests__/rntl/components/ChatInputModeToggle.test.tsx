@@ -1,10 +1,11 @@
 /**
  * ChatInputModeToggle tests
  *
- * The pro-only inline Chat→Audio interface toggle rendered in the chat-input
- * pill row. Verifies:
- *  - when no audio engine is ready → routes to the Models Voice tab
- *  - when ready → flips interfaceMode inline (chat→audio)
+ * The pro-only Chat→Voice interface toggle in the chat-input pill row. It's a chip
+ * that opens a dropdown; choosing "Voice":
+ *  - when the voice model is NOT downloaded → routes to the Models Voice tab
+ *  - when downloaded → flips interfaceMode inline (chat→audio)
+ *  - when the chip is disabled → does nothing (menu never opens)
  */
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
@@ -21,11 +22,16 @@ jest.mock('@offgrid/core/utils/haptics', () => ({
 import { ChatInputModeToggle } from '../../../pro/audio/ui/ChatInputModeToggle';
 import { useTTSStore } from '../../../pro/audio/ttsStore';
 
-const styles = { pillIconButton: {} };
+// The chip opens its dropdown via chipRef.measureInWindow(...) → setOpen(true).
+// Host instances don't implement it under jest, so shim it to fire the callback.
+beforeAll(() => {
+  (require('react-native').View.prototype as any).measureInWindow = (cb: (x: number, y: number, w: number, h: number) => void) => cb(0, 0, 100, 40);
+});
 
-const setReady = (ready: boolean, mode: 'chat' | 'audio' = 'chat') => {
+// isReady drives the `downloaded` gate (modelDownloaded ?? isReady) the component uses.
+const setDownloaded = (downloaded: boolean, mode: 'chat' | 'audio' = 'chat') => {
   useTTSStore.setState((s) => ({
-    isReady: ready,
+    isReady: downloaded,
     settings: { ...s.settings, interfaceMode: mode },
   }));
 };
@@ -33,37 +39,38 @@ const setReady = (ready: boolean, mode: 'chat' | 'audio' = 'chat') => {
 describe('ChatInputModeToggle', () => {
   beforeEach(() => {
     mockNavigate.mockClear();
-    setReady(false, 'chat');
+    setDownloaded(false, 'chat');
   });
 
-  it('routes to the Models Voice tab when no audio engine is ready', () => {
-    setReady(false);
-    const { getByTestId } = render(<ChatInputModeToggle styles={styles} />);
+  it('routes to the Models Voice tab when the voice model is not downloaded', () => {
+    setDownloaded(false);
+    const { getByTestId } = render(<ChatInputModeToggle />);
 
-    fireEvent.press(getByTestId('chat-input-mode-toggle'));
+    fireEvent.press(getByTestId('chat-mode-toggle'));
+    fireEvent.press(getByTestId('mode-option-audio'));
 
     expect(mockNavigate).toHaveBeenCalledWith('ModelsTab', { initialTab: 'voice' });
-    // Must NOT switch into a broken Audio Mode.
     expect(useTTSStore.getState().settings.interfaceMode).toBe('chat');
   });
 
-  it('flips interfaceMode to audio inline when the engine is ready', () => {
-    setReady(true, 'chat');
-    const { getByTestId } = render(<ChatInputModeToggle styles={styles} />);
+  it('flips interfaceMode to audio inline when the model is downloaded', () => {
+    setDownloaded(true, 'chat');
+    const { getByTestId } = render(<ChatInputModeToggle />);
 
-    fireEvent.press(getByTestId('chat-input-mode-toggle'));
+    fireEvent.press(getByTestId('chat-mode-toggle'));
+    fireEvent.press(getByTestId('mode-option-audio'));
 
     expect(mockNavigate).not.toHaveBeenCalled();
     expect(useTTSStore.getState().settings.interfaceMode).toBe('audio');
   });
 
-  it('does not fire when disabled', () => {
-    setReady(true, 'chat');
-    const { getByTestId } = render(<ChatInputModeToggle styles={styles} disabled />);
+  it('does not open the menu when disabled', () => {
+    setDownloaded(true, 'chat');
+    const { getByTestId, queryByTestId } = render(<ChatInputModeToggle disabled />);
 
-    fireEvent.press(getByTestId('chat-input-mode-toggle'));
+    fireEvent.press(getByTestId('chat-mode-toggle'));
 
-    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(queryByTestId('mode-option-audio')).toBeNull();
     expect(useTTSStore.getState().settings.interfaceMode).toBe('chat');
   });
 });

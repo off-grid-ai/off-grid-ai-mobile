@@ -78,7 +78,7 @@ export async function preloadSelectedModels(): Promise<void> {
     ['tts', preloadTts],
     ['stt', preloadStt],
   ];
-  for (const [name, step] of steps) {
+  for (const [, step] of steps) {
     // Yield to the user: stop warming the moment they send a message (abort) or a
     // generation is running — they must never wait behind background warming.
     if (aborted) {

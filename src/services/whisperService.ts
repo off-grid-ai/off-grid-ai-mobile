@@ -60,6 +60,10 @@ class WhisperService {
         url: model.url,
         fileName,
         modelId: `whisper-${modelId}`,
+        // Tag as speech-to-text so the Download Manager files an in-progress
+        // download under Voice. Without it the entry defaulted to 'text' and
+        // STT models showed up under Text (and never under the Voice filter).
+        modelType: 'stt',
         // WHISPER_MODELS sizes are in MB; seed totalBytes so progress renders
         // before the first byte arrives. The native layer refines this from the
         // server's Content-Length once the download starts.

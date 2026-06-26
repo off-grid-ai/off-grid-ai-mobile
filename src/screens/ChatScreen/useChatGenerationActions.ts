@@ -155,14 +155,18 @@ export type ImageGenCall = {
   prompt: string;
   conversationId: string;
   skipUserMessage?: boolean;
+  /** Attachments to keep on the user message (e.g. a voice note in audio mode). */
+  attachments?: MediaAttachment[];
 };
 export async function handleImageGenerationFn(
   deps: Pick<GenerationDeps, 'activeImageModel' | 'settings' | 'imageGenState' | 'setAlertState' | 'addMessage'>,
   call: ImageGenCall,
 ): Promise<void> {
-  const { prompt, conversationId, skipUserMessage = false } = call;
+  const { prompt, conversationId, skipUserMessage = false, attachments } = call;
   if (!deps.activeImageModel) { deps.setAlertState(showAlert('Error', 'No image model loaded.')); return; }
-  if (!skipUserMessage) { deps.addMessage(conversationId, { role: 'user', content: prompt }); }
+  // Keep attachments (e.g. a voice note recorded in audio mode) on the user
+  // message so it renders as a voice note, not plain text.
+  if (!skipUserMessage) { deps.addMessage(conversationId, { role: 'user', content: prompt, attachments }); }
   const result = await imageGenerationService.generateImage({
     prompt, conversationId,
     steps: deps.settings.imageSteps || 8,
@@ -364,7 +368,7 @@ export async function dispatchGenerationFn(
   let messageText = appendAttachmentText(text, attachments);
   const shouldGenerateImage = imageMode !== 'disabled' && await shouldRouteToImageGenerationFn(deps, messageText, imageMode === 'force');
   if (shouldGenerateImage && deps.activeImageModel) {
-    await handleImageGenerationFn(deps, { prompt: text, conversationId }); // adds user msg
+    await handleImageGenerationFn(deps, { prompt: text, conversationId, attachments }); // adds user msg (keeps voice note)
     return;
   }
   // Text route, no text model selected (image-only device): load one / open selector.

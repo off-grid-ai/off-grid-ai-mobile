@@ -349,6 +349,17 @@ describe('handleImageGenerationFn', () => {
     expect(deps.addMessage).toHaveBeenCalledWith('conv-1', expect.objectContaining({ role: 'user', content: 'a dog' }));
   });
 
+  it('keeps attachments (e.g. a voice note) on the user message in the image route', async () => {
+    mockGenerateImage.mockResolvedValueOnce({ imagePath: '/img.png' });
+    const deps = makeGenerationDeps({
+      activeImageModel: baseImageModel,
+      imageGenState: { isGenerating: false, progress: null, status: null, previewPath: null, prompt: null, conversationId: null, error: null, result: null },
+    });
+    const attachments = [{ id: 'a1', type: 'audio' as const, uri: 'file:///rec.m4a', audioDurationSeconds: 3 }];
+    await handleImageGenerationFn(deps, { prompt: 'a dog', conversationId: 'conv-1', attachments });
+    expect(deps.addMessage).toHaveBeenCalledWith('conv-1', expect.objectContaining({ role: 'user', content: 'a dog', attachments }));
+  });
+
   it('skips user message when skipUserMessage=true', async () => {
     mockGenerateImage.mockResolvedValueOnce({ imagePath: '/img.png' });
     const deps = makeGenerationDeps({ activeImageModel: baseImageModel, imageGenState: { isGenerating: false, error: null } });

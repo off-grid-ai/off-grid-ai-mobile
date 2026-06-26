@@ -1188,4 +1188,39 @@ describe('chatStore', () => {
       expect(state.isStreaming).toBe(false);
     });
   });
+
+  describe('streaming TTS answer gating (only the answer is spoken)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { registerHook, _clearHooksForTesting } = require('../../../src/bootstrap/hookRegistry');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { useAppStore } = require('../../../src/stores/appStore');
+    let spoken: string[];
+
+    beforeEach(() => {
+      _clearHooksForTesting();
+      spoken = [];
+      registerHook('audio.onStreamingToken', (t: string) => spoken.push(t));
+    });
+
+    it('withholds inline reasoning until </think>, then speaks only the answer (thinking on)', () => {
+      useAppStore.setState({ settings: { ...useAppStore.getState().settings, thinkingEnabled: true } });
+      const store = useChatStore.getState();
+      const convId = store.createConversation('m');
+      store.startStreaming(convId);
+      store.appendToStreamingMessage('The user is asking ');
+      store.appendToStreamingMessage('about the weather.');
+      expect(spoken.at(-1)).toBe(''); // still in the (inline) thinking phase
+      store.appendToStreamingMessage('</think>Hello there!');
+      expect(spoken.at(-1)).toBe('Hello there!'); // only the answer after </think>
+    });
+
+    it('speaks content normally when thinking is disabled', () => {
+      useAppStore.setState({ settings: { ...useAppStore.getState().settings, thinkingEnabled: false } });
+      const store = useChatStore.getState();
+      const convId = store.createConversation('m');
+      store.startStreaming(convId);
+      store.appendToStreamingMessage('Hello there!');
+      expect(spoken.at(-1)).toBe('Hello there!');
+    });
+  });
 });

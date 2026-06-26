@@ -81,7 +81,11 @@ export const useWhisperStore = create<WhisperState>()(
           // Auto-load after download
           await get().loadModel();
         } catch (error) {
-          set({ error: error instanceof Error ? error.message : 'Download failed' });
+          // A user-initiated cancel rejects with a marked error — don't show it as
+          // a failure on the model row, just let the finally clear its progress.
+          if (!(error as { cancelled?: boolean })?.cancelled) {
+            set({ error: error instanceof Error ? error.message : 'Download failed' });
+          }
         } finally {
           // Clear this model's progress entry, even if auto-load hangs/fails —
           // the file is already on disk by this point. Other in-flight downloads
@@ -103,7 +107,9 @@ export const useWhisperStore = create<WhisperState>()(
           }));
           await get().loadModel();
         } catch (error) {
-          set({ error: error instanceof Error ? error.message : 'Download failed' });
+          if (!(error as { cancelled?: boolean })?.cancelled) {
+            set({ error: error instanceof Error ? error.message : 'Download failed' });
+          }
         } finally {
           clearProgress(set, modelId);
         }

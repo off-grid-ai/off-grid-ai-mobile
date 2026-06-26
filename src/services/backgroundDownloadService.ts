@@ -72,6 +72,20 @@ class BackgroundDownloadService {
     } catch (e) {
       logger.log('[BackgroundDownload] cancelDownload failed (bridge may be torn down):', e);
     }
+    // Native cancel emits no complete/error event and tears down its observer, so
+    // anything awaiting this download via downloadFileTo() would hang forever.
+    // Synthesize a cancellation so that promise settles and callers can clean up
+    // (e.g. whisperService clears its in-flight progress, the transcription screen
+    // stops showing the model as downloading). reasonCode marks it user-cancelled
+    // so callers treat it as a cancel, not a download failure.
+    this.dispatchToListeners(this.errorListeners, 'error', {
+      downloadId,
+      fileName: '',
+      modelId: '',
+      status: 'failed',
+      reason: 'Download cancelled',
+      reasonCode: 'user_cancelled',
+    });
   }
 
   async getActiveDownloads(): Promise<BackgroundDownloadInfo[]> {
@@ -214,7 +228,11 @@ class BackgroundDownloadService {
         });
         const removeError = this.onError(info.downloadId, (err) => {
           done();
-          reject(new Error(err.reason || 'Download failed'));
+          const error = new Error(err.reason || 'Download failed') as Error & { cancelled?: boolean };
+          // Let callers distinguish a user cancel from a real failure so they can
+          // clean up quietly instead of surfacing a "download failed" error.
+          if (err.reasonCode === 'user_cancelled') error.cancelled = true;
+          reject(error);
         });
         this.startProgressPolling();
       });

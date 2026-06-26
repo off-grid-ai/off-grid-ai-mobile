@@ -188,6 +188,18 @@ describe('whisperStore', () => {
       expect(getState().error).toBe('Download failed');
     });
 
+    it('clears progress without surfacing an error when the download is cancelled', async () => {
+      // A user cancel (from the Download Manager) rejects with a marked error.
+      // It must clear the in-flight entry but not show a failure on the model row.
+      const cancelled = Object.assign(new Error('Download cancelled'), { cancelled: true });
+      mockWhisperService.downloadModel.mockRejectedValue(cancelled);
+
+      await getState().downloadModel('ggml-tiny');
+
+      expect(getState().error).toBeNull();
+      expect(getState().downloadProgressById['ggml-tiny']).toBeUndefined();
+    });
+
     it('tracks concurrent downloads independently with no cross-talk', async () => {
       // Reproduces issue #3: two models downloading at once. The old single
       // downloadingId/downloadProgress made one bar jump between them; per-model

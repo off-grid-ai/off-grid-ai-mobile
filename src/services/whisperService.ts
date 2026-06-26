@@ -113,7 +113,13 @@ class WhisperService {
         });
         await promise;
       } catch (error) {
-        logger.error('[Whisper] Download failed:', error);
+        if ((error as { cancelled?: boolean })?.cancelled) {
+          logger.log(`[Whisper] Download cancelled: ${modelId}`);
+        } else {
+          logger.error('[Whisper] Download failed:', error);
+        }
+        // Remove any partial file (a user cancel already deletes it natively; this
+        // also covers the error case). Rethrow so the store clears its progress.
         await RNFS.unlink(destPath).catch(() => {});
         throw error;
       } finally {

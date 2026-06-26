@@ -220,6 +220,53 @@ describe('BackgroundDownloadService', () => {
       );
       NativeModules.DownloadManagerModule = savedModule;
     });
+
+    it('notifies error listeners with a user_cancelled event so awaiters can settle', async () => {
+      // Native cancel emits nothing, so the service synthesizes a cancellation
+      // event — without it, anything awaiting downloadFileTo() hangs forever.
+      mockDownloadManagerModule.cancelDownload.mockResolvedValue(undefined);
+      const onError = jest.fn();
+      service.onError(42, onError);
+
+      await service.cancelDownload(42);
+
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({ downloadId: 42, reasonCode: 'user_cancelled' }),
+      );
+    });
+
+    it('rejects a downloadFileTo() promise as cancelled when its download is cancelled', async () => {
+      mockDownloadManagerModule.startDownload.mockResolvedValue({
+        downloadId: 7,
+        fileName: 'f.bin',
+        modelId: 'm',
+      });
+      mockDownloadManagerModule.cancelDownload.mockResolvedValue(undefined);
+
+      const { downloadIdPromise, promise } = service.downloadFileTo({
+        params: { url: 'https://x/f.bin', fileName: 'f.bin', modelId: 'm' },
+        destPath: '/tmp/f.bin',
+        silent: true,
+      });
+      const id = await downloadIdPromise;
+      expect(id).toBe(7);
+
+      await service.cancelDownload(7);
+
+      await expect(promise).rejects.toMatchObject({ cancelled: true });
+    });
+
+    it('synthesizes the cancellation even if the native cancel throws', async () => {
+      mockDownloadManagerModule.cancelDownload.mockRejectedValue(new Error('bridge down'));
+      const onError = jest.fn();
+      service.onError(99, onError);
+
+      await service.cancelDownload(99);
+
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({ downloadId: 99, reasonCode: 'user_cancelled' }),
+      );
+    });
   });
 
   // ========================================================================

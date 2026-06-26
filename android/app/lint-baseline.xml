@@ -102,7 +102,7 @@
 
     <issue
         id="NotificationPermission"
-        message="When targeting Android 13 or higher, posting a permission requires holding the `POST_NOTIFICATIONS` permission (usage from com.swmansion.audioapi.system.notification.PlaybackNotification)">
+        message="When targeting Android 13 or higher, posting a permission requires holding the `POST_NOTIFICATIONS` permission (usage from com.eko.ResumableDownloadService)">
         <location
             file="src/main/AndroidManifest.xml"/>
     </issue>
@@ -147,7 +147,7 @@
         errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="build.gradle"
-            line="170"
+            line="169"
             column="20"/>
     </issue>
 
@@ -158,7 +158,7 @@
         errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="build.gradle"
-            line="175"
+            line="174"
             column="20"/>
     </issue>
 
@@ -169,7 +169,7 @@
         errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="build.gradle"
-            line="177"
+            line="176"
             column="20"/>
     </issue>
 
@@ -180,7 +180,7 @@
         errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="build.gradle"
-            line="178"
+            line="177"
             column="20"/>
     </issue>
 
@@ -191,7 +191,7 @@
         errorLine2="                       ~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="build.gradle"
-            line="185"
+            line="184"
             column="24"/>
     </issue>
 
@@ -202,7 +202,7 @@
         errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="build.gradle"
-            line="164"
+            line="163"
             column="20"/>
     </issue>
 
@@ -213,7 +213,7 @@
         errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="build.gradle"
-            line="167"
+            line="166"
             column="20"/>
     </issue>
 
@@ -224,7 +224,7 @@
         errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="build.gradle"
-            line="179"
+            line="178"
             column="20"/>
     </issue>
 
@@ -235,7 +235,7 @@
         errorLine2="                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="build.gradle"
-            line="182"
+            line="181"
             column="24"/>
     </issue>
 
@@ -246,7 +246,7 @@
         errorLine2="                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="build.gradle"
-            line="183"
+            line="182"
             column="24"/>
     </issue>
 
@@ -257,7 +257,7 @@
         errorLine2="                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="build.gradle"
-            line="184"
+            line="183"
             column="24"/>
     </issue>
 

@@ -10,6 +10,8 @@ import type { ToolCall, ToolResult } from './tools/types';
 import { getToolExtensions } from './tools/extensions';
 import { Platform } from 'react-native';
 import { selectRelevantTools } from './litertToolSelector';
+import { isMcpEnabled } from './mcpContextBoost';
+import { selectToolsByEmbedding } from './toolEmbeddingRouter';
 import { providerRegistry } from './providers';
 import type { GenerationOptions, CompletionResult } from './providers/types';
 import logger from '../utils/logger';
@@ -18,6 +20,9 @@ const MAX_TOTAL_TOOL_CALLS = 5;
 // On-device: above this many tools, run a fast routing pass to pick the relevant ones
 // before generating (small models can't fit many schemas in context). Tunable.
 const TOOL_SELECTION_THRESHOLD = 5;
+// MCP enabled: how many MCP/ext tools the hybrid router keeps for the prompt.
+// Small enough to keep prefill fast, large enough to cover a multi-step request.
+const MCP_TOOL_ROUTE_TOPK = 12;
 // LiteRT runs the tool loop natively (automaticToolCalling), so the JS caps above don't
 // apply to it. Bound the native loop here instead: once a single response exceeds this many
 // tool calls we stop executing them and tell the model to answer, which prevents the KV cache
@@ -214,6 +219,8 @@ export interface ToolLoopContext {
   onStream?: (data: StreamChunk) => void;
   onStreamReset?: () => void;
   onFinalResponse: (content: string) => void;
+  /** Reports the tool names sent to the model this turn (built-in + routed MCP/ext). */
+  onToolsRouted?: (names: string[]) => void;
   forceRemote?: boolean;
 }
 function normalizeStreamChunk(data: StreamChunk): StreamToken {
@@ -324,6 +331,13 @@ function isLiteRTActive(): boolean {
   return downloadedModels.find((m: any) => m.id === activeModelId)?.engine === 'litert' && liteRTService.isModelLoaded();
 }
 
+/** True when generation is served by a remote provider (no on-device native context). */
+function isUsingRemote(forceRemote?: boolean): boolean {
+  if (forceRemote) return true;
+  const activeServerId = useRemoteServerStore.getState().activeServerId;
+  return !!activeServerId && providerRegistry.hasProvider(activeServerId) && !llmService.isModelLoaded();
+}
+
 /** On first iteration: last user message. On tool-result iterations: formatted tool results. */
 function buildLiteRTSendText(messages: Message[]): string {
   const toolResults: Message[] = [];
@@ -432,7 +446,7 @@ async function callLiteRTForLoop(
   }
 }
 
-const TOOL_BEHAVIOR_GUIDANCE = '\n\nMake good use of the tools available to you. If you are uncertain or lack current information, use the appropriate tool rather than guessing. Never refuse or say you cannot help when a tool is available. For multiple distinct items, make a separate tool call for each. Call tools silently — do not announce them first.';
+const TOOL_BEHAVIOR_GUIDANCE = '\n\nMake good use of the tools available to you. If you are uncertain or lack current information, use the appropriate tool rather than guessing. Never refuse or say you cannot help when a tool is available. For multiple distinct items, make a separate tool call for each. Call tools silently — do not announce them first. To find or look up content, prefer a general search tool (e.g. a tool whose name contains "search" or "fetch") before specialized query tools. If a tool returns an error, try a different tool that could accomplish the task before giving up.';
 
 /** Tools that need precise time-of-day to resolve relative phrases like "in half an hour". */
 const TIME_SENSITIVE_TOOL_IDS = ['create_calendar_event', 'read_calendar_events'];
@@ -632,6 +646,22 @@ async function selectEffectiveSchemas(ctx: ToolLoopContext, builtInSchemas: any[
   const llamaIosNative = !litertActive && Platform.OS === 'ios' && llmService.supportsToolCalling();
   const activeServerId = useRemoteServerStore.getState().activeServerId;
   const usingRemote = !!activeServerId && providerRegistry.hasProvider(activeServerId) && !llmService.isModelLoaded();
+
+  // MCP enabled on-device: route the many MCP/ext tools down with the embedding model
+  // BEFORE generating, so the big model only prefills the relevant handful instead of
+  // every schema (the time-to-first-token killer). Works on Android llama too, since
+  // it runs on the tiny MiniLM context, not the main model. Built-in tools always stay.
+  if (!usingRemote && isMcpEnabled() && extSchemas.length > 0 && all.length > TOOL_SELECTION_THRESHOLD) {
+    try {
+      const selected = await selectToolsByEmbedding(getLastUserQuery(ctx.messages), extSchemas, MCP_TOOL_ROUTE_TOPK);
+      const filteredExt = extSchemas.filter(s => selected.includes(s.function.name));
+      return [...builtInSchemas, ...filteredExt];
+    } catch (e) {
+      logger.warn(`[ToolLoop] embedding tool routing failed; using all tools: ${String(e)}`);
+      return all;
+    }
+  }
+
   const shouldRoute = !usingRemote && (litertActive || llamaIosNative) && extSchemas.length > 0 && all.length > TOOL_SELECTION_THRESHOLD;
   if (!shouldRoute) return all;
 
@@ -662,6 +692,7 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
   const extSchemas = getToolExtensions().flatMap(e => e.getOpenAISchemas?.() ?? []);
 
   const effectiveSchemas = await selectEffectiveSchemas(ctx, builtInSchemas, extSchemas);
+  ctx.onToolsRouted?.(effectiveSchemas.map((s: any) => s?.function?.name).filter(Boolean));
 
   const loopMessages = [...ctx.messages];
   let totalToolCalls = 0;
@@ -719,6 +750,11 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
     await executeToolCalls(ctx, cappedToolCalls, loopMessages);
 
     chatStore.setIsThinking(true);
-    await new Promise<void>(resolve => setTimeout(resolve, CONTEXT_RELEASE_PAUSE_MS));
+    // The pause exists to let an on-device llama context settle between the tool
+    // result and the next prefill. Remote providers have no native context to
+    // release, so skip the dead time there — it only inflated MCP latency per turn.
+    if (!isUsingRemote(ctx.forceRemote)) {
+      await new Promise<void>(resolve => setTimeout(resolve, CONTEXT_RELEASE_PAUSE_MS));
+    }
   }
 }

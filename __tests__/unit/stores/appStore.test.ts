@@ -1288,6 +1288,48 @@ describe('appStore', () => {
       );
       expect(result.checklistDismissed).toBe(false);
     });
+
+    // Un-stick the removed MCP context auto-boost (pinned ctx to 32768, never restored).
+    it('resets llama context pinned at the boost ceiling back to the default', () => {
+      const merge = getMergeFn();
+      const result = merge(
+        { settings: { contextLength: 32768, maxTokens: 8192 } },
+        useAppStore.getState(),
+      );
+      expect(result.settings.contextLength).toBe(4096); // DEFAULT_SETTINGS.contextLength
+      expect(result.settings.maxTokens).toBe(1024); // DEFAULT_SETTINGS.maxTokens
+    });
+
+    it('resets liteRTMaxTokens pinned at the boost ceiling back to the default', () => {
+      const merge = getMergeFn();
+      const result = merge(
+        { settings: { liteRTMaxTokens: 32768 } },
+        useAppStore.getState(),
+      );
+      expect(result.settings.liteRTMaxTokens).toBe(4096); // DEFAULT_SETTINGS.liteRTMaxTokens
+    });
+
+    it('leaves a legitimate non-boost context untouched', () => {
+      const merge = getMergeFn();
+      const result = merge(
+        { settings: { contextLength: 8192, maxTokens: 2048, liteRTMaxTokens: 8192 } },
+        useAppStore.getState(),
+      );
+      expect(result.settings.contextLength).toBe(8192);
+      expect(result.settings.maxTokens).toBe(2048);
+      expect(result.settings.liteRTMaxTokens).toBe(8192);
+    });
+
+    it('does not clobber a high user maxTokens when context was not boosted', () => {
+      const merge = getMergeFn();
+      const result = merge(
+        { settings: { contextLength: 4096, maxTokens: 8192 } },
+        useAppStore.getState(),
+      );
+      // context not at the boost ceiling → maxTokens is the user's choice, keep it.
+      expect(result.settings.contextLength).toBe(4096);
+      expect(result.settings.maxTokens).toBe(8192);
+    });
   });
 
 });

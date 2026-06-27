@@ -10,7 +10,7 @@
  * The whisper store tracks a single active model; downloading another switches
  * the active one.
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -20,6 +20,7 @@ import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors, ThemeShadows } from '../../theme';
 import { TYPOGRAPHY, SPACING } from '../../constants';
 import { useWhisperStore } from '../../stores';
+import { useDownloadStore, isActiveStatus } from '../../stores/downloadStore';
 import { WHISPER_MODELS } from '../../services';
 import { createStyles as createModelsScreenStyles } from './styles';
 import logger from '../../utils/logger';
@@ -75,9 +76,35 @@ export const TranscriptionModelsTab: React.FC = () => {
     selectModel, deleteModelById, refreshPresentModels, error: whisperError, clearError,
   } = useWhisperStore();
 
-  // True while any transcription model is downloading. Disk probes are deferred
-  // until everything settles so an in-flight file isn't mistaken for absent.
-  const anyDownloading = Object.keys(downloadProgressById).length > 0;
+  // In-flight STT state from the canonical download tracker (same store the Download
+  // Manager reads), so the two screens can never disagree. A failed entry reports
+  // active=false here, so a stuck "downloading" bar on this tab can't linger while the
+  // Download Manager shows "failed" — the model just becomes downloadable again.
+  const downloads = useDownloadStore((s) => s.downloads);
+  const sttDownloadState = useMemo(() => {
+    const byModel: Record<string, { progress: number; active: boolean }> = {};
+    for (const e of Object.values(downloads)) {
+      if (e.modelType !== 'stt') continue;
+      const id = e.modelId.startsWith('whisper-') ? e.modelId.slice('whisper-'.length) : e.modelId;
+      byModel[id] = { progress: e.progress ?? 0, active: isActiveStatus(e.status) };
+    }
+    return byModel;
+  }, [downloads]);
+
+  // Per-model in-flight state: prefer the canonical download tracker; fall back to the
+  // whisper store for the RNFS URL-import path, which has no download-store entry.
+  const downloadStateFor = useCallback((id: string): { progress: number; active: boolean } | undefined => {
+    const fromStore = sttDownloadState[id];
+    if (fromStore) return fromStore;
+    const p = downloadProgressById[id];
+    return p !== undefined ? { progress: p, active: true } : undefined;
+  }, [sttDownloadState, downloadProgressById]);
+
+  // True while any transcription model is actively downloading. Disk probes are
+  // deferred until everything settles so an in-flight file isn't mistaken for absent.
+  const anyDownloading =
+    Object.values(sttDownloadState).some((s) => s.active) ||
+    Object.keys(downloadProgressById).some((id) => !(id in sttDownloadState));
 
   // Probe disk on mount and whenever downloads finish, so every on-disk model
   // (not just the active one) shows as downloaded.
@@ -114,7 +141,7 @@ export const TranscriptionModelsTab: React.FC = () => {
   }, [deleteModelById]);
 
   const renderWhisperCard = (model: typeof WHISPER_MODELS[number], index: number) => {
-    const progress = downloadProgressById[model.id];
+    const state = downloadStateFor(model.id);
     return (
       <WhisperCard
         key={model.id}
@@ -122,8 +149,8 @@ export const TranscriptionModelsTab: React.FC = () => {
         index={index}
         downloadedModelId={downloadedModelId}
         presentModelIds={presentModelIds}
-        downloading={progress !== undefined}
-        downloadProgress={progress ?? 0}
+        downloading={state?.active ?? false}
+        downloadProgress={state?.progress ?? 0}
         onDownload={handleDownload}
         onSelect={handleSelect}
         onDelete={handleDelete}

@@ -68,10 +68,48 @@ class LLMService {
     logger.log(`[LLM] Resolved params: threads=${params.nThreads}, batch=${params.nBatch}, ctx=${params.ctxLen}, gpuLayers=${params.nGpuLayers}`);
     const fileStat = await RNFS.stat(modelPath);
     const fileSize = typeof fileStat.size === 'string' ? Number.parseInt(fileStat.size, 10) : fileStat.size;
-    const memCheck = await checkMemoryForModel(fileSize, params.ctxLen, () => hardwareService.getAppMemoryUsage());
-    if (!memCheck.safe) logger.warn(`[LLM] Memory warning: ${memCheck.reason}`);
-    logger.log(`[LLM] Memory check: estimatedMB=${memCheck.estimatedMB.toFixed(0)}, availableMB=${memCheck.availableMB.toFixed(0)}, safe=${memCheck.safe}`);
+    const quantizedCache = settings.cacheType !== 'f16';
+    const getMem = () => hardwareService.getAppMemoryUsage();
+    let memCheck = await checkMemoryForModel({ modelFileSize: fileSize, contextLength: params.ctxLen, getAvailableMemory: getMem, quantizedCache });
+    if (!memCheck.safe) {
+      // Don't just warn and load into a near-certain native allocator crash (the iOS
+      // metal_buffer_type_alloc_buffer / Android litert OOM clusters). Reduce context
+      // to the largest size that fits; only block when the weights alone can't fit.
+      const downgrade = await this.resolveSafeContext(fileSize, params.ctxLen, quantizedCache);
+      params.ctxLen = downgrade.ctxLen;
+      memCheck = downgrade.memCheck;
+    }
+    logger.log(`[LLM] Memory check: estimatedMB=${memCheck.estimatedMB.toFixed(0)}, availableMB=${memCheck.availableMB.toFixed(0)}, safe=${memCheck.safe}, ctx=${params.ctxLen}`);
     return { fileSize, memCheck, params };
+  }
+  /**
+   * Find the largest context that fits available memory, stepping down from the
+   * requested size. Throws only when the model weights alone exceed available RAM
+   * (a load that would certainly crash the allocator); otherwise proceeds at the
+   * smallest context, since the estimate is intentionally conservative.
+   */
+  private async resolveSafeContext(
+    fileSize: number,
+    requestedCtx: number,
+    quantizedCache: boolean,
+  ): Promise<{ ctxLen: number; memCheck: Awaited<ReturnType<typeof checkMemoryForModel>> }> {
+    const getMem = () => hardwareService.getAppMemoryUsage();
+    const fallbacks = [4096, 3072, 2048, 1024].filter(c => c < requestedCtx);
+    for (const ctx of fallbacks) {
+      const mc = await checkMemoryForModel({ modelFileSize: fileSize, contextLength: ctx, getAvailableMemory: getMem, quantizedCache });
+      if (mc.safe) {
+        logger.warn(`[LLM] Memory tight — reducing context ${requestedCtx} → ${ctx} (~${mc.estimatedMB.toFixed(0)}MB of ${mc.availableMB.toFixed(0)}MB available)`);
+        return { ctxLen: ctx, memCheck: mc };
+      }
+    }
+    const minCtx = fallbacks.length ? fallbacks[fallbacks.length - 1] : requestedCtx;
+    const finalCheck = await checkMemoryForModel({ modelFileSize: fileSize, contextLength: minCtx, getAvailableMemory: getMem, quantizedCache });
+    const modelMB = (fileSize * 1.2) / (1024 * 1024);
+    if (finalCheck.availableMB > 0 && modelMB > finalCheck.availableMB) {
+      throw new Error(`Not enough memory to load this model: it needs ~${Math.round(modelMB)}MB but only ${Math.round(finalCheck.availableMB)}MB is available. Close other apps or choose a smaller model.`);
+    }
+    logger.warn(`[LLM] Memory very tight — proceeding at minimum context ${minCtx} (estimate may be conservative)`);
+    return { ctxLen: minCtx, memCheck: finalCheck };
   }
   private async applyLoadedContext(opts: { context: LlamaContext; actualLength: number; gpuAttemptFailed: boolean; nGpuLayers: number; modelPath: string; mmProjPath?: string }): Promise<void> {
     const { context, actualLength, gpuAttemptFailed, nGpuLayers, modelPath, mmProjPath } = opts;

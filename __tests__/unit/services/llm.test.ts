@@ -58,6 +58,8 @@ function setupScalingTest({
 describe('LLMService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.restoreAllMocks(); // undo any jest.spyOn (e.g. getAppMemoryUsage) so memory state doesn't leak between tests
+    mockedRNFS.stat.mockResolvedValue({ size: 1000000, isFile: () => true } as any); // reset file size so per-test overrides don't leak
     resetStores();
 
     // Reset singleton state
@@ -108,6 +110,48 @@ describe('LLMService', () => {
       mockedRNFS.exists.mockResolvedValue(false);
 
       await expect(llmService.loadModel('/missing/model.gguf')).rejects.toThrow('Model file not found');
+    });
+
+    it('downgrades context when memory is tight instead of loading and crashing (F4)', async () => {
+      const { hardwareService } = require('../../../src/services/hardware');
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.stat.mockResolvedValue({ size: 2 * 1024 * 1024 * 1024 } as any); // 2 GB model
+      const ctx = createMockLlamaContext();
+      mockedInitLlama.mockResolvedValue(ctx as any);
+      // ~2.9 GB available: 8192/4096 ctx don't fit, a smaller ctx does.
+      jest.spyOn(hardwareService, 'getAppMemoryUsage').mockResolvedValue({
+        used: 5 * 1024 * 1024 * 1024,
+        available: 2900 * 1024 * 1024,
+        total: 8 * 1024 * 1024 * 1024,
+      });
+      useAppStore.setState({
+        settings: { ...useAppStore.getState().settings, contextLength: 8192, cacheType: 'q8_0' },
+      });
+
+      await llmService.loadModel('/models/big.gguf');
+
+      const ctxArg = (initLlama as jest.Mock).mock.calls[0][0].n_ctx;
+      expect(ctxArg).toBeLessThan(8192); // context was reduced to fit
+      expect(llmService.isModelLoaded()).toBe(true);
+    });
+
+    it('blocks the load when the model weights alone exceed available memory (F4)', async () => {
+      const { hardwareService } = require('../../../src/services/hardware');
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.stat.mockResolvedValue({ size: 6 * 1024 * 1024 * 1024 } as any); // 6 GB model
+      const ctx = createMockLlamaContext();
+      mockedInitLlama.mockResolvedValue(ctx as any);
+      jest.spyOn(hardwareService, 'getAppMemoryUsage').mockResolvedValue({
+        used: 6 * 1024 * 1024 * 1024,
+        available: 2 * 1024 * 1024 * 1024, // 2 GB — can't even fit the weights
+        total: 8 * 1024 * 1024 * 1024,
+      });
+      useAppStore.setState({
+        settings: { ...useAppStore.getState().settings, contextLength: 4096, cacheType: 'q8_0' },
+      });
+
+      await expect(llmService.loadModel('/models/huge.gguf')).rejects.toThrow('Not enough memory');
+      expect(initLlama).not.toHaveBeenCalled();
     });
 
     it('skips loading if same model already loaded', async () => {

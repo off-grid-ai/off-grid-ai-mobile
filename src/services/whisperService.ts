@@ -47,6 +47,11 @@ export const WHISPER_MODELS = [
   { id: 'tiny.en',   name: 'Tiny',   size: 75,   lang: 'en',    url: `${GGML_BASE}/ggml-tiny.en.bin`,   description: 'Fastest, English only' },
   { id: 'base.en',   name: 'Base',   size: 142,  lang: 'en',    url: `${GGML_BASE}/ggml-base.en.bin`,   description: 'Better accuracy, English only' },
   { id: 'small.en',  name: 'Small',  size: 466,  lang: 'en',    url: `${GGML_BASE}/ggml-small.en.bin`,  description: 'High accuracy, English only' },
+  // tinydiarize build of small.en: marks speaker-turn boundaries ([SPEAKER_TURN])
+  // when transcribed with diarization on. English only; required for the
+  // diarization toggle to produce anything (other models ignore tdrz).
+  // The only tdrz checkpoint that exists (akashmjn's repo, not ggerganov's). ~465 MB f16; no smaller/quantized variant is published.
+  { id: 'small.en-tdrz', name: 'Small (speaker turns)', size: 465, lang: 'en', url: 'https://huggingface.co/akashmjn/tinydiarize-whisper.cpp/resolve/main/ggml-small.en-tdrz.bin', description: 'Marks who-spoke turn boundaries, English only (experimental)' },
   { id: 'medium.en', name: 'Medium', size: 1500, lang: 'en',    url: `${GGML_BASE}/ggml-medium.en.bin`, description: 'Near human-level, English only, ~2 GB RAM' },
   // ── Multilingual ──────────────────────────────────────────────────────────
   { id: 'tiny',           name: 'Tiny',             size: 75,   lang: 'multi', url: `${GGML_BASE}/ggml-tiny.bin`,           description: 'Fastest, 99 languages' },
@@ -267,20 +272,32 @@ class WhisperService {
     // Native initWithModelPath calls abort() on invalid files, crashing the app.
     await this.validateModelFile(modelPath);
 
+    // CoreML only helps when the per-model encoder bundle (ggml-<model>-encoder.mlmodelc)
+    // is present. Enabling it WITHOUT that asset makes whisper.rn fail to load CoreML,
+    // fall back to CPU, AND then crash at transcribe (0%) on some iOS devices (e.g. the
+    // A12 / iPhone XS). The encoder assets are not wired yet, so this guard keeps CoreML
+    // off until they are - the toggle becomes a no-op rather than a crash.
+    let useCoreML = options?.useCoreML ?? false;
+    if (useCoreML) {
+      const coreMLPath = modelPath.replace(/\.bin$/i, '-encoder.mlmodelc');
+      if (!(await RNFS.exists(coreMLPath))) {
+        logger.warn('[Whisper] CoreML requested but encoder asset missing; using CPU instead');
+        useCoreML = false;
+      }
+    }
+
     logger.log(
       `[Whisper] Loading model: ${modelPath} useGpu=${options?.useGpu ?? false} ` +
-        `useFlashAttn=${options?.useFlashAttn ?? false} useCoreML=${options?.useCoreML ?? false}`,
+        `useFlashAttn=${options?.useFlashAttn ?? false} useCoreML=${useCoreML}`,
     );
     try {
       // useGpu/useFlashAttn/useCoreMLIos are real whisper.rn runtime options but
       // absent from this version's WhisperContextOptions type, so pass via a cast.
-      // useCoreMLIos accelerates on the Apple Neural Engine; whisper.rn falls
-      // back to CPU when the CoreML encoder assets aren't present (iOS only).
       const initOpts: Record<string, unknown> = {
         filePath: modelPath,
         useGpu: options?.useGpu ?? false,
         useFlashAttn: options?.useFlashAttn ?? false,
-        useCoreMLIos: options?.useCoreML ?? false,
+        useCoreMLIos: useCoreML,
       };
       this.context = await initWhisper(initOpts as unknown as Parameters<typeof initWhisper>[0]);
       this.currentModelPath = modelPath;
@@ -503,6 +520,10 @@ class WhisperService {
       // Receives the final segments with whisper.cpp timestamps. t0/t1 are in
       // centiseconds (10ms units) relative to the processed window.
       onSegments?: (segments: { text: string; t0: number; t1: number }[]) => void;
+      // Enable tinydiarize (tdrz): whisper marks speaker-turn boundaries with a
+      // [SPEAKER_TURN] token in the segment text. Requires a tdrz model
+      // (ggml-small.en-tdrz.bin); other models silently ignore it. English only.
+      diarize?: boolean;
     }
   ): Promise<string> {
     wireNativeWhisperLog();
@@ -510,7 +531,18 @@ class WhisperService {
       throw new Error('No Whisper model loaded');
     }
 
-    const language = options?.language || 'auto';
+    const requestedLanguage = options?.language || 'auto';
+    // English-only models (ggml-*.en) have ONLY English tokens. Asking them for
+    // any other language - via auto-detect (which returns garbage like "tg") OR an
+    // explicit pick like "fr" - makes whisper unstable on iOS: it crashes at 0%,
+    // thrashes (762s for 13%, 0 segments), or garbles. So force English for ANY
+    // English-only model, whatever was requested. Use the catalogue's `lang`
+    // metadata; fall back to the filename convention for custom models. (To
+    // transcribe other languages, a multilingual model like ggml-base.bin is needed.)
+    const modelFile = (this.currentModelPath ?? '').split('/').pop() ?? '';
+    const catalogModel = WHISPER_MODELS.find((m) => m.url.endsWith(modelFile));
+    const isEnglishOnlyModel = catalogModel ? catalogModel.lang === 'en' : /\.en\.bin$/i.test(modelFile);
+    const language = isEnglishOnlyModel ? 'en' : requestedLanguage;
     const maxThreads = options?.maxThreads ?? 0;
     const nProcessors = options?.nProcessors ?? 1;
     const loadedPath = this.currentModelPath ?? '(unknown)';
@@ -544,10 +576,18 @@ class WhisperService {
     if (nProcessors > 1) transcribeOpts.nProcessors = nProcessors;
     if (options?.offset && options.offset > 0) transcribeOpts.offset = Math.floor(options.offset);
     if (options?.duration && options.duration > 0) transcribeOpts.duration = Math.floor(options.duration);
+    // Speaker-turn marking. whisper.cpp only honors this with a tdrz model; with
+    // any other model it is a no-op (no crash, just no [SPEAKER_TURN] tokens).
+    if (options?.diarize) transcribeOpts.tdrzEnable = true;
 
     // whisper.rn fires onNewSegments after every decoded chunk; `result` is
     // the cumulative text. nProcessors > 1 disables this in whisper.cpp
     // (parallel chunks can't stream in order), so it only fires when nProcessors == 1.
+    // Live segment streaming uses whisper.rn's native new_segment_callback. On iOS
+    // the file-transcribe path (transcribeFile -> ObjC transcribeData) used to crash
+    // here because that callback's user_data was a stack struct that died before the
+    // callback fired; our whisper.rn+0.5.5 patch hoists it so it stays alive. That
+    // patch is compiled into the iOS binary, so streaming is enabled on both platforms.
     if (options?.onPartial || options?.onSegments) {
       transcribeOpts.onNewSegments = (eventData: {
         result: string;

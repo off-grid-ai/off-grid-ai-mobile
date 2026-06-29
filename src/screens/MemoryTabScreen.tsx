@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -33,28 +33,80 @@ export const MemoryTabScreen: React.FC = () => {
   return <MemoryPaywall />;
 };
 
+interface Feature {
+  icon: string;
+  title: string;
+  desc: string;
+}
+
+const FEATURES: Feature[] = [
+  {
+    icon: 'mic',
+    title: `Always-on recording${Platform.OS === 'android' ? '' : ' (Android)'}`,
+    desc: 'Capture meetings and conversations in the background, all day.',
+  },
+  {
+    icon: 'file-text',
+    title: 'On-device transcription',
+    desc: 'Whisper turns recordings into readable text right on your phone.',
+  },
+  {
+    icon: 'align-left',
+    title: 'Summaries',
+    desc: 'Condense a long recording into the key points and action items.',
+  },
+  {
+    icon: 'calendar',
+    title: 'Calendar context',
+    desc: 'Each recording is labelled with the meeting and the people in it.',
+  },
+];
+
+const FeatureRow: React.FC<{ feature: Feature; styles: ReturnType<typeof createStyles>; colors: ThemeColors }> = ({ feature, styles, colors }) => (
+  <View style={styles.featureRow}>
+    <View style={styles.featureIcon}>
+      <Icon name={feature.icon} size={18} color={colors.primary} />
+    </View>
+    <View style={styles.featureText}>
+      <Text style={styles.featureTitle}>{feature.title}</Text>
+      <Text style={styles.featureDesc}>{feature.desc}</Text>
+    </View>
+  </View>
+);
+
 const MemoryPaywall: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.iconCircle}>
           <Icon name="mic" size={28} color={colors.primary} />
         </View>
         <Text style={styles.title}>Recorder</Text>
         <Text style={styles.body}>
-          Record continuously and transcribe on your phone. The audio and the
-          transcript stay on the device - nothing is uploaded.
+          Capture your meetings and conversations, then transcribe, summarise, and
+          search them - entirely on your phone.
         </Text>
-        <Text style={styles.meta}>
-          Tap-to-seek timestamps, resumable transcription, on-device Whisper.
-        </Text>
+
+        <View style={styles.features}>
+          {FEATURES.map((f) => (
+            <FeatureRow key={f.title} feature={f} styles={styles} colors={colors} />
+          ))}
+        </View>
+
+        <View style={styles.privacyRow}>
+          <Icon name="lock" size={13} color={colors.textMuted} />
+          <Text style={styles.privacyText}>
+            The audio and transcript run in your phone and never leave the device.
+          </Text>
+        </View>
+
         <View style={styles.cta}>
           <Button title="Unlock with Pro" onPress={() => navigation.navigate('ProDetail')} />
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -65,18 +117,18 @@ const createStyles = (colors: ThemeColors) => ({
     backgroundColor: colors.background,
   },
   content: {
-    flex: 1,
-    alignItems: 'center' as const,
+    flexGrow: 1,
     justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.xxl,
     gap: SPACING.lg,
   },
   iconCircle: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: `${colors.primary}18`,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
@@ -89,12 +141,54 @@ const createStyles = (colors: ThemeColors) => ({
     color: colors.textSecondary,
     textAlign: 'center' as const,
   },
-  meta: {
+  features: {
+    width: '100%' as const,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: SPACING.lg,
+    gap: SPACING.lg,
+    marginTop: SPACING.sm,
+  },
+  featureRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: SPACING.md,
+  },
+  featureIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: `${colors.primary}18`,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  featureText: {
+    flex: 1,
+    gap: 2,
+  },
+  featureTitle: {
+    ...TYPOGRAPHY.body,
+    color: colors.text,
+  },
+  featureDesc: {
     ...TYPOGRAPHY.meta,
     color: colors.textMuted,
-    textAlign: 'center' as const,
+  },
+  privacyRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+  },
+  privacyText: {
+    ...TYPOGRAPHY.meta,
+    color: colors.textMuted,
+    flex: 1,
   },
   cta: {
+    width: '100%' as const,
     marginTop: SPACING.sm,
   },
 });

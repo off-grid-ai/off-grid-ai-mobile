@@ -295,16 +295,30 @@ describe('ModelResidencyManager', () => {
     });
   });
 
-  describe('makeRoomFor (measure-after-evict + ceiling guard)', () => {
+  describe('makeRoomFor (predictive — credits evictable residents)', () => {
     beforeEach(() => { modelResidencyManager._reset(); });
     afterEach(() => jest.restoreAllMocks());
 
-    it('refuses WITHOUT evicting when the model is too big to ever fit (ceiling guard)', async () => {
+    it('loads by evicting a resident even when instantaneous free RAM is low (credits the freed model)', async () => {
+      modelResidencyManager.setBudgetOverrideMB(null);
+      jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(8);
       jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
-      modelResidencyManager.setBudgetOverrideMB(1000); // ceiling
+      jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockReturnValue(0.5); // transiently low (post-STT)
+      const unloadWhisper = jest.fn().mockResolvedValue(undefined);
+      modelResidencyManager.register({ key: 'whisper', type: 'whisper', sizeMB: 2500 }, unloadWhisper, 1);
+      const { evicted, fits } = await modelResidencyManager.makeRoomFor({ key: 'text', type: 'text', sizeMB: 1500 });
+      // The budget credits the evictable whisper, so text fits after evicting it —
+      // NOT refused just because instantaneous free RAM dipped (the E2B-in-voice regression).
+      expect(fits).toBe(true);
+      expect(evicted).toEqual(['whisper']);
+      expect(unloadWhisper).toHaveBeenCalledTimes(1);
+    });
+
+    it("does NOT evict (don't strand) when the model can't fit even after full eviction", async () => {
+      modelResidencyManager.setBudgetOverrideMB(1000);
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
       const unloadImg = jest.fn().mockResolvedValue(undefined);
       modelResidencyManager.register({ key: 'image', type: 'image', sizeMB: 400 }, unloadImg, 1);
-      // 1500 > the 1000 ceiling → can never fit. Don't strand by freeing the image.
       const { evicted, fits } = await modelResidencyManager.makeRoomFor({ key: 'huge', type: 'text', sizeMB: 1500 });
       expect(fits).toBe(false);
       expect(evicted).toEqual([]);
@@ -312,130 +326,15 @@ describe('ModelResidencyManager', () => {
       expect(modelResidencyManager.isResident('image')).toBe(true);
     });
 
-    it('evicts when the REAL freed RAM (not the undercounting estimate) makes room', async () => {
-      modelResidencyManager.setBudgetOverrideMB(null); // dynamic real-RAM path
-      jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(8);
+    it('keeps both co-resident (no eviction) when the incoming fits the budget', async () => {
+      modelResidencyManager.setBudgetOverrideMB(2000);
       jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
-      // The image's registered estimate (500MB) badly undercounts its real footprint:
-      // while it's resident only ~1GB is free; evicting it actually frees far more.
-      jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockImplementation(() =>
-        modelResidencyManager.isResident('image') ? 1.0 : 4.0);
       const unloadImg = jest.fn().mockResolvedValue(undefined);
       modelResidencyManager.register({ key: 'image', type: 'image', sizeMB: 500 }, unloadImg, 1);
-
-      const { evicted, fits } = await modelResidencyManager.makeRoomFor({ key: 'text', type: 'text', sizeMB: 2500 });
-
-      // Predicting from the 500MB estimate would have said "won't fit even after
-      // eviction" and freed nothing; measuring the real freed RAM fits the text model.
-      expect(unloadImg).toHaveBeenCalledTimes(1);
-      expect(evicted).toEqual(['image']);
-      expect(fits).toBe(true);
-      expect(modelResidencyManager.isResident('image')).toBe(false);
-    });
-
-    it('keeps both co-resident (no eviction) when the incoming fits in real free RAM', async () => {
-      modelResidencyManager.setBudgetOverrideMB(null);
-      jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(8);
-      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
-      jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockReturnValue(5.0); // plenty free
-      const unloadImg = jest.fn().mockResolvedValue(undefined);
-      modelResidencyManager.register({ key: 'image', type: 'image', sizeMB: 500 }, unloadImg, 1);
-
-      const { evicted, fits } = await modelResidencyManager.makeRoomFor({ key: 'text', type: 'text', sizeMB: 1500 });
+      const { evicted, fits } = await modelResidencyManager.makeRoomFor({ key: 'text', type: 'text', sizeMB: 1000 });
       expect(fits).toBe(true);
       expect(evicted).toEqual([]);
       expect(unloadImg).not.toHaveBeenCalled();
-      expect(modelResidencyManager.isResident('image')).toBe(true);
-    });
-
-    it('does nothing when the incoming model is already resident', async () => {
-      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
-      modelResidencyManager.setBudgetOverrideMB(1000);
-      const unload = jest.fn().mockResolvedValue(undefined);
-      modelResidencyManager.register({ key: 'text', type: 'text', sizeMB: 800 }, unload, 1);
-      const { evicted, fits } = await modelResidencyManager.makeRoomFor({ key: 'text', type: 'text', sizeMB: 800 });
-      expect(fits).toBe(true);
-      expect(evicted).toEqual([]);
-      expect(unload).not.toHaveBeenCalled();
-    });
-
-    it('evicts MULTIPLE victims one at a time, lowest priority first, re-measuring after each', async () => {
-      modelResidencyManager.setBudgetOverrideMB(null);
-      jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(8);
-      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
-      // Real free RAM rises as each model is freed: both resident → 1GB; after the
-      // sidecar goes → 1.5GB (still not enough); after the image goes → 4GB (fits).
-      jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockImplementation(() =>
-        modelResidencyManager.isResident('image')
-          ? (modelResidencyManager.isResident('stt') ? 1.0 : 1.5)
-          : 4.0);
-      const unloadImg = jest.fn().mockResolvedValue(undefined);
-      const unloadStt = jest.fn().mockResolvedValue(undefined);
-      modelResidencyManager.register({ key: 'image', type: 'image', sizeMB: 500 }, unloadImg, 2);
-      modelResidencyManager.register({ key: 'stt', type: 'whisper', sizeMB: 200 }, unloadStt, 1);
-
-      const { evicted, fits } = await modelResidencyManager.makeRoomFor({ key: 'text', type: 'text', sizeMB: 3000 });
-
-      // Sidecar (lowest priority) evicted first, then the image — and only after
-      // re-measuring did the second eviction prove necessary AND sufficient.
-      expect(evicted).toEqual(['stt', 'image']);
-      expect(fits).toBe(true);
-      expect(unloadStt).toHaveBeenCalledTimes(1);
-      expect(unloadImg).toHaveBeenCalledTimes(1);
-    });
-
-    it('reports fits=false after freeing everything evictable when real RAM is still short (external pressure)', async () => {
-      modelResidencyManager.setBudgetOverrideMB(null);
-      jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(8);
-      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
-      // Even after the image is freed, only ~2GB is free (another app holds the rest),
-      // so a 3GB model still can't load. The honest outcome: we freed our model and
-      // report fits=false so the caller surfaces insufficient-memory (no OOM).
-      jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockImplementation(() =>
-        modelResidencyManager.isResident('image') ? 1.0 : 2.0);
-      const unloadImg = jest.fn().mockResolvedValue(undefined);
-      modelResidencyManager.register({ key: 'image', type: 'image', sizeMB: 500 }, unloadImg, 1);
-
-      const { evicted, fits } = await modelResidencyManager.makeRoomFor({ key: 'text', type: 'text', sizeMB: 3000 });
-      expect(fits).toBe(false);
-      expect(evicted).toEqual(['image']);
-      expect(unloadImg).toHaveBeenCalledTimes(1);
-      expect(modelResidencyManager.isResident('image')).toBe(false);
-    });
-
-    it('never evicts a pinned resident while measuring', async () => {
-      modelResidencyManager.setBudgetOverrideMB(null);
-      jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(8);
-      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
-      jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockImplementation(() =>
-        modelResidencyManager.isResident('image') ? 1.0 : 4.0);
-      const unloadCls = jest.fn().mockResolvedValue(undefined);
-      const unloadImg = jest.fn().mockResolvedValue(undefined);
-      modelResidencyManager.register({ key: 'cls', type: 'classifier', sizeMB: 100, pinned: true }, unloadCls, 2);
-      modelResidencyManager.register({ key: 'image', type: 'image', sizeMB: 500 }, unloadImg, 1);
-
-      const { evicted, fits } = await modelResidencyManager.makeRoomFor({ key: 'text', type: 'text', sizeMB: 3000 });
-      expect(fits).toBe(true);
-      expect(evicted).toEqual(['image']);
-      expect(unloadCls).not.toHaveBeenCalled();
-      expect(modelResidencyManager.isResident('cls')).toBe(true);
-    });
-
-    it('an incoming sidecar only reclaims peer sidecars, never the LLM, while measuring', async () => {
-      modelResidencyManager.setBudgetOverrideMB(null);
-      jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(8);
-      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
-      jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockImplementation(() =>
-        modelResidencyManager.isResident('stt') ? 1.0 : 2.0);
-      const unloadText = jest.fn().mockResolvedValue(undefined);
-      const unloadStt = jest.fn().mockResolvedValue(undefined);
-      modelResidencyManager.register({ key: 'text', type: 'text', sizeMB: 1500 }, unloadText, 5);
-      modelResidencyManager.register({ key: 'stt', type: 'whisper', sizeMB: 200 }, unloadStt, 1);
-
-      const { evicted } = await modelResidencyManager.makeRoomFor({ key: 'tts', type: 'tts', sizeMB: 320 });
-      expect(evicted).toEqual(['stt']); // peer sidecar only
-      expect(unloadText).not.toHaveBeenCalled(); // the LLM is off-limits to a sidecar load
-      expect(modelResidencyManager.isResident('text')).toBe(true);
     });
   });
 

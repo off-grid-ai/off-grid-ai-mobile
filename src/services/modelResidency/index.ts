@@ -12,7 +12,7 @@
 import { AppState } from 'react-native';
 import { hardwareService } from '../hardware';
 import logger from '../../utils/logger';
-import { selectEvictionVictim, computeBudgetMB, Resident, ResidentType } from './policy';
+import { planEviction, computeBudgetMB, Resident, ResidentType } from './policy';
 
 type UnloadFn = () => Promise<void>;
 
@@ -179,54 +179,32 @@ class ModelResidencyManager {
     // Re-read real free RAM so the decision reflects current pressure, not a stale
     // boot-time snapshot (other apps may have grabbed memory since).
     await hardwareService.refreshMemoryInfo().catch(() => {});
-
-    if (this.residents.has(spec.key)) {
-      logger.log(`[MEM-SM] makeRoomFor ${spec.key} already resident → fits`);
-      return { evicted: [], fits: true };
-    }
-
-    // Absolute ceiling: the most RAM we'd EVER commit to a single model on this
-    // device (physical cap, or the test override). If the model alone exceeds it,
-    // it can NEVER fit no matter what we evict — so refuse WITHOUT evicting, rather
-    // than strand the device by freeing a resident for a load guaranteed to fail.
-    // This is what correctly refuses E4B (8.5GB) / SDXL (7.3GB) on a tight device.
-    const ceilingMB = this.budgetOverrideMB ?? computeBudgetMB(hardwareService.getTotalMemoryGB() * 1024);
-    if (spec.sizeMB > ceilingMB) {
-      logger.log(`[MEM-SM] makeRoomFor ${spec.key} sizeMB=${spec.sizeMB} ceilingMB=${Math.round(ceilingMB)} → too big to EVER fit, refusing without eviction`);
+    // Compute the budget ONCE, crediting ALL current residents (getBudgetMB adds
+    // residentMB to real free RAM — i.e. "free RAM if we evicted our own models"),
+    // then plan eviction against that single budget. We do NOT re-read available
+    // mid-eviction: getBudgetMB credits residentMB, so deleting a resident drops the
+    // budget faster than os_proc_available_memory reflects the freed RAM — that race
+    // collapsed the budget and falsely refused a model that genuinely fits (e.g.
+    // E2B in voice mode after STT). planEviction simulates eviction against the
+    // stable budget instead, which is why ordinary loads succeed.
+    const budgetMB = this.getBudgetMB();
+    const residents = this.planningResidents();
+    const plan = planEviction(residents, spec, budgetMB);
+    // [MEM-SM] trace (kept forever): the exact numbers behind every fit decision —
+    // real per-process budget vs the model estimate vs what's resident/evictable.
+    logger.log(`[MEM-SM] makeRoomFor ${spec.key} sizeMB=${spec.sizeMB} budgetMB=${budgetMB} residents=[${residents.map(r => `${r.key}:${r.sizeMB}${r.pinned ? '(pinned)' : ''}`).join(',')}] fits=${plan.fits} evict=[${plan.evict.map(e => e.key).join(',')}]`);
+    if (!plan.fits) {
+      // Won't fit even after the planned evictions — DON'T evict (otherwise we'd
+      // strand the device with nothing). The caller blocks the load.
       return { evicted: [], fits: false };
     }
-
-    // Does it fit RIGHT NOW (in real free RAM, alongside everything resident)? If
-    // so, evict nothing — this is how text+image stay co-resident for enhancement.
-    const fits = (): boolean => {
-      const usedMB = [...this.residents.values()].reduce((sum, r) => sum + r.sizeMB, 0);
-      return usedMB + spec.sizeMB <= this.getBudgetMB();
-    };
-
-    // Measure-after-evict (NOT predict): the resident-size estimates undercount
-    // palettized image models 3-4× (tiny compressed file, large runtime footprint),
-    // so a prediction wrongly concludes a small text model won't fit. Instead evict
-    // the lowest-priority victim, let the OS reclaim, re-read REAL free RAM, re-check.
-    // planningResidents() pins anything whose owner vetoes eviction right now
-    // (canEvict()===false, e.g. TTS playing) so an in-use model is never freed.
-    const evicted: string[] = [];
-    while (!fits()) {
-      const victim = selectEvictionVictim(this.planningResidents(), spec, () => false);
-      if (!victim) break; // nothing evictable left (all pinned / in-use / sidecar rule) → bail
+    for (const victim of plan.evict) {
       const reg = this.residents.get(victim.key);
-      if (!reg) break;
+      if (!reg) continue;
       await reg.unload().catch(err => logger.log(`[ModelResidency] unload ${victim.key} failed:`, err));
       this.residents.delete(victim.key);
-      evicted.push(victim.key);
-      await hardwareService.refreshMemoryInfo().catch(() => {}); // real freed RAM now visible
     }
-
-    const finalFits = fits();
-    // [MEM-SM] trace (kept forever): the exact numbers behind every fit decision,
-    // so "not enough memory" is never a mystery (real per-process budget vs the
-    // model estimate vs what was actually evicted).
-    logger.log(`[MEM-SM] makeRoomFor ${spec.key} sizeMB=${spec.sizeMB} budgetMB=${this.getBudgetMB()} ceilingMB=${Math.round(ceilingMB)} evicted=[${evicted.join(',')}] fits=${finalFits}`);
-    return { evicted, fits: finalFits };
+    return { evicted: plan.evict.map(e => e.key), fits: plan.fits };
   }
 
   async ensureResident(

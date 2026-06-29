@@ -74,6 +74,13 @@ class ModelDownloadService {
    */
   private onProviderChange(): void {
     this.notify();
+    // Only self-drive a list() (which does disk scans for completed models) when a
+    // consumer is actually observing — otherwise, during heavy downloads, every
+    // progress tick would schedule a disk scan for [DL-SM] logging that nothing
+    // reads, saturating the JS thread (the "can't switch tabs while downloading"
+    // lag). When the Download Manager is open it subscribes, so transitions are
+    // still logged where they matter; control ops + reconcile log explicitly too.
+    if (this.listeners.size === 0) return;
     if (this.selfRefreshTimer) return; // coalesce a burst
     this.selfRefreshTimer = setTimeout(() => {
       this.selfRefreshTimer = null;

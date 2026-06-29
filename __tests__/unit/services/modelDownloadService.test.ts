@@ -125,13 +125,23 @@ describe('ModelDownloadService', () => {
     await expect(modelDownloadService.reconcile()).resolves.toBeUndefined();
   });
 
-  it('self-drives transition logging on a provider change — no external list() needed', async () => {
+  it('self-drives transition logging on a provider change WHEN a consumer is subscribed', async () => {
     const p = makeProvider('text', [dl('text:a', 'text', { status: 'downloading' })]);
-    modelDownloadService.register(p); // schedules a coalesced self-list
-    // No one calls list(); the service must self-list and log the transition.
+    modelDownloadService.register(p);
+    modelDownloadService.subscribe(() => {}); // a consumer is observing → self-list runs
+    p._onChange?.();                           // a progress/status change fires
     await new Promise(r => setTimeout(r, 360));
     const lines = (logger.log as jest.Mock).mock.calls.map(c => c[0]);
     expect(lines.some((l: string) => l.includes('text:a') && l.includes('new → downloading'))).toBe(true);
+  });
+
+  it('does NOT self-list (no disk scan) when NO consumer is subscribed — avoids download-time lag', async () => {
+    const p = makeProvider('text', [dl('text:a', 'text', { status: 'downloading' })]);
+    modelDownloadService.register(p); // no subscriber
+    (p.list as jest.Mock).mockClear();
+    p._onChange?.(); // progress tick
+    await new Promise(r => setTimeout(r, 360));
+    expect(p.list).not.toHaveBeenCalled();
   });
 
   it('notifies subscribers when a provider reports a change', async () => {

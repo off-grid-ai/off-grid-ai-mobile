@@ -79,3 +79,47 @@ index b1fa548..5f0b7f1 100644
      if (job->audio_output_path != nullptr) {
          RNWHISPER_LOG_INFO("job->params.language: %s\n", job->params.language);
          std::vector<int> slice_n_samples_vec;
+diff --git a/node_modules/whisper.rn/ios/RNWhisperContext.mm b/node_modules/whisper.rn/ios/RNWhisperContext.mm
+index 13a880f..4ccf878 100644
+--- a/node_modules/whisper.rn/ios/RNWhisperContext.mm
++++ b/node_modules/whisper.rn/ios/RNWhisperContext.mm
+@@ -419,6 +419,24 @@ - (void)transcribeData:(int)jobId
+ 
+         whisper_full_params params = [self createParams:options jobId:jobId];
+ 
++        // Hoisted to the dispatch-block scope so it outlives the `if` below and
++        // stays valid through fullTranscribe. It was declared inside the
++        // `if (onNewSegments)` block but its address is handed to whisper as the
++        // segment-callback context; once that `if` closed, the stack struct was
++        // dead, and the first segment callback (~first 30s window) dereferenced a
++        // dangling pointer -> deterministic native crash on iOS. (onProgress was
++        // unaffected: it passes the block directly, no struct.)
++        struct rnwhisper_segments_callback_data user_data = {
++            .onNewSegments = onNewSegments,
++            .tdrzEnable = options[@"tdrzEnable"] && [options[@"tdrzEnable"] boolValue],
++            .total_n_new = 0,
++        };
++        // Marker proving this binary carries the whisper.rn+0.5.5 segment-callback
++        // lifetime patch. If you DON'T see this line in the device log when iOS
++        // streaming is enabled, the running app was built without the patch (likely
++        // a Metro reload over a stale binary) and the live callback will crash.
++        NSLog(@"[RNWhisper][PATCH-LIVE] segment-callback user_data hoisted (whisper.rn+0.5.5 lifetime patch compiled in)");
++
+         if (options[@"onProgress"] && [options[@"onProgress"] boolValue]) {
+             params.progress_callback = [](struct whisper_context * /*ctx*/, struct whisper_state * /*state*/, int progress, void * user_data) {
+                 void (^onProgress)(int) = (__bridge void (^)(int))user_data;
+@@ -463,11 +481,9 @@ - (void)transcribeData:(int)jobId
+                 void (^onNewSegments)(NSDictionary *) = (void (^)(NSDictionary *))data->onNewSegments;
+                 onNewSegments(result);
+             };
+-            struct rnwhisper_segments_callback_data user_data = {
+-                .onNewSegments = onNewSegments,
+-                .tdrzEnable = options[@"tdrzEnable"] && [options[@"tdrzEnable"] boolValue],
+-                .total_n_new = 0,
+-            };
++            // user_data is declared at the dispatch-block scope above so it stays
++            // alive through fullTranscribe (declaring it here, inside the if, left a
++            // dangling pointer once this block closed).
+             params.new_segment_callback_user_data = &user_data;
+         }
+ 

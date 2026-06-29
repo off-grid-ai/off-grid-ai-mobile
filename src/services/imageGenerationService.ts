@@ -8,6 +8,7 @@ import logger from '../utils/logger';
 import { shouldShowSharePrompt, emitSharePrompt } from '../utils/sharePrompt';
 import { checkProPromptForImage } from '../utils/proPrompt';
 import { buildEnhancementMessages, getConversationContext, cleanEnhancedPrompt, buildImageGenMeta } from './imageGenerationHelpers';
+import { reportModelFailure } from './modelFailureHandler';
 
 const SHARE_PROMPT_DELAY_MS = 2000;
 
@@ -98,6 +99,8 @@ class ImageGenerationService {
 
   private readonly listeners: Set<ImageGenerationListener> = new Set();
   private cancelRequested: boolean = false;
+  /** Last generate request, so a failure card's Retry button can re-run it. */
+  private _lastParams: GenerateImageParams | null = null;
 
   /** Public snapshot: isGenerating is computed from phase, never stored. */
   getState(): ImageGenerationState { return { ...this.state, isGenerating: isInFlight(this.state.phase) }; }
@@ -140,20 +143,34 @@ class ImageGenerationService {
 
   /**
    * The SINGLE owner of generation failure (SRP): move to the error phase AND
-   * surface the reason to the user as a chat message — so a failure is NEVER
-   * silent and the handling is defined once, not duplicated per call site. Every
-   * error path routes through here. Returns null for `return this._fail(...)`.
+   * surface the reason via the common dismissible failure card (modelFailureHandler)
+   * — NOT a flat chat message. So a failure is never silent, never a chat bubble,
+   * and the handling is defined once. The card detects insufficient-memory from the
+   * error text and offers "Free memory & Retry" (re-runs the last request).
+   * Returns null for `return this._fail(...)`.
    */
-  private _fail(error: string, conversationId: string | null = this.state.conversationId): null {
+  private _fail(error: string, _conversationId: string | null = this.state.conversationId): null {
     this.updateState({ phase: 'error', progress: null, status: null, previewPath: null, error });
-    if (conversationId) {
-      useChatStore.getState().addMessage(conversationId, {
-        role: 'assistant',
-        content: `Image generation failed: ${error}`,
-        isSystemInfo: true,
-      });
-    }
+    reportModelFailure('image', error, {
+      message: error,
+      onRetry: this._lastParams ? () => { void this.generateImage(this._lastParams as GenerateImageParams); } : undefined,
+    });
     return null;
+  }
+
+  /**
+   * Prompt enhancement was skipped (best-effort text-model load failed). This is a
+   * SOFT degradation — the image still generates from the original prompt — so it
+   * surfaces as a non-blocking 'warning' on the same dismissible card instead of
+   * being silently swallowed. We pass the underlying reason as the error so the
+   * card can still flag memory pressure when that's the cause.
+   */
+  private _noticeEnhancementSkipped(reason: string): void {
+    reportModelFailure('text', reason, {
+      severity: 'warning',
+      title: 'Prompt enhancement skipped',
+      message: `Generating from your original prompt — ${reason}.`,
+    });
   }
 
   private _checkSharePrompt(): void {
@@ -206,6 +223,7 @@ class ImageGenerationService {
       const textModelId = activeModelId ?? lastTextModelId;
       if (!textModelId) {
         logger.warn('[ImageGen] No text model available, skipping enhancement');
+        this._noticeEnhancementSkipped('no text model is selected');
         return params.prompt;
       }
       this.updateState({
@@ -213,14 +231,22 @@ class ImageGenerationService {
         status: 'Loading text model to enhance prompt...', previewPath: null,
         progress: { step: 0, totalSteps: steps }, error: null, result: null,
       });
+      let loadError: unknown = null;
       try {
         await activeModelService.loadTextModel(textModelId);
         isTextModelLoaded = llmService.isModelLoaded();
       } catch (err) {
+        loadError = err;
         logger.warn('[ImageGen] Failed to load text model for enhancement, using original prompt:', err);
       }
       if (!isTextModelLoaded) {
         logger.warn('[ImageGen] Text model still not loaded after on-demand load, skipping enhancement');
+        // Soft, non-blocking notice: the image still generates from the original
+        // prompt — surfaced on the same dismissible card (never silent), and the
+        // text-model error text lets the card flag memory pressure if that's why.
+        this._noticeEnhancementSkipped(
+          loadError instanceof Error ? loadError.message : 'the text model could not load',
+        );
         return params.prompt;
       }
     }
@@ -380,6 +406,7 @@ class ImageGenerationService {
       logger.log('[ImageGenerationService] Already generating, ignoring request');
       return null;
     }
+    this._lastParams = params; // so a failure card's Retry can re-run this exact request
     const { settings, activeImageModelId, downloadedImageModels } = useAppStore.getState();
     const activeImageModel = downloadedImageModels.find(m => m.id === activeImageModelId);
     if (!activeImageModel) return this._fail('No image model selected', params.conversationId || null);

@@ -302,7 +302,7 @@ describe('HomeScreen', () => {
 
     it('shows app title', () => {
       const { getByText } = renderHomeScreen();
-      expect(getByText('Off Grid')).toBeTruthy();
+      expect(getByText('Off Grid AI')).toBeTruthy();
     });
 
     it('shows Text and Image model card labels', () => {
@@ -494,7 +494,8 @@ describe('HomeScreen', () => {
       });
 
       const { getByText } = renderHomeScreen();
-      expect(getByText('See all')).toBeTruthy();
+      // "See all" now carries the total chat count: "See all (1)".
+      expect(getByText(/See all \(1\)/)).toBeTruthy();
     });
 
     it('limits recent conversations to 4', () => {
@@ -729,7 +730,9 @@ describe('HomeScreen', () => {
   // Stats Display
   // ============================================================================
   describe('stats display', () => {
-    it('shows count of text models', () => {
+    // The old stats row was removed: per-type counts now live in the Models card,
+    // and the conversation count sits next to "See all".
+    it('shows the text-model count in the Models card', () => {
       useAppStore.setState({
         downloadedModels: [
           createDownloadedModel(),
@@ -739,11 +742,11 @@ describe('HomeScreen', () => {
       });
 
       const { getByText } = renderHomeScreen();
+      expect(getByText('Text')).toBeTruthy();
       expect(getByText('3')).toBeTruthy();
-      expect(getByText('Text models')).toBeTruthy();
     });
 
-    it('shows count of image models', () => {
+    it('shows the image-model count in the Models card', () => {
       useAppStore.setState({
         downloadedImageModels: [
           createONNXImageModel(),
@@ -752,21 +755,21 @@ describe('HomeScreen', () => {
       });
 
       const { getByText } = renderHomeScreen();
+      expect(getByText('Image')).toBeTruthy();
       expect(getByText('2')).toBeTruthy();
-      expect(getByText('Image models')).toBeTruthy();
     });
 
-    it('shows count of conversations', () => {
+    it('shows the conversation count next to See all', () => {
       createMultipleConversations(5);
 
       const { getByText } = renderHomeScreen();
-      expect(getByText('5')).toBeTruthy();
-      expect(getByText('Chats')).toBeTruthy();
+      expect(getByText(/See all \(5\)/)).toBeTruthy();
     });
 
-    it('shows zero counts by default', () => {
+    it('shows zero per-type counts by default in the Models card', () => {
+      // Four model types (text/image/voice/speech), each 0 by default.
       const { getAllByText } = renderHomeScreen();
-      expect(getAllByText('0').length).toBe(3);
+      expect(getAllByText('0').length).toBe(4);
     });
   });
 

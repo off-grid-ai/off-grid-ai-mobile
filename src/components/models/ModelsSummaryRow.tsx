@@ -9,6 +9,9 @@ import type { ModelRowType } from './ModelsManagerSheet';
 
 type Props = {
   labels: Record<ModelRowType, string>;
+  /** Count of downloaded models per type — shown under each caption so the card
+   *  carries information at a glance (replaces the separate stats row). */
+  counts?: Partial<Record<ModelRowType, number>>;
   isLoading: boolean;
   onPress: () => void;
 };
@@ -25,7 +28,7 @@ const TYPE_ICONS: { type: ModelRowType; icon: string; caption: string }[] = [
  * type — emerald + bright caption when that type has an active model, dimmed +
  * muted when not. Tap → manager sheet.
  */
-export const ModelsSummaryRow: React.FC<Props> = ({ labels, isLoading, onPress }) => {
+export const ModelsSummaryRow: React.FC<Props> = ({ labels, counts, isLoading, onPress }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
@@ -40,10 +43,16 @@ export const ModelsSummaryRow: React.FC<Props> = ({ labels, isLoading, onPress }
       <View style={styles.icons}>
         {TYPE_ICONS.map(({ type, icon, caption }) => {
           const active = !!labels[type] && labels[type] !== '—';
+          const count = counts?.[type];
           return (
             <View key={type} style={[styles.iconCol, !active && styles.inactive]}>
               <Icon name={icon} size={18} color={active ? colors.primary : colors.textMuted} />
-              <Text style={[styles.caption, active && styles.captionActive]}>{caption}</Text>
+              <View style={styles.captionRow}>
+                <Text style={[styles.caption, active && styles.captionActive]}>{caption}</Text>
+                {typeof count === 'number' && (
+                  <Text style={[styles.count, count > 0 && styles.countActive]}>{count}</Text>
+                )}
+              </View>
             </View>
           );
         })}
@@ -76,6 +85,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
   iconCol: { alignItems: 'center' as const, gap: SPACING.xs },
   inactive: { opacity: 0.35 },
+  captionRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4 },
   caption: { ...TYPOGRAPHY.metaSmall, color: colors.textMuted },
   captionActive: { color: colors.textSecondary },
+  count: { ...TYPOGRAPHY.metaSmall, color: colors.textMuted },
+  countActive: { color: colors.primary },
 });

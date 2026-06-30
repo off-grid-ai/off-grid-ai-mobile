@@ -50,9 +50,11 @@ const mockAppState = {
 };
 
 jest.mock('../../../src/stores', () => ({
-  useAppStore: jest.fn((selector?: any) => {
-    return selector ? selector(mockAppState) : mockAppState;
-  }),
+  useAppStore: Object.assign(
+    jest.fn((selector?: any) => (selector ? selector(mockAppState) : mockAppState)),
+    // startModelDownload (the shared download action) reads useAppStore.getState().
+    { getState: () => mockAppState },
+  ),
 }));
 
 const mockRemoteServerState = {
@@ -97,6 +99,12 @@ jest.mock('../../../src/services', () => ({
     testConnection: jest.fn().mockResolvedValue({ success: false }),
     setActiveRemoteTextModel: jest.fn().mockResolvedValue(undefined),
   },
+}));
+
+// The shared startModelDownload action imports modelManager from the direct module,
+// not the barrel — point it at the same mock so the screen's delegation is exercised.
+jest.mock('../../../src/services/modelManager', () => ({
+  modelManager: jest.requireMock('../../../src/services').modelManager,
 }));
 
 jest.mock('../../../src/services/networkDiscovery', () => ({

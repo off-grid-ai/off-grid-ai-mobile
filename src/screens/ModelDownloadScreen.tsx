@@ -20,6 +20,7 @@ import { useAppStore } from '../stores';
 import { useDownloadStore, isActiveStatus } from '../stores/downloadStore';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { hardwareService, modelManager, remoteServerManager } from '../services';
+import { startModelDownload } from '../services/startModelDownload';
 import { modelBudgetFraction } from '../services/memoryBudget';
 import { discoverLANServers } from '../services/networkDiscovery';
 import { ModelFile, DownloadedModel, RemoteServer } from '../types';
@@ -116,7 +117,7 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
-  const { deviceInfo, setDeviceInfo, setModelRecommendation, addDownloadedModel, downloadedModels } = useAppStore();
+  const { deviceInfo, setDeviceInfo, setModelRecommendation, downloadedModels } = useAppStore();
   const storeDownloads = useDownloadStore(s => s.downloads);
   const servers = useRemoteServerStore((s) => s.servers);
   const discoveredModels = useRemoteServerStore((s) => s.discoveredModels);
@@ -216,25 +217,11 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const handleDownload = async (modelId: string, file: ModelFile) => {
-    const modelKey = makeModelKey(modelId, file.name);
-    // Duplicate-start guard. The store's add() also enforces this, but
-    // checking up-front avoids the unnecessary native call.
-    const existing = useDownloadStore.getState().downloads[modelKey];
-    if (existing && isActiveStatus(existing.status)) return;
-    const onError = (error: Error) => {
-      // The store now holds the failed state — UI shows it, no need to
-      // clear progress here. Only surface the alert.
-      setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(error.message)));
-    };
-    try {
-      // modelManager.downloadModelBackground writes the row to SQLite and
-      // adds the entry to useDownloadStore synchronously after start.
-      const info = await modelManager.downloadModelBackground(modelId, file);
-      modelManager.watchDownload(info.downloadId, (model: DownloadedModel) => {
-        addDownloadedModel(model);
-        useDownloadStore.getState().remove(modelKey);
-      }, onError);
-    } catch (error) { onError(error as Error); }
+    // Same mechanism as the Models screen (startModelDownload) — guard, register, and
+    // clear are shared; onboarding just surfaces the failure alert.
+    await startModelDownload(modelId, file, {
+      onError: (error) => setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(error.message))),
+    });
   };
 
   const handleConnectServer = async (server: RemoteServer) => {

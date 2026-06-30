@@ -5,9 +5,9 @@ import { showAlert, AlertState } from '../../components/CustomAlert';
 import { RECOMMENDED_MODELS, TRENDING_FAMILIES, MODEL_ORGS } from '../../constants';
 import { useAppStore } from '../../stores';
 import { modelBudgetFraction } from '../../services/memoryBudget';
-import { useDownloadStore, isActiveStatus } from '../../stores/downloadStore';
-import { makeModelKey } from '../../utils/modelKey';
+import { useDownloadStore } from '../../stores/downloadStore';
 import { huggingFaceService, modelManager, hardwareService, activeModelService } from '../../services';
+import { startModelDownload } from '../../services/startModelDownload';
 import { ModelInfo, ModelFile, DownloadedModel } from '../../types';
 import { FilterDimension, FilterState, ModelTypeFilter, CredibilityFilter, SizeFilter, SortOption } from './types';
 import { initialFilterState, SIZE_OPTIONS, VISION_PIPELINE_TAG, CODE_FALLBACK_QUERY } from './constants';
@@ -111,7 +111,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   const repairingVisionIds = useDownloadStore(s => s.repairingVisionIds);
   const setRepairingVision = useDownloadStore(s => s.setRepairingVision);
 
-  const { downloadedModels, setDownloadedModels, addDownloadedModel, removeDownloadedModel, activeModelId } = useAppStore();
+  const { downloadedModels, setDownloadedModels, removeDownloadedModel, activeModelId } = useAppStore();
 
   const loadDownloadedModels = async () => {
     const models = await modelManager.getDownloadedModels();
@@ -221,40 +221,21 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   const isRepairingVisionModel = (modelDownloadId: string) => !!repairingVisionIds[modelDownloadId];
 
   const handleDownload = async (model: ModelInfo, file: ModelFile) => {
-    const modelKey = makeModelKey(model.id, file.name);
-    // Duplicate-start guard. If a download is already active for this
-    // logical file (rapid double-tap, race after retry, etc.), do nothing.
-    const existing = useDownloadStore.getState().downloads[modelKey];
-    if (existing && isActiveStatus(existing.status)) return;
-    let currentDownloadId: string | undefined;
-
-    const onComplete = (dm: DownloadedModel) => {
-      addDownloadedModel(dm);
-      // Clear the entry once the model is registered — UI then reads "downloaded" state
-      // from downloadedModels rather than a lingering store entry stuck at 100%.
-      useDownloadStore.getState().remove(modelKey);
-      if (file.mmProjFile && !(dm.engine === 'llama' && dm.isVisionModel)) {
-        setAlertState(showAlert(
-          'Model Downloaded',
-          `${model.name} downloaded but the vision projection file could not be saved. Go to Download Manager and use "Repair Vision" to fix it.`,
-        ));
-      } else {
-        setAlertState(showAlert('Success', `${model.name} downloaded successfully!`));
-      }
-    };
-    const onError = (err: Error) => {
-      if (currentDownloadId) {
-        useDownloadStore.getState().setStatus(currentDownloadId, 'failed', { message: err.message });
-      }
-      setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(err.message)));
-    };
-    try {
-      // modelManager.downloadModelBackground handles store population
-      // (add for new entries, retryEntry for existing failed ones).
-      const info = await modelManager.downloadModelBackground(model.id, file);
-      currentDownloadId = info.downloadId;
-      modelManager.watchDownload(info.downloadId, onComplete, onError);
-    } catch (e) { onError(e as Error); }
+    // Shared with the onboarding ModelDownloadScreen via startModelDownload — one
+    // mechanism + one duplicate guard. This screen owns only its completion/error UI.
+    await startModelDownload(model.id, file, {
+      onRegistered: (dm) => {
+        if (file.mmProjFile && !(dm.engine === 'llama' && dm.isVisionModel)) {
+          setAlertState(showAlert(
+            'Model Downloaded',
+            `${model.name} downloaded but the vision projection file could not be saved. Go to Download Manager and use "Repair Vision" to fix it.`,
+          ));
+        } else {
+          setAlertState(showAlert('Success', `${model.name} downloaded successfully!`));
+        }
+      },
+      onError: (err) => setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(err.message))),
+    });
   };
 
   const handleCancelDownload = async (modelKey: string) => {

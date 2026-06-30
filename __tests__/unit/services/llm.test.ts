@@ -2563,4 +2563,36 @@ describe('LLMService', () => {
       );
     });
   });
+
+  describe('dropMissingImageAttachments (prevents the vision-mode file-open crash)', () => {
+    const withImage = (uri: string) => {
+      const m: any = createUserMessage('hi');
+      m.attachments = [{ id: 'img', type: 'image', uri }];
+      return m;
+    };
+
+    it('keeps image attachments whose files exist', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const out = await (llmService as any).dropMissingImageAttachments([withImage('file:///x/a.png')]);
+      expect(out[0].attachments).toHaveLength(1);
+      expect(mockedRNFS.exists).toHaveBeenCalledWith('/x/a.png'); // file:// stripped
+    });
+
+    it('drops image attachments whose files are gone (keeps non-image attachments)', async () => {
+      mockedRNFS.exists.mockResolvedValue(false);
+      const m: any = createUserMessage('hi');
+      m.attachments = [
+        { id: 'img', type: 'image', uri: 'file:///x/gone.png' },
+        { id: 'aud', type: 'audio', uri: 'file:///x/a.wav' },
+      ];
+      const out = await (llmService as any).dropMissingImageAttachments([m]);
+      expect(out[0].attachments).toEqual([{ id: 'aud', type: 'audio', uri: 'file:///x/a.wav' }]);
+    });
+
+    it('leaves messages without image attachments untouched', async () => {
+      const plain = createUserMessage('no attachments');
+      const out = await (llmService as any).dropMissingImageAttachments([plain]);
+      expect(out[0]).toBe(plain);
+    });
+  });
 });

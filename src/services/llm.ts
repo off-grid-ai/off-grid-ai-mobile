@@ -278,7 +278,7 @@ class LLMService {
     this.isGenerating = true;
     const ctx = this.context;
     const completionWork = (async () => {
-      const managed = await this.manageContextWindow(messages);
+      const managed = await this.dropMissingImageAttachments(await this.manageContextWindow(messages));
       const hasImages = managed.some(m => m.attachments?.some(a => a.type === 'image'));
       if (hasImages && !this.multimodalInitialized) logger.warn('[LLM] Images attached but multimodal not initialized - falling back to text-only');
       logger.log('[LLM] Generation mode:', hasImages && this.multimodalInitialized ? 'VISION' : 'TEXT-ONLY');
@@ -335,6 +335,32 @@ class LLMService {
   /** No-op pass-through — lets llama.rn's native ctx_shift handle overflow for KV cache reuse. */
   private async manageContextWindow(messages: Message[], _extraReserve = 0): Promise<Message[]> {
     return messages;
+  }
+  /**
+   * Drop image attachments whose files no longer exist before they reach the native
+   * layer. A generated image's uri is a temp/cache path that gets cleaned up, so once
+   * it's in the conversation history EVERY later turn (even a voice note) flips to
+   * VISION mode and the native completion throws "File does not exist or cannot be
+   * opened", killing the whole turn (silent empty bubble). Validating file inputs at
+   * this boundary is the generation layer's own responsibility — a missing image is
+   * simply not sent, so the turn runs (TEXT-ONLY if none remain) instead of crashing.
+   */
+  private async dropMissingImageAttachments(messages: Message[]): Promise<Message[]> {
+    const out: Message[] = [];
+    for (const m of messages) {
+      const attachments = m.attachments;
+      if (!attachments?.some(a => a.type === 'image')) { out.push(m); continue; }
+      const kept: typeof attachments = [];
+      for (const a of attachments) {
+        if (a.type !== 'image') { kept.push(a); continue; }
+        const path = (a.uri || '').replace(/^file:\/\//, '');
+        const exists = path.length > 0 && await RNFS.exists(path).catch(() => false);
+        if (exists) kept.push(a);
+        else logger.warn(`[LLM] dropping missing image attachment (file gone): ${a.uri}`);
+      }
+      out.push(kept.length === attachments.length ? m : { ...m, attachments: kept });
+    }
+    return out;
   }
   /** Generate a completion with a hard token cap (used for summarization, not user-facing). */
   async generateWithMaxTokens(messages: Message[], maxTokens: number): Promise<string> {

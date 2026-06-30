@@ -4,6 +4,21 @@
 
 **All Pro feature code lives in the `pro/` submodule (its own git repo, `@offgrid/pro`) — not in core.** When changing or adding a Pro feature (e.g. TTS/audio, MCP/tools, and other paid surfaces), edit files under `pro/` and commit/PR them in that repo. Core only wires Pro in through the slot/hook registries; it never imports Pro code directly. Pro changes are a separate branch + PR from core (see `pro/CLAUDE.md`).
 
+## Device Logs (how to see what's actually happening on the device)
+
+**RN 0.83 moved JS `console.log` off the Metro terminal into React Native DevTools, and RN's console never reaches the iOS device syslog.** So `metro` stdout, `idevicesyslog`, and `npx react-native log-ios` (simulator-only) all capture NOTHING from a physical device. Do not waste time tailing Metro for app logs.
+
+Instead, a **dev-only persistent file sink** (`src/utils/debugLogFile.ts`, wired in `App.tsx` behind `__DEV__`) mirrors every `logger.*` line — which is where ALL the state-machine traces go (`[TTS-SM]`, `[GEN-SM]`, `[MODEL-SM]`, `[DL-SM]`, `[ROUTE-SM]`, `[IMG-SM]`, `[MEM-SM]`, `[FAIL-SM]`) — into a file in the app container. Pull it over the cable to read the real trace:
+
+```sh
+xcrun devicectl device copy from \
+  --device 00008150-000225103CD8C01C \
+  --domain-type appDataContainer --domain-identifier ai.offgridmobile \
+  --source Documents/offgrid-debug.log --destination /tmp/offgrid-debug.log
+```
+
+Then `grep`/read `/tmp/offgrid-debug.log`. The file appends a `===== session start … =====` marker on each launch and is size-capped (rotates, keeping the tail). The in-app **Debug Logs** screen (Settings → Debug Logs) shows the same lines live for quick visual checks. **When diagnosing a device issue, pull this file rather than guessing.**
+
 ## Branch Policy
 
 **Never push directly to `main`.** All changes must go through a pull request:

@@ -16,6 +16,7 @@ import { hardwareService, modelManager, authService, ragService, remoteServerMan
 import logger from './src/utils/logger';
 import { useAppStore, useAuthStore, useRemoteServerStore, useWhisperStore } from './src/stores';
 import { useDebugLogsStore } from './src/stores/debugLogsStore';
+import { initDebugLogFile, appendDebugLine } from './src/utils/debugLogFile';
 import { loadProFeatures } from './src/bootstrap/loadProFeatures';
 import { checkProStatus } from './src/services/proLicenseService';
 import { hydrateDownloadStore } from './src/services/downloadHydration';
@@ -40,13 +41,18 @@ if (__DEV__) {
   const base = { log: logger.log, warn: logger.warn, error: logger.error };
   const tap = (level: 'log' | 'warn' | 'error') => (...args: unknown[]) => {
     base[level](...args);
+    const message = args.map(fmt).join(' ');
     try {
-      useDebugLogsStore.getState().addLog({ timestamp: Date.now(), level, message: args.map(fmt).join(' ') });
+      useDebugLogsStore.getState().addLog({ timestamp: Date.now(), level, message });
     } catch { /* never break logging */ }
+    // Persist to the on-device file sink so traces can be pulled over the cable
+    // (RN 0.83 console logs don't reach Metro stdout or syslog). See debugLogFile.ts.
+    try { appendDebugLine(level, message); } catch { /* never break logging */ }
   };
   logger.log = tap('log');
   logger.warn = tap('warn');
   logger.error = tap('error');
+  initDebugLogFile();
 }
 
 const ensureRemoteServerStoreHydrated = async () => {

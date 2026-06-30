@@ -300,6 +300,32 @@ describe('ActiveModelService Integration', () => {
     });
   });
 
+  describe('ejectAll (frees RAM but KEEPS the selection)', () => {
+    it('unloads the model from RAM yet keeps it selected — eject != deselect', async () => {
+      const model = createDownloadedModel({ id: 'test-model-1' });
+      useAppStore.setState({ downloadedModels: [model] });
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      await activeModelService.loadTextModel('test-model-1');
+      expect(getAppState().activeModelId).toBe('test-model-1');
+
+      const { count } = await activeModelService.ejectAll();
+
+      // RAM is freed...
+      expect(mockLlmService.unloadModel).toHaveBeenCalled();
+      expect(count).toBeGreaterThanOrEqual(1);
+      // ...but the selection is preserved (contrast: plain unloadTextModel() above
+      // clears activeModelId). The model reloads on demand from the kept selection.
+      expect(getAppState().activeModelId).toBe('test-model-1');
+    });
+
+    it('is a no-op count of 0 when nothing is loaded', async () => {
+      useAppStore.setState({ activeModelId: null, activeImageModelId: null });
+      mockLlmService.isModelLoaded.mockReturnValue(false);
+      const { count } = await activeModelService.ejectAll();
+      expect(count).toBe(0);
+    });
+  });
+
   describe('Image Model Loading', () => {
     it('should load image model via localDreamGeneratorService', async () => {
       const imageModel = createONNXImageModel({ id: 'img-model-1' });

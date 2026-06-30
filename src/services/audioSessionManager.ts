@@ -50,6 +50,32 @@ class AudioSessionManager {
   }
 
   /**
+   * Configure a record+playback session for the iOS realtime-transcription path
+   * AND surface the result (this is also what triggers the iOS mic-permission
+   * prompt — activating a record session prompts on first use).
+   *
+   * This exists so the realtime STT path no longer talks to whisper.rn's
+   * AudioSessionIos directly: doing so set the category/active flag WITHOUT
+   * updating this owner's `mode`, so a later TTS ensurePlayback() saw a stale
+   * `mode` and could make the wrong session decision (silent TTS after STT).
+   * Routing through here keeps `mode` authoritative.
+   *
+   * Returns true if the session activated (permission effectively granted), false
+   * if activation threw (treated as permission denied by the caller). Behaviour
+   * matches `ensureRecording` (same category/options, per-call re-activation); it
+   * only differs in surfacing success/failure as a boolean for the permission gate.
+   * iOS-only: returns true on Android (no session to manage; the caller handles
+   * Android permission via PermissionsAndroid).
+   */
+  async ensureRecordingPermission(): Promise<boolean> {
+    if (Platform.OS !== 'ios') return true;
+    // Returns whether the record session activated; a throw on activation is how
+    // iOS surfaces a denied mic permission, so false === denied here (matching the
+    // old whisperService.requestPermissions, which returned false on setActive throw).
+    return this.apply('record');
+  }
+
+  /**
    * Restore a playback-only session after recording ends. Recording raises the
    * category to `playAndRecord`; without restoring it, later playback would run
    * against a record session. No-op if we weren't recording.
@@ -60,7 +86,8 @@ class AudioSessionManager {
     await this.apply('playback');
   }
 
-  private async apply(mode: AudioSessionMode): Promise<void> {
+  /** @returns true if the session activated, false if activation threw (swallowed). */
+  private async apply(mode: AudioSessionMode): Promise<boolean> {
     // Part of the [TTS-SM] trace: a silent/wrong AVAudioSession is a top cause of
     // "audio plays but nothing comes out" on iOS, so every (re)assert is logged.
     logger.log(`[TTS-SM] iOS session apply → ${mode} (was ${this.mode ?? 'none'})`);
@@ -76,10 +103,13 @@ class AudioSessionManager {
       }
       await AudioManager.setAudioSessionActivity(true);
       this.mode = mode;
+      return true;
     } catch (e) {
       // Non-fatal: a failed activation shouldn't crash playback/recording. The
       // caller proceeds; worst case is the pre-existing silent-on-iOS behaviour.
+      // (The recording-permission gate uses the return value to detect denial.)
       logger.warn('[AudioSession] failed to set', mode, e instanceof Error ? e.message : String(e));
+      return false;
     }
   }
 

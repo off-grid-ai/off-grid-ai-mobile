@@ -71,6 +71,26 @@ describe('AudioSessionManager', () => {
       expect(setOptions).not.toHaveBeenCalled();
       expect(audioSessionManager.getMode()).toBe('playback');
     });
+
+    it('ensureRecordingPermission activates a playAndRecord session, sets mode, returns true', async () => {
+      setActivity.mockResolvedValueOnce(true);
+      const granted = await audioSessionManager.ensureRecordingPermission();
+      // Routes the realtime-STT permission/session setup through the owner so a
+      // later ensurePlayback() sees an accurate mode (was: direct AudioSessionIos
+      // left mode stale → silent TTS after STT).
+      expect(granted).toBe(true);
+      expect(categoryOfLastCall()).toBe('playAndRecord');
+      expect(setActivity).toHaveBeenCalledWith(true);
+      expect(audioSessionManager.getMode()).toBe('record');
+    });
+
+    it('ensureRecordingPermission returns false and leaves mode null when activation throws (mic denied)', async () => {
+      setActivity.mockRejectedValueOnce(new Error('Microphone permission denied'));
+      const granted = await audioSessionManager.ensureRecordingPermission();
+      expect(granted).toBe(false);
+      // A throw is how iOS surfaces a denied mic permission; mode must not advance.
+      expect(audioSessionManager.getMode()).toBeNull();
+    });
   });
 
   describe('Android', () => {
@@ -82,6 +102,13 @@ describe('AudioSessionManager', () => {
       await audioSessionManager.restorePlaybackAfterRecording();
       expect(setOptions).not.toHaveBeenCalled();
       expect(setActivity).not.toHaveBeenCalled();
+      expect(audioSessionManager.getMode()).toBeNull();
+    });
+
+    it('ensureRecordingPermission is a no-op that returns true (Android handles mic via PermissionsAndroid)', async () => {
+      const granted = await audioSessionManager.ensureRecordingPermission();
+      expect(granted).toBe(true);
+      expect(setOptions).not.toHaveBeenCalled();
       expect(audioSessionManager.getMode()).toBeNull();
     });
   });

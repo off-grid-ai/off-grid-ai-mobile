@@ -208,9 +208,15 @@ export const useWhisperTranscription = (): UseWhisperTranscriptionResult => {
         setRecordingTime(result.recordingTime);
 
         if (result.isCapturing) {
-          // Still recording - update partial result
-          if (result.text) {
-            setPartialResult(result.text);
+          // Still recording - update partial result.
+          // Clean through cleanTranscription (the single owner of marker stripping)
+          // so a partial like "[BLANK_AUDIO] hello" shows "hello", never the raw
+          // marker. Guard: only overwrite when cleaning leaves real speech — an
+          // empty cleaned partial (pure silence/noise marker mid-capture) must NOT
+          // clobber an existing good partial or the "listening…" UI state.
+          const cleaned = cleanTranscription(result.text);
+          if (cleaned) {
+            setPartialResult(cleaned);
           }
         } else {
           // Recording finished - haptic feedback

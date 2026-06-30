@@ -1,7 +1,8 @@
-import { initWhisper, WhisperContext, RealtimeTranscribeEvent, AudioSessionIos } from 'whisper.rn';
+import { initWhisper, WhisperContext, RealtimeTranscribeEvent } from 'whisper.rn';
 import { Platform, PermissionsAndroid } from 'react-native';
 import RNFS from 'react-native-fs';
 import logger from '../utils/logger';
+import { audioSessionManager } from './audioSessionManager';
 import { backgroundDownloadService } from './backgroundDownloadService';
 import { useDownloadStore } from '../stores/downloadStore';
 import { makeModelKey } from '../utils/modelKey';
@@ -287,16 +288,14 @@ class WhisperService {
       }
     }
     if (Platform.OS === 'ios') {
-      try {
-        // Configure audio session for recording - this also triggers the permission prompt
-        await AudioSessionIos.setCategory('PlayAndRecord', ['AllowBluetooth', 'MixWithOthers']);
-        await AudioSessionIos.setMode('Default');
-        await AudioSessionIos.setActive(true);
-        return true;
-      } catch (error) {
-        logger.error('[Whisper] iOS audio session/permission error:', error);
-        return false;
-      }
+      // Route iOS session setup through audioSessionManager — the SINGLE owner of
+      // the AVAudioSession — instead of calling AudioSessionIos directly. The old
+      // direct path set the category/active flag without updating the manager's
+      // `mode`, so a later TTS ensurePlayback() saw a stale mode and could pick the
+      // wrong session (silent TTS after realtime STT). ensureRecordingPermission
+      // applies the playAndRecord session (which also triggers the mic prompt) AND
+      // updates `mode`, returning false if activation threw (permission denied).
+      return audioSessionManager.ensureRecordingPermission();
     }
     return true;
   }

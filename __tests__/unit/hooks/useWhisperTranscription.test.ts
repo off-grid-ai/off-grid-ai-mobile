@@ -142,6 +142,45 @@ describe('useWhisperTranscription', () => {
     expect(result.current.recordingTime).toBe(1);
   });
 
+  it('cleans whisper markers out of partial results (never shows "[BLANK_AUDIO]" in the UI)', async () => {
+    mockWhisperService.isModelLoaded.mockReturnValue(true);
+    mockWhisperService.startRealtimeTranscription.mockImplementation(
+      async (callback: any) => {
+        // Mid-capture partial with a leading no-speech marker.
+        callback({ isCapturing: true, text: '[BLANK_AUDIO] hello', recordingTime: 1 });
+      },
+    );
+
+    const { result } = renderHook(() => useWhisperTranscription());
+
+    await act(async () => {
+      await result.current.startRecording();
+    });
+
+    // Stripped through cleanTranscription (the single owner of marker stripping).
+    expect(result.current.partialResult).toBe('hello');
+  });
+
+  it('does not let an empty cleaned partial clobber an existing good partial', async () => {
+    mockWhisperService.isModelLoaded.mockReturnValue(true);
+    mockWhisperService.startRealtimeTranscription.mockImplementation(
+      async (callback: any) => {
+        // First a real partial, then a pure-marker partial (silence mid-capture):
+        // the marker-only result cleans to '' and must NOT wipe the good text.
+        callback({ isCapturing: true, text: 'hello world', recordingTime: 1 });
+        callback({ isCapturing: true, text: '[BLANK_AUDIO]', recordingTime: 2 });
+      },
+    );
+
+    const { result } = renderHook(() => useWhisperTranscription());
+
+    await act(async () => {
+      await result.current.startRecording();
+    });
+
+    expect(result.current.partialResult).toBe('hello world');
+  });
+
   it('sets error and calls forceReset when startRecording throws', async () => {
     mockWhisperService.isModelLoaded.mockReturnValue(true);
     mockWhisperService.startRealtimeTranscription.mockRejectedValue(

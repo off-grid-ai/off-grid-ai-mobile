@@ -41,9 +41,23 @@ export type ChatMessageAreaProps = {
 // safe-area inset — that made the bottom feel like a large dead band vs the top.
 // The container already pads its bottom by 8, so cap the extra footer at 4 → 12
 // total, symmetric with the top. Collapses to 0 while the keyboard is up.
+//
+// BUT that cap only applies to a thin overlay inset (iOS home indicator / gesture
+// nav), which draws *over* content. A 3-button navigation bar is opaque and owns
+// real space at the bottom — capping there renders the input controls UNDER the
+// nav buttons. We distinguish by the inset size (not Platform.OS): anything above
+// the overlay threshold is a real nav bar, so honor the full inset and clear it.
 const FOOTER_SAFE_CAP = 4;
-const computeFooterPaddingBottom = (keyboardVisible: boolean, insetBottom: number): number =>
-  keyboardVisible ? 0 : Math.min(insetBottom, FOOTER_SAFE_CAP);
+// Home-indicator / gesture-nav overlays sit at ~24px or below on the devices we
+// target; a 3-button nav bar is taller. Above this, treat the inset as opaque.
+const OVERLAY_INSET_MAX = 24;
+export const computeFooterPaddingBottom = (keyboardVisible: boolean, insetBottom: number): number => {
+  if (keyboardVisible) return 0;
+  // Opaque nav bar (tall inset): pad the full inset so controls clear it.
+  if (insetBottom > OVERLAY_INSET_MAX) return insetBottom;
+  // Thin overlay inset: keep the symmetric-with-top cap.
+  return Math.min(insetBottom, FOOTER_SAFE_CAP);
+};
 
 // Small status bar above the input: classifying takes precedence over the
 // background model-load indicator.

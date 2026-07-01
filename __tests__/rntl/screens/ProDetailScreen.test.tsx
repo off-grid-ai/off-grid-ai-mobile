@@ -22,6 +22,9 @@ jest.mock('../../../src/services/proLicenseService', () => ({
   getProLicenseInfo: (...args: unknown[]) => mockGetProLicenseInfo(...args),
   listProDevices: (...args: unknown[]) => mockListProDevices(...args),
   deactivateProDevice: (...args: unknown[]) => mockDeactivateProDevice(...args),
+  // ProManageSection renders the status line from this map — mirror the real export
+  // so the mock can't diverge (an omitted map made PRO_TIER_META[tier] throw).
+  PRO_TIER_META: { lifetime: { label: 'Lifetime', renews: false }, yearly: { label: 'Yearly', renews: true } },
   PRO_PAY_PAGE_URL: 'https://offgridmobileai.co/pay',
 }));
 
@@ -173,16 +176,29 @@ describe('ProDetailScreen', () => {
     await waitFor(() => expect(getByText('Lifetime · never expires')).toBeTruthy());
   });
 
-  it('shows the monthly status line and a Manage subscription link for monthly Pro', async () => {
+  it('shows the yearly status line and a Manage subscription link for a recurring license', async () => {
     useAppStore.setState({ hasRegisteredPro: true });
     mockGetProLicenseInfo.mockResolvedValue({
       isPro: true,
-      tier: 'monthly',
+      tier: 'yearly',
       expiry: '2026-08-01T00:00:00.000Z',
       verifiedAt: 0,
     });
     const { getByText } = render(<ProDetailScreen />);
-    await waitFor(() => expect(getByText(/Monthly · active until/)).toBeTruthy());
+    await waitFor(() => expect(getByText(/Yearly · renews/)).toBeTruthy());
     expect(getByText('Manage subscription')).toBeTruthy();
+  });
+
+  it('shows a lifetime status line and NO Manage subscription link for a one-time license', async () => {
+    useAppStore.setState({ hasRegisteredPro: true });
+    mockGetProLicenseInfo.mockResolvedValue({
+      isPro: true,
+      tier: 'lifetime',
+      expiry: null,
+      verifiedAt: 0,
+    });
+    const { getByText, queryByText } = render(<ProDetailScreen />);
+    await waitFor(() => expect(getByText(/Lifetime · never expires/)).toBeTruthy());
+    expect(queryByText('Manage subscription')).toBeNull();
   });
 });

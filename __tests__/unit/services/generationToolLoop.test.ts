@@ -6,7 +6,7 @@
  * Priority: P0 (Critical) - Core tool-calling functionality.
  */
 
-import { runToolLoop, ToolLoopContext, parseToolCallsFromText } from '../../../src/services/generationToolLoop';
+import { runToolLoop, ToolLoopContext, parseToolCallsFromText, isToolGrammarError } from '../../../src/services/generationToolLoop';
 import { llmService } from '../../../src/services/llm';
 import { liteRTService } from '../../../src/services/litert';
 import { Message } from '../../../src/types';
@@ -1545,6 +1545,55 @@ describe('callRemoteLLMWithTools via forceRemote', () => {
 
     const ctx = createContext({ forceRemote: true });
     await expect(runToolLoop(ctx)).rejects.toThrow('Remote provider not found');
+  });
+
+  it('retries WITHOUT tools when the server rejects the tool grammar (llama.cpp)', async () => {
+    // 1st generate: server can't compile the tool schemas → grammar error. 2nd generate
+    // (retry, tools stripped) succeeds. The user gets an answer instead of a hard failure.
+    let call = 0;
+    const toolCounts: number[] = [];
+    mockProvider.generate.mockImplementation((_msgs: any, opts: any, callbacks: any) => {
+      call++;
+      toolCounts.push(opts.tools?.length ?? 0);
+      if (call === 1) {
+        callbacks.onError(new Error('HTTP 400: Failed to initialize samplers: failed to parse grammar'));
+      } else {
+        callbacks.onComplete({ content: 'answer without tools', toolCalls: [] });
+      }
+    });
+
+    const ctx = createContext({ forceRemote: true });
+    await runToolLoop(ctx);
+
+    expect(call).toBe(2);
+    expect(toolCounts[0]).toBeGreaterThan(0); // first attempt sent tools
+    expect(toolCounts[1]).toBe(0);            // retry sent NO tools
+    expect(ctx.onFinalResponse).toHaveBeenCalledWith('answer without tools');
+  });
+
+  it('does NOT retry on a non-grammar remote error (still rejects)', async () => {
+    let call = 0;
+    mockProvider.generate.mockImplementation((_msgs: any, _opts: any, callbacks: any) => {
+      call++;
+      callbacks.onError(new Error('HTTP 500: internal server error'));
+    });
+
+    const ctx = createContext({ forceRemote: true });
+    await expect(runToolLoop(ctx)).rejects.toThrow('internal server error');
+    expect(call).toBe(1); // no retry for unrelated errors
+  });
+});
+
+describe('isToolGrammarError', () => {
+  it('matches llama.cpp grammar / sampler-init failures', () => {
+    expect(isToolGrammarError('HTTP 400: failed to parse grammar')).toBe(true);
+    expect(isToolGrammarError('Failed to initialize samplers: failed to parse grammar')).toBe(true);
+    expect(isToolGrammarError('FAILED TO PARSE GRAMMAR')).toBe(true); // case-insensitive
+  });
+  it('does not match unrelated errors', () => {
+    expect(isToolGrammarError('HTTP 500: internal server error')).toBe(false);
+    expect(isToolGrammarError('Network request failed')).toBe(false);
+    expect(isToolGrammarError('context is full')).toBe(false);
   });
 });
 

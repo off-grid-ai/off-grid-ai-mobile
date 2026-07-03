@@ -619,6 +619,102 @@ describe('remoteServerStore', () => {
       expect(useRemoteServerStore.getState().isLoading).toBe(false);
       expect(useRemoteServerStore.getState().discoveringServerId).toBeNull();
     });
+
+    it('should set serverHealth healthy when models are discovered', async () => {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          object: 'list',
+          data: [{ id: 'llama3' }],
+        }),
+      });
+      (global as any).fetch = mockFetch;
+
+      const serverId = addTestServer();
+
+      await useRemoteServerStore.getState().discoverModels(serverId);
+
+      const health = useRemoteServerStore.getState().serverHealth[serverId];
+      expect(health).toBeDefined();
+      expect(health.isHealthy).toBe(true);
+      expect(health.lastCheck).toBeDefined();
+    });
+
+    it('should set serverHealth unhealthy when discovery returns empty', async () => {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: false,
+        json: async () => ({}),
+      });
+      (global as any).fetch = mockFetch;
+
+      const serverId = addTestServer();
+
+      await useRemoteServerStore.getState().discoverModels(serverId);
+
+      const health = useRemoteServerStore.getState().serverHealth[serverId];
+      expect(health).toBeDefined();
+      expect(health.isHealthy).toBe(false);
+    });
+
+    it('should preserve cached models when re-discovery returns empty', async () => {
+      const okFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          object: 'list',
+          data: [{ id: 'llama3' }],
+        }),
+      });
+      (global as any).fetch = okFetch;
+
+      const serverId = addTestServer();
+      await useRemoteServerStore.getState().discoverModels(serverId);
+      expect(useRemoteServerStore.getState().discoveredModels[serverId]).toHaveLength(1);
+
+      // Simulate transient failure — both endpoints return non-ok
+      const failFetch = jest.fn().mockResolvedValue({
+        ok: false,
+        json: async () => ({}),
+      });
+      (global as any).fetch = failFetch;
+
+      await useRemoteServerStore.getState().discoverModels(serverId);
+
+      // Cached models preserved, not overwritten with []
+      expect(useRemoteServerStore.getState().discoveredModels[serverId]).toHaveLength(1);
+      // Health marked unhealthy
+      expect(useRemoteServerStore.getState().serverHealth[serverId].isHealthy).toBe(false);
+    });
+
+    it('should overwrite cached models when re-discovery returns new models', async () => {
+      const firstFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          object: 'list',
+          data: [{ id: 'llama3' }],
+        }),
+      });
+      (global as any).fetch = firstFetch;
+
+      const serverId = addTestServer();
+      await useRemoteServerStore.getState().discoverModels(serverId);
+
+      const secondFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          object: 'list',
+          data: [{ id: 'qwen2' }],
+        }),
+      });
+      (global as any).fetch = secondFetch;
+
+      const models = await useRemoteServerStore.getState().discoverModels(serverId);
+
+      expect(models).toHaveLength(1);
+      expect(models[0].id).toBe('qwen2');
+      expect(useRemoteServerStore.getState().discoveredModels[serverId]).toHaveLength(1);
+      expect(useRemoteServerStore.getState().discoveredModels[serverId][0].id).toBe('qwen2');
+      expect(useRemoteServerStore.getState().serverHealth[serverId].isHealthy).toBe(true);
+    });
   });
 
   describe('testConnection error cases', () => {

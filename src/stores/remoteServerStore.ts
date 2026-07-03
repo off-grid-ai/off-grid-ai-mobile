@@ -212,22 +212,57 @@ export const useRemoteServerStore = create<RemoteServerState>()(
 
         try {
           const models = await fetchModelsFromServer(server);
-          let merged: RemoteModel[] = models;
+          const now = new Date().toISOString();
+
+          if (models.length > 0) {
+            let merged: RemoteModel[] = models;
+            set((state) => {
+              merged = applyToolCallingOverrides(serverId, models, state.toolCallingOverrides);
+              return {
+                discoveredModels: {
+                  ...state.discoveredModels,
+                  [serverId]: merged,
+                },
+                serverHealth: {
+                  ...state.serverHealth,
+                  [serverId]: { isHealthy: true, lastCheck: now },
+                },
+                isLoading: false,
+                discoveringServerId: null,
+              };
+            });
+            logger.log('[RemoteServer] Discovered models:', merged.length);
+            return merged;
+          }
+
+          // Empty result — could be transient failure or genuinely no models.
+          // Preserve cached models if we have them to avoid wiping on a blip.
           set((state) => {
-            merged = applyToolCallingOverrides(serverId, models, state.toolCallingOverrides);
+            const hasCachedModels = (state.discoveredModels[serverId] || []).length > 0;
             return {
-              discoveredModels: {
-                ...state.discoveredModels,
-                [serverId]: merged,
+              discoveredModels: hasCachedModels
+                ? state.discoveredModels
+                : { ...state.discoveredModels, [serverId]: [] },
+              serverHealth: {
+                ...state.serverHealth,
+                [serverId]: { isHealthy: false, lastCheck: now },
               },
               isLoading: false,
               discoveringServerId: null,
             };
           });
-          logger.log('[RemoteServer] Discovered models:', merged.length);
-          return merged;
+          logger.log('[RemoteServer] Discovery returned no models');
+          return models;
         } catch (error) {
-          set({ isLoading: false, discoveringServerId: null });
+          const now = new Date().toISOString();
+          set((state) => ({
+            isLoading: false,
+            discoveringServerId: null,
+            serverHealth: {
+              ...state.serverHealth,
+              [serverId]: { isHealthy: false, lastCheck: now },
+            },
+          }));
           throw error;
         }
       },

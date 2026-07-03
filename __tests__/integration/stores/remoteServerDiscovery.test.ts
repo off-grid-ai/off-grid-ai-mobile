@@ -610,4 +610,101 @@ describe('remoteServerDiscovery integration', () => {
       expect(rediscovered[0].capabilities.supportsToolCalling).toBe(false);
     });
   });
+
+  // =========================================================================
+  // Server health synchronisation with discoverModels
+  // =========================================================================
+
+  describe('serverHealth syncs with discoverModels', () => {
+    beforeEach(() => {
+      useRemoteServerStore.setState({ serverHealth: {} });
+    });
+
+    it('marks server healthy when discovery finds models', async () => {
+      addServer({ id: 'srv-1', endpoint: 'http://192.168.1.10:11434' });
+
+      mockFetch.mockImplementation((url: string) => {
+        if (url.endsWith('/v1/models')) {
+          return Promise.resolve(jsonResponse({ object: 'list', data: [{ id: 'llama3' }] }));
+        }
+        return Promise.resolve(jsonResponse({}, false, 404));
+      });
+
+      await useRemoteServerStore.getState().discoverModels('srv-1');
+
+      const health = useRemoteServerStore.getState().serverHealth['srv-1'];
+      expect(health).toBeDefined();
+      expect(health.isHealthy).toBe(true);
+    });
+
+    it('marks server unhealthy when both endpoints fail', async () => {
+      addServer({ id: 'srv-1', endpoint: 'http://192.168.1.10:11434' });
+
+      mockFetch.mockResolvedValue(jsonResponse({}, false, 500));
+
+      await useRemoteServerStore.getState().discoverModels('srv-1');
+
+      const health = useRemoteServerStore.getState().serverHealth['srv-1'];
+      expect(health).toBeDefined();
+      expect(health.isHealthy).toBe(false);
+    });
+
+    it('preserves cached models and marks unhealthy on transient failure', async () => {
+      addServer({ id: 'srv-1', endpoint: 'http://192.168.1.10:11434' });
+
+      // First discovery succeeds
+      mockFetch.mockImplementation((url: string) => {
+        if (url.endsWith('/v1/models')) {
+          return Promise.resolve(jsonResponse({ object: 'list', data: [{ id: 'llama3' }, { id: 'mistral' }] }));
+        }
+        return Promise.resolve(jsonResponse({}, false, 404));
+      });
+      await useRemoteServerStore.getState().discoverModels('srv-1');
+      expect(useRemoteServerStore.getState().discoveredModels['srv-1']).toHaveLength(2);
+
+      // Second discovery: server temporarily down (both endpoints 500)
+      mockFetch.mockResolvedValue(jsonResponse({}, false, 500));
+      await useRemoteServerStore.getState().discoverModels('srv-1');
+
+      // Cached models preserved — not wiped to []
+      const cached = useRemoteServerStore.getState().discoveredModels['srv-1'];
+      expect(cached).toHaveLength(2);
+      expect(cached[0].id).toBe('llama3');
+
+      // Health marked unhealthy
+      expect(useRemoteServerStore.getState().serverHealth['srv-1'].isHealthy).toBe(false);
+
+      // Third discovery: server back up — models refreshed, health back to healthy
+      mockFetch.mockImplementation((url: string) => {
+        if (url.endsWith('/v1/models')) {
+          return Promise.resolve(jsonResponse({ object: 'list', data: [{ id: 'qwen2' }] }));
+        }
+        return Promise.resolve(jsonResponse({}, false, 404));
+      });
+      const models = await useRemoteServerStore.getState().discoverModels('srv-1');
+
+      expect(models).toHaveLength(1);
+      expect(models[0].id).toBe('qwen2');
+      expect(useRemoteServerStore.getState().serverHealth['srv-1'].isHealthy).toBe(true);
+    });
+
+    it('flips stale isHealthy=false back to true on successful re-discovery', async () => {
+      addServer({ id: 'srv-1', endpoint: 'http://192.168.1.10:11434' });
+
+      // Pre-seed stale unhealthy state (e.g. left over from a generation failure)
+      useRemoteServerStore.getState().updateServerHealth('srv-1', false);
+      expect(useRemoteServerStore.getState().serverHealth['srv-1'].isHealthy).toBe(false);
+
+      mockFetch.mockImplementation((url: string) => {
+        if (url.endsWith('/v1/models')) {
+          return Promise.resolve(jsonResponse({ object: 'list', data: [{ id: 'llama3' }] }));
+        }
+        return Promise.resolve(jsonResponse({}, false, 404));
+      });
+
+      await useRemoteServerStore.getState().discoverModels('srv-1');
+
+      expect(useRemoteServerStore.getState().serverHealth['srv-1'].isHealthy).toBe(true);
+    });
+  });
 });

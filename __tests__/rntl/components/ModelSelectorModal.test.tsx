@@ -1034,6 +1034,55 @@ describe('ModelSelectorModal', () => {
       // Server name appears as a section header in the grouped remote models list
       expect(getByText('My Ollama')).toBeTruthy();
     });
+
+    it('shows remote models even when serverHealth is false (stale health bug)', () => {
+      mockUseRemoteServerStore.mockReturnValue({
+        servers: [{ id: 'srv1', name: 'My Ollama', endpoint: 'http://192.168.1.10:11434' }],
+        activeServerId: 'srv1',
+        activeRemoteTextModelId: null,
+        activeRemoteImageModelId: null,
+        discoveredModels: {
+          srv1: [
+            {
+              id: 'llama3',
+              name: 'llama3',
+              serverId: 'srv1',
+              capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false },
+              lastUpdated: '2026-01-01T00:00:00Z',
+            },
+          ],
+        },
+        serverHealth: { srv1: { isHealthy: false, lastCheck: '2026-01-01T00:00:00Z' } },
+        setActiveServerId: jest.fn(),
+        setActiveRemoteImageModelId: jest.fn(),
+      });
+
+      const { getByText } = render(
+        <ModelSelectorModal {...defaultProps} />
+      );
+
+      expect(getByText('llama3')).toBeTruthy();
+      expect(getByText('My Ollama')).toBeTruthy();
+    });
+
+    it('hides remote models when serverHealth is false AND discoveredModels is empty', () => {
+      mockUseRemoteServerStore.mockReturnValue({
+        servers: [{ id: 'srv1', name: 'My Ollama', endpoint: 'http://192.168.1.10:11434' }],
+        activeServerId: 'srv1',
+        activeRemoteTextModelId: null,
+        activeRemoteImageModelId: null,
+        discoveredModels: {},
+        serverHealth: { srv1: { isHealthy: false, lastCheck: '2026-01-01T00:00:00Z' } },
+        setActiveServerId: jest.fn(),
+        setActiveRemoteImageModelId: jest.fn(),
+      });
+
+      const { queryByText } = render(
+        <ModelSelectorModal {...defaultProps} />
+      );
+
+      expect(queryByText('My Ollama')).toBeNull();
+    });
   });
 
   // ============================================================================

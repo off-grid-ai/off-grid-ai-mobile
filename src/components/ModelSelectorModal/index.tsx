@@ -82,10 +82,18 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
     if (visible) setActiveTab(initialTab);
   }, [visible, initialTab]);
 
-  // Group remote models by server for TextTab — exclude servers known to be offline
+  // Group remote models by server for TextTab — exclude servers known to be
+  // offline ONLY when we don't have cached models for them.  If
+  // discoveredModels is populated, always show them regardless of health so a
+  // stale isHealthy=false flag (e.g. after a transient generation failure)
+  // doesn't hide models we know exist.  This matches ModelPickerSheet behaviour.
   const remoteTextModels = useMemo(() => {
     return servers
-      .filter(server => serverHealth[server.id]?.isHealthy !== false)
+      .filter(server => {
+        const hasCachedModels = (discoveredModels[server.id] || []).length > 0;
+        const isHealthy = serverHealth[server.id]?.isHealthy !== false;
+        return hasCachedModels || isHealthy;
+      })
       .map(server => ({
         serverId: server.id,
         serverName: server.name,

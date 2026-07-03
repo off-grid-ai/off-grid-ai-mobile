@@ -38,6 +38,10 @@ interface ChatInputProps {
   onMcpPress?: () => void;
   supportsThinking?: boolean;
   onRepairVision?: () => void;
+  /** Whether the active text model is a remote (server) model. Remote models
+   * can't be repaired from the Download Manager, so the "no vision" dialog must
+   * not offer that action for them. */
+  isRemote?: boolean;
   activeSpotlight?: number | null;
   showSettingsDot?: boolean;
 }
@@ -53,6 +57,35 @@ const IMAGE_MODE_CYCLE: ImageModeState[] = ['auto', 'force', 'disabled'];
 // Attach + quick-settings only. The Chat/Voice mode toggle is no longer in this
 // (collapsing) row — it's rendered persistently above the input instead.
 const computePillIconsWidth = (): number => PILL_ICON_SIZE * 2;
+
+/**
+ * Alert shown when the user attaches an image to a model without vision support.
+ * Remote (server) models have no local vision-projector file to repair, so the
+ * Download Manager / eye-icon advice is omitted for them — it can't be acted on.
+ */
+const buildNoVisionAlert = (opts: {
+  isRemote: boolean;
+  onRepairVision?: () => void;
+  dismiss: () => void;
+}): AlertState => {
+  if (opts.isRemote) {
+    return showAlert(
+      'Vision Not Supported',
+      'This remote model does not support image input.\n\nSelect a vision-capable model on the server, or switch to a local vision model to send images.',
+      [{ text: 'OK', onPress: opts.dismiss }],
+    );
+  }
+  return showAlert(
+    'Vision Not Supported',
+    'The loaded model does not have vision support.\n\nIf this model supports vision, open Download Manager and tap the eye icon next to the model to repair it.',
+    [
+      { text: 'Cancel', onPress: opts.dismiss },
+      ...(opts.onRepairVision
+        ? [{ text: 'Go to Download Manager', onPress: () => { opts.dismiss(); opts.onRepairVision!(); } }]
+        : [{ text: 'OK' }]),
+    ],
+  );
+};
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 
@@ -77,6 +110,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   mcpToolCount = 0,
   onMcpPress,
   onRepairVision,
+  isRemote = false,
   activeSpotlight = null,
   showSettingsDot = false,
 }) => {
@@ -176,14 +210,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const handleVisionPress = () => {
     if (!supportsVision) {
-      setAlertState(showAlert(
-        'Vision Not Supported',
-        'The loaded model does not have vision support.\n\nIf this model supports vision, open Download Manager and tap the eye icon next to the model to repair it.',
-        [
-          { text: 'Cancel', onPress: () => setAlertState(hideAlert()) },
-          ...(onRepairVision ? [{ text: 'Go to Download Manager', onPress: () => { setAlertState(hideAlert()); onRepairVision(); } }] : [{ text: 'OK' }]),
-        ],
-      ));
+      setAlertState(buildNoVisionAlert({ isRemote, onRepairVision, dismiss: () => setAlertState(hideAlert()) }));
       return;
     }
     handlePickImage();

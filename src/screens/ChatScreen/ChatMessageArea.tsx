@@ -153,7 +153,6 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           activeModelName={chat.activeModelName}
           activeProject={chat.activeProject}
           setShowProjectSelector={chat.setShowProjectSelector}
-          isRemote={chat.activeModelInfo?.isRemote}
         />
           );
         })()
@@ -284,6 +283,7 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
             supportsToolCalling={chat.supportsToolCalling}
             supportsThinking={chat.supportsThinking}
             onRepairVision={handleRepairVision}
+            isRemote={chat.activeModelInfo.isRemote}
             activeSpotlight={chatSpotlight === 12 ? chatSpotlight : null}
           />
         </AttachStep>

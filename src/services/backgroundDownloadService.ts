@@ -84,6 +84,11 @@ class BackgroundDownloadService {
     // over-admit past the cap.
     const token = `reserve:${++this.startSeq}`;
     this.activeIds.add(token);
+    // Android 13+: prompt for notification permission so the foreground-service download
+    // notification is visible (the download still runs as an FGS if denied). Best-effort.
+    if (Platform.OS === 'android' && typeof DownloadManagerModule.requestNotificationPermission === 'function') {
+      try { DownloadManagerModule.requestNotificationPermission(); } catch { /* non-fatal */ }
+    }
     try {
       const result = await DownloadManagerModule.startDownload({
         url: params.url,

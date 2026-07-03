@@ -523,7 +523,7 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
       // When we finalized from an already-on-disk file (native move was skipped), the
       // stale native record still lingers as 'completed'-without-localUri and restore
       // would re-adopt + re-finalize it every foreground. Purge it so it can't loop.
-      if (!movedNatively) backgroundDownloadService.cancelDownload(downloadId).catch(() => {});
+      if (!movedNatively) backgroundDownloadService.purgeNativeRecord(downloadId).catch(() => {});
     } catch (error) {
       ctx.isFinalizing = false;
       logger.error('[DownloadDebug] Finalization failed', {

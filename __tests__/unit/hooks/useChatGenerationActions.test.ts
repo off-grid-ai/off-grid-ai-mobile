@@ -258,10 +258,16 @@ describe('shouldRouteToImageGenerationFn', () => {
     expect(mockClassifyIntent).not.toHaveBeenCalled();
   });
 
-  it('returns false when no image model is selected (nothing to load on demand)', async () => {
+  it('returns false when no image model is selected WITHOUT running the classifier or setting a status (F12)', async () => {
+    // Auto mode + no image model: there is nothing to route to, so the classifier must
+    // not run (it only adds latency on the send hot path) and no "Analyzing…" status
+    // should be set. Regression guard for the removed early-out.
     const deps = makeGenerationDeps({ activeImageModel: null });
     const result = await shouldRouteToImageGenerationFn(deps, 'draw a cat');
     expect(result).toBe(false);
+    expect(mockClassifyIntent).not.toHaveBeenCalled();
+    expect(deps.setIsClassifying).not.toHaveBeenCalledWith(true);
+    expect(deps.setAppImageGenerationStatus).not.toHaveBeenCalled();
   });
 
   it('routes an image request even when the image model is NOT resident (loads on demand — the voice-mode fix)', async () => {

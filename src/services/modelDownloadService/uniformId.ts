@@ -25,3 +25,28 @@ export function uniformDownloadId(modelType: ModelType, modelId: string): string
   else if (modelType === 'image') canonical = modelId.replace(/^image:/, '');
   return `${modelType}:${canonical}`;
 }
+
+/** The identity fields carried by a still-queued start (from getQueuedItems). */
+export interface QueuedIdentity {
+  modelType: ModelType;
+  modelId: string;
+  modelKey: string;
+}
+
+/**
+ * The uniform id for a start that is still WAITING for a concurrency slot. It MUST
+ * resolve to the exact id the provider assigns once that start becomes a listed
+ * (downloading) row, or cancel/remove on a Queued item silently no-ops.
+ *
+ * The trap this closes: a text download's started-row id is `text:<modelKey>` (modelKey
+ * = repo/file), because `textProvider.list()` keys on `modelKey`. But a queued item's
+ * bare `modelId` is only the repo. Deriving the id from `modelId` gives `text:<repo>`,
+ * which never matches the `text:<repo/file>` the View dispatches — so the queued row
+ * stays and downloads anyway. Text routes on `modelKey`; every other type passes
+ * `modelId` through. Owned HERE so the View's dispatch and `cancelQueuedStart` can't
+ * diverge.
+ */
+export function queuedUniformId(q: QueuedIdentity): string {
+  const idInput = q.modelType === 'text' ? q.modelKey : q.modelId;
+  return uniformDownloadId(q.modelType, idInput);
+}

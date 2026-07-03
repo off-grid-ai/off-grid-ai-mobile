@@ -21,7 +21,7 @@
  */
 import logger from '../../utils/logger';
 import { backgroundDownloadService } from '../backgroundDownloadService';
-import { uniformDownloadId } from './uniformId';
+import { queuedUniformId } from './uniformId';
 import {
   DownloadProvider,
   ModelDownload,
@@ -207,7 +207,7 @@ class ModelDownloadService {
   private cancelQueuedStart(id: string): boolean {
     const queued = backgroundDownloadService
       .getQueuedItems()
-      .find(q => uniformDownloadId(q.modelType as ModelDownloadType, q.modelId) === id);
+      .find(q => queuedUniformId({ modelType: q.modelType as ModelDownloadType, modelId: q.modelId, modelKey: q.modelKey }) === id);
     return queued ? backgroundDownloadService.cancelQueued(queued.modelKey) : false;
   }
 

@@ -168,13 +168,21 @@ export function useDownloadManager(): UseDownloadManagerResult {
   const [queuedItems, setQueuedItems] = useState<DownloadItem[]>([]);
   useEffect(() => {
     const refresh = () => setQueuedItems(backgroundDownloadService.getQueuedItems().map(queuedToActiveItem));
+    // On the light poll, also reconcile the concurrency accounting against the native
+    // truth so a leaked slot (e.g. a folded mmproj sidecar) is reclaimed and a stuck
+    // Queued download starts — without waiting for a new start to trigger it.
+    const reconcileAndRefresh = () => { backgroundDownloadService.reconcileActiveIds().catch(() => {}); refresh(); };
     refresh();
     // The service owns the queue and notifies on every control op (incl. cancelling a
     // queued start), so a cancel drops the "Queued" row immediately, not on the poll.
     const unsubscribe = modelDownloadService.subscribe(refresh);
-    const t = setInterval(refresh, 1000);
+    const t = setInterval(reconcileAndRefresh, 1000);
     return () => { unsubscribe(); clearInterval(t); };
-  }, [downloads]);
+    // Mount once: the subscription already fires on every store change (that's what
+    // drains the queue) and the interval covers the rest. Depending on `downloads` here
+    // tore down + rebuilt the subscription and interval on EVERY progress tick — pure
+    // churn while a download runs — and refresh reads from the service, not `downloads`.
+  }, []);
 
   // Voice (TTS) + transcription (STT) downloaded models, loaded from disk.
   const { voiceItems, buildDeleteAlert: buildVoiceDeleteAlert } = useVoiceDownloadItems(() => setAlertState(hideAlert()));

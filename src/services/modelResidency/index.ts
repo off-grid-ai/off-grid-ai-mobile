@@ -90,13 +90,19 @@ class ModelResidencyManager {
    * centralized so the eviction decision lives in one place.
    */
   async handleMemoryWarning(): Promise<void> {
-    for (const [key, r] of [...this.residents.entries()]) {
-      if (r.pinned || !SIDECAR_TYPES.has(r.type)) continue;
-      if (r.canEvict && !r.canEvict()) continue; // in use — owner vetoes
-      logger.log(`[ModelResidency] memory warning → reclaiming idle ${r.type} (${key})`);
-      await r.unload().catch(err => logger.log(`[ModelResidency] memory-warning unload ${key} failed:`, err));
-      this.residents.delete(key);
-    }
+    // Run under the same FIFO lock as every load/unload: mutating `residents` and
+    // driving native unloads concurrently with an in-flight load is exactly the
+    // race the lock exists to prevent. The sidecar unloads here don't re-acquire the
+    // lock, so this can't deadlock.
+    await this.runExclusive('memory-warning', async () => {
+      for (const [key, r] of [...this.residents.entries()]) {
+        if (r.pinned || !SIDECAR_TYPES.has(r.type)) continue;
+        if (r.canEvict && !r.canEvict()) continue; // in use — owner vetoes
+        logger.log(`[ModelResidency] memory warning → reclaiming idle ${r.type} (${key})`);
+        await r.unload().catch(err => logger.log(`[ModelResidency] memory-warning unload ${key} failed:`, err));
+        this.residents.delete(key);
+      }
+    });
   }
 
   /**
@@ -282,20 +288,17 @@ class ModelResidencyManager {
     let totalGB: number;
     try { totalGB = hardwareService.getTotalMemoryGB(); } catch { return; }
     if (totalGB > 6) return; // roomy: keep STT warm
-    const w = this.residents.get('whisper');
-    if (!w) return;
-    logger.log('[ModelResidency] reclaiming idle STT for generation turn (memory-tight)');
-    await w.unload().catch(err => logger.log('[ModelResidency] STT reclaim failed:', err));
-    this.residents.delete('whisper');
-  }
-
-  /** Evict everything except pinned residents (e.g. on memory-warning). */
-  async evictAll(includePinned = false): Promise<void> {
-    for (const [key, reg] of [...this.residents.entries()]) {
-      if (reg.pinned && !includePinned) continue;
-      await reg.unload().catch(err => logger.log(`[ModelResidency] unload ${key} failed:`, err));
-      this.residents.delete(key);
-    }
+    if (!this.residents.has('whisper')) return;
+    // Serialize with load/unload: this fires on the generation hot path (every send /
+    // regenerate), so without the lock it can race an in-flight whisper load and desync
+    // the residents map. whisper's unload doesn't re-acquire the lock, so no deadlock.
+    await this.runExclusive('reclaim:stt', async () => {
+      const w = this.residents.get('whisper');
+      if (!w) return; // reclaimed by another op while we waited for the lock
+      logger.log('[ModelResidency] reclaiming idle STT for generation turn (memory-tight)');
+      await w.unload().catch(err => logger.log('[ModelResidency] STT reclaim failed:', err));
+      this.residents.delete('whisper');
+    });
   }
 
   /** Test helper. */

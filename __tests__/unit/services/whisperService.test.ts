@@ -505,6 +505,25 @@ describe('WhisperService', () => {
 
         expect(requestSpy).not.toHaveBeenCalled();
       });
+
+      it('restores playback after stopTranscription so TTS is not silenced (F4)', async () => {
+        // Dictation sets the owner to record mode.
+        await whisperService.requestPermissions();
+        expect(audioSessionManager.getMode()).toBe('record');
+
+        // Stopping dictation must hand the session back to the owner. Previously nothing
+        // did, so mode stayed 'record' and the next TTS ensurePlayback() early-returned
+        // → silent speech after dictation.
+        await whisperService.stopTranscription();
+        expect(audioSessionManager.getMode()).toBe('playback');
+
+        // And a subsequent TTS playback request is actually applied (not skipped).
+        mockSetAudioSessionOptions.mockClear();
+        await audioSessionManager.ensurePlayback();
+        expect(mockSetAudioSessionOptions).toHaveBeenCalledWith(
+          expect.objectContaining({ iosCategory: 'playback' }),
+        );
+      });
     });
   });
 

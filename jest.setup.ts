@@ -248,6 +248,7 @@ jest.mock(
       listDownloadedModels: jest.fn(async () => [] as string[]),
       listDownloadedFiles: jest.fn(async () => [] as string[]),
       deleteResources: jest.fn(async () => {}),
+      fetch: jest.fn(async () => {}),
     },
   }),
   { virtual: true },

@@ -19,7 +19,7 @@ import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
 import { MadeWithLove } from '../components/MadeWithLove';
 import { DebugLogsScreen } from '../components/DebugLogsScreen';
-import { getSettingsSections } from '../components/settings/sectionRegistry';
+import { useSettingsSections } from '../components/settings/sectionRegistry';
 import { ProUpsellBanner } from '../components/settings/ProUpsellBanner';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import { useTheme, useThemedStyles } from '../theme';
@@ -47,6 +47,9 @@ export const SettingsScreen: React.FC = () => {
   const focusTrigger = useFocusTrigger();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  // Reactive: Pro sections registered at runtime (license-key activation re-runs
+  // loadProFeatures) show up live without an app restart.
+  const settingsSections = useSettingsSections();
   const setOnboardingComplete = useAppStore((s) => s.setOnboardingComplete);
   const themeMode = useAppStore((s) => s.themeMode);
   const setThemeMode = useAppStore((s) => s.setThemeMode);
@@ -302,7 +305,7 @@ export const SettingsScreen: React.FC = () => {
         </AnimatedEntry>
 
         {/* Pro feature sections registered at runtime by @offgrid/pro */}
-        {getSettingsSections().map((Section, i) => <Section key={Section.displayName ?? String(i)} />)}
+        {settingsSections.map((Section, i) => <Section key={Section.displayName ?? String(i)} />)}
 
         {/* Dev-only tooling — stripped from release builds */}
         {__DEV__ && (

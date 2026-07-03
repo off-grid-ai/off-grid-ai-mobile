@@ -49,7 +49,8 @@ export interface ReadinessDeps {
   activeModelInfo?: { isRemote: boolean };
   activeModel: { engine?: string; filePath: string } | null | undefined;
   activeModelId: string | null;
-  ensureModelLoaded: () => Promise<ModelReadyOutcome>;
+  /** onLoadedResume: when a turn triggered the load, resume it after a "Load Anyway". */
+  ensureModelLoaded: (onLoadedResume?: () => void) => Promise<ModelReadyOutcome>;
   setAlertState: (a: AlertState) => void;
 }
 
@@ -59,11 +60,11 @@ export interface ReadinessDeps {
  * line records the branch. Every exit is explicit — no silent early-return can
  * collapse into a generic "Failed to load model" again.
  */
-export async function ensureModelReady(deps: ReadinessDeps): Promise<ModelReadyOutcome> {
+export async function ensureModelReady(deps: ReadinessDeps, onLoadedResume?: () => void): Promise<ModelReadyOutcome> {
   if (deps.activeModelInfo?.isRemote) { logger.log('[GEN-SM] ensureModelReady → remote ok'); return { ok: true }; }
   if (deps.activeModel?.engine === 'litert') {
     if (liteRTService.isModelLoaded()) { logger.log('[GEN-SM] ensureModelReady → litert already loaded'); return { ok: true }; }
-    const outcome = await deps.ensureModelLoaded();
+    const outcome = await deps.ensureModelLoaded(onLoadedResume);
     if (!outcome.ok) { logger.log(`[GEN-SM] ensureModelReady litert NOT ready reason=${outcome.reason} detail=${outcome.detail ?? ''}`); return outcome; }
     return liteRTService.isModelLoaded()
       ? { ok: true }
@@ -97,7 +98,9 @@ export async function ensureReadyOrAlert(
    *  re-reads the now-higher REAL per-process budget. */
   onRetry?: () => void,
 ): Promise<boolean> {
-  const outcome = await ensureModelReady(deps);
+  // Thread onRetry down so a "Load Anyway" on the insufficient-memory alert resumes the
+  // turn after the forced load (the message would otherwise be silently dropped).
+  const outcome = await ensureModelReady(deps, onRetry);
   if (outcome.ok) return true;
   logger.log(`[GEN-SM] ${tag} BAIL reason=${outcome.reason} detail=${outcome.detail ?? ''} alerted=${!!outcome.alerted}`);
   if (!outcome.alerted) {

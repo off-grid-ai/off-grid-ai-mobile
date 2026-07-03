@@ -293,6 +293,31 @@ describe('ModelResidencyManager', () => {
       jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(4);
       await expect(modelResidencyManager.reclaimSttForGeneration()).resolves.toBeUndefined();
     });
+
+    it('serializes the reclaim behind an in-flight load (F3: no unload while the lock is held)', async () => {
+      jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(4);
+      const order: string[] = [];
+      const unload = jest.fn().mockImplementation(async () => { order.push('reclaim:unload'); });
+      modelResidencyManager.register({ key: 'whisper', type: 'whisper', sizeMB: 466 }, unload, 1);
+
+      // A load holds the global lock.
+      let releaseLoad: () => void = () => {};
+      const load = modelResidencyManager.runExclusive('load:text', async () => {
+        order.push('load:start');
+        await new Promise<void>(r => { releaseLoad = r; });
+        order.push('load:end');
+      });
+      // Fire the reclaim while the load is still holding the lock.
+      const reclaim = modelResidencyManager.reclaimSttForGeneration();
+      await new Promise(r => setImmediate(r));
+      // The reclaim's native unload must NOT run mid-load — that's the race the lock closes.
+      expect(order).toEqual(['load:start']);
+
+      releaseLoad();
+      await Promise.all([load, reclaim]);
+      expect(order).toEqual(['load:start', 'load:end', 'reclaim:unload']);
+      expect(modelResidencyManager.isResident('whisper')).toBe(false);
+    });
   });
 
   describe('makeRoomFor (predictive — credits evictable residents)', () => {

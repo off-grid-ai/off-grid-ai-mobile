@@ -534,6 +534,23 @@ describe('ModelSelectorModal', () => {
   // Image Tab
   // ============================================================================
   describe('image tab', () => {
+    it('opens directly on the image tab when initialTab="image" (F-SHEET)', () => {
+      // Tapping the "Image" row in the models manager must open the selector focused on
+      // Image, not default to Text. The modal honors initialTab; the manager now passes it.
+      mockUseAppStore.mockReturnValue({
+        downloadedModels: [],
+        downloadedImageModels: [],
+        activeImageModelId: null,
+      });
+
+      const { getByText } = render(
+        <ModelSelectorModal {...defaultProps} initialTab="image" />
+      );
+
+      // No tab press needed — image content is shown immediately.
+      expect(getByText('No Image Models')).toBeTruthy();
+    });
+
     it('switches to image tab when Image is pressed', () => {
       mockUseAppStore.mockReturnValue({
         downloadedModels: [],

@@ -152,6 +152,50 @@ describe('initiateModelLoad', () => {
       expect.objectContaining({ title: 'Error' }),
     );
   });
+
+  it('resumes the pending turn after "Load Anyway" on insufficient memory (F16)', async () => {
+    jest.useFakeTimers();
+    const { InteractionManager } = require('react-native');
+    const iaSpy = jest.spyOn(InteractionManager, 'runAfterInteractions')
+      .mockImplementation((cb: any) => { cb?.(); return { then: () => {}, done: () => {}, cancel: () => {} } as any; });
+    mockCheckMemoryForModel.mockResolvedValueOnce({ canLoad: false, message: 'Not enough RAM', severity: 'critical' });
+    mockLoadTextModel.mockResolvedValue(undefined);
+    mockIsModelLoaded.mockReturnValue(true);
+    const onResume = jest.fn();
+    const deps = makeDeps();
+
+    await initiateModelLoad(deps, false, onResume);
+    const alert = deps.setAlertState.mock.calls.find((c: any) => c[0].title === 'Insufficient Memory')[0];
+    const loadAnyway = alert.buttons.find((b: any) => b.text === 'Load Anyway');
+
+    loadAnyway.onPress();
+    await jest.advanceTimersByTimeAsync(400); // flush waitForRenderFrame -> doLoadTextModel -> resume
+
+    expect(mockLoadTextModel).toHaveBeenCalledWith('model-1');
+    expect(onResume).toHaveBeenCalledTimes(1); // the message is NOT dropped
+    iaSpy.mockRestore();
+    jest.useRealTimers();
+  });
+
+  it('does NOT resume a turn for "Load Anyway" when no resume was requested (model-select/reload)', async () => {
+    jest.useFakeTimers();
+    const { InteractionManager } = require('react-native');
+    const iaSpy = jest.spyOn(InteractionManager, 'runAfterInteractions')
+      .mockImplementation((cb: any) => { cb?.(); return { then: () => {}, done: () => {}, cancel: () => {} } as any; });
+    mockCheckMemoryForModel.mockResolvedValueOnce({ canLoad: false, message: 'Not enough RAM', severity: 'critical' });
+    mockLoadTextModel.mockResolvedValue(undefined);
+    mockIsModelLoaded.mockReturnValue(true);
+    const deps = makeDeps();
+
+    await initiateModelLoad(deps, false); // no onLoadedResume
+    const alert = deps.setAlertState.mock.calls.find((c: any) => c[0].title === 'Insufficient Memory')[0];
+    alert.buttons.find((b: any) => b.text === 'Load Anyway').onPress();
+    await jest.advanceTimersByTimeAsync(400);
+
+    expect(mockLoadTextModel).toHaveBeenCalledWith('model-1'); // still loads
+    iaSpy.mockRestore();
+    jest.useRealTimers();
+  });
 });
 
 // ─────────────────────────────────────────────

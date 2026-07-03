@@ -14,6 +14,7 @@ import {
   ModelCardActions,
   RecommendedConfig,
 } from './ModelCardContent';
+import { QUEUED_ICON } from '../utils/downloadStatusIcon';
 
 interface ModelCardProps {
   model: {
@@ -86,15 +87,19 @@ const DownloadProgressSection: React.FC<{
   queued?: boolean;
 }> = ({ progress, bytes, tight, queued }) => {
   const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
   return (
   <View style={styles.progressSection}>
     <View style={[styles.progressContainer, tight && styles.progressContainerTight]}>
       <View style={styles.progressBar}>
         <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
       </View>
-      <Text style={[styles.progressText, tight && styles.progressTextTight]}>
-        {queued ? 'Queued' : `${Math.round(progress * 100)}%`}
-      </Text>
+      <View style={styles.progressLabelRow}>
+        {queued && <Icon name={QUEUED_ICON} size={13} color={colors.textMuted} />}
+        <Text style={[styles.progressText, tight && styles.progressTextTight]}>
+          {queued ? 'Queued' : `${Math.round(progress * 100)}%`}
+        </Text>
+      </View>
     </View>
     {!queued && bytes && bytes.total > 0 && (
       <Text style={styles.progressBytesText}>

@@ -17,6 +17,7 @@ const originalOS = Platform.OS;
 const mockDownloadManagerModule = {
   startDownload: jest.fn(),
   cancelDownload: jest.fn(),
+  retryDownload: jest.fn(),
   getActiveDownloads: jest.fn(),
   getDownloadProgress: jest.fn(),
   moveCompletedDownload: jest.fn(),
@@ -1394,6 +1395,79 @@ describe('BackgroundDownloadService', () => {
       eventHandlers.DownloadComplete({ downloadId: 'r1' });
       await flush();
       expect(mockDownloadManagerModule.startDownload).toHaveBeenCalledTimes(1);
+    });
+
+    it('reconcileActiveIds reclaims leaked slots (e.g. folded mmproj sidecars) and pumps the queue', async () => {
+      // 3 downloads hold the slots, a 4th is queued.
+      ['a', 'b', 'c', 'd'].forEach((id) => service.startDownload(params(id)));
+      await flush();
+      expect(mockDownloadManagerModule.startDownload).toHaveBeenCalledTimes(3);
+      expect(service.getQueuedCount()).toBe(1);
+
+      // Native truth: only '1' is still transferring — '2' and '3' leaked (their tasks
+      // were folded into a main download, so they never emitted DownloadComplete and
+      // release() was never called). Without reconcile, pump() sees the cap as full
+      // forever and 'd' is wedged — the "1 downloading, N queued" collapse.
+      mockDownloadManagerModule.getActiveDownloads.mockResolvedValue([{ downloadId: '1' }]);
+      await service.reconcileActiveIds();
+      await flush();
+
+      // The two phantom slots are reclaimed, so the queued 'd' starts.
+      expect(mockDownloadManagerModule.startDownload).toHaveBeenCalledTimes(4);
+      expect(service.getQueuedCount()).toBe(0);
+    });
+
+    it('retryDownload re-reserves the slot so a retried download counts against the cap', async () => {
+      mockDownloadManagerModule.retryDownload.mockResolvedValue(undefined);
+      ['a', 'b', 'c'].forEach((id) => service.startDownload(params(id))); // ids 1,2,3
+      await flush();
+      // 'a' (id '1') fails -> its slot is released.
+      eventHandlers.DownloadError({ downloadId: '1', reason: 'boom' });
+      await flush();
+
+      // Retry it. Before the fix this restarted the native transfer without re-reserving,
+      // so the cap was silently bypassed and its completion couldn't pump the queue.
+      await service.retryDownload('1');
+
+      // At the cap again -> a fresh start must queue.
+      service.startDownload(params('d'));
+      expect(service.getQueuedCount()).toBe(1);
+
+      // The retried '1' completing frees its slot and promotes the queued 'd'.
+      eventHandlers.DownloadComplete({ downloadId: '1' });
+      await flush();
+      expect(service.getQueuedCount()).toBe(0);
+    });
+
+    it('purgeNativeRecord drops the record and frees the slot WITHOUT dispatching an error', async () => {
+      mockDownloadManagerModule.cancelDownload.mockResolvedValue(undefined);
+      const onErr = jest.fn();
+      service.onAnyError(onErr);
+      service.startDownload(params('a')); // id '1' occupies a slot
+      await flush();
+
+      await service.purgeNativeRecord('1');
+
+      // Native record dropped and slot freed, but (unlike cancelDownload) NO synthetic
+      // DownloadError — a just-finalized model must not flash "failed".
+      expect(mockDownloadManagerModule.cancelDownload).toHaveBeenCalledWith('1');
+      expect(onErr).not.toHaveBeenCalled();
+      // Slot was freed: three fresh starts all begin, none queued.
+      ['b', 'c', 'd'].forEach((id) => service.startDownload(params(id)));
+      expect(service.getQueuedCount()).toBe(0);
+    });
+
+    it('reconcileActiveIds does NOT drop slots the native layer still reports active', async () => {
+      ['a', 'b', 'c', 'd'].forEach((id) => service.startDownload(params(id)));
+      await flush();
+      // All three are genuinely still downloading — reconcile must not free anything.
+      mockDownloadManagerModule.getActiveDownloads.mockResolvedValue([
+        { downloadId: '1' }, { downloadId: '2' }, { downloadId: '3' },
+      ]);
+      await service.reconcileActiveIds();
+      await flush();
+      expect(mockDownloadManagerModule.startDownload).toHaveBeenCalledTimes(3);
+      expect(service.getQueuedCount()).toBe(1);
     });
   });
 });

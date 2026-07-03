@@ -104,6 +104,26 @@ describe('ActiveModelService Integration', () => {
       expect(getAppState().activeModelId).toBe('test-model-1');
     });
 
+    it('budgets a LiteRT text model as dirty memory and a GGUF as clean (F9)', async () => {
+      const spy = jest.spyOn(modelResidencyManager, 'makeRoomFor');
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+
+      // LiteRT weights + KV are dirty/accelerator memory -> must budget against REAL
+      // free RAM (dirtyMemory:true), or the native engine can OOM on a "fits" verdict.
+      const litert = createDownloadedModel({ id: 'litert-1', engine: 'litert' as any, fileName: 'm.litertlm', filePath: '/m.litertlm' });
+      useAppStore.setState({ downloadedModels: [litert] });
+      await activeModelService.loadTextModel('litert-1').catch(() => {});
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ key: 'text', dirtyMemory: true }));
+
+      // GGUF/llama is clean mmap -> physical-cap budgeting unchanged (dirtyMemory:false).
+      spy.mockClear();
+      const gguf = createDownloadedModel({ id: 'gguf-1', engine: 'llama' as any });
+      useAppStore.setState({ downloadedModels: [gguf] });
+      await activeModelService.loadTextModel('gguf-1').catch(() => {});
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ key: 'text', dirtyMemory: false }));
+      spy.mockRestore();
+    });
+
     it('should save loadedSettings when model is loaded', async () => {
       const model = createDownloadedModel({ id: 'test-model-1' });
       useAppStore.setState({

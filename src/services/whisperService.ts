@@ -421,6 +421,13 @@ class WhisperService {
       logger.error('[WhisperService] Error stopping transcription:', error);
     } finally {
       this.isTranscribing = false;
+      // Hand the audio session back to the single owner. Realtime STT set mode='record'
+      // via ensureRecordingPermission on start; whisper.rn's audioSessionOnStopIos
+      // restores the NATIVE session but leaves this owner's `mode` stuck at 'record', so
+      // the next TTS ensurePlayback() early-returns and playback is silent after
+      // dictation. restorePlaybackAfterRecording resets mode + re-asserts playback
+      // (iOS only; Android is a no-op). Best-effort — never throw into the stop path.
+      audioSessionManager.restorePlaybackAfterRecording().catch(() => {});
     }
   }
 

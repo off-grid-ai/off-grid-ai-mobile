@@ -136,8 +136,16 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                 supportsVision = visionEnabled
                 supportsAudio = audioEnabled
 
-                Log.i(TAG, "loadModel — success on backend=$activeBackend vision=$supportsVision audio=$supportsAudio")
-                safe.resolve(activeBackend)
+                Log.i(TAG, "loadModel — success on backend=$activeBackend vision=$supportsVision audio=$supportsAudio maxNumTokens=$configuredMaxTokens")
+                // Resolve what we ACTUALLY configured, not just the backend: resolveSafeMaxTokens
+                // may have clamped the context below the requested budget to fit free RAM. JS
+                // adopts the effective value so compaction thresholds + the context-usage bar
+                // reflect reality (they were stale at the requested figure otherwise).
+                val result = com.facebook.react.bridge.Arguments.createMap().apply {
+                    putString("backend", activeBackend)
+                    putInt("maxNumTokens", configuredMaxTokens)
+                }
+                safe.resolve(result)
             } catch (e: Exception) {
                 Log.e(TAG, "loadModel — all backends failed: ${e.message}", e)
                 safe.reject("LITERT_LOAD_ERROR", "Failed to load model: ${e.message}", e)

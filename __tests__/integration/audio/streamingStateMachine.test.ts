@@ -151,9 +151,16 @@ describe('streaming state machine — engine errors never wedge', () => {
     expect(names()).toContain('stream segment FAILED');
     expect(names()).toContain('stream drain ABORT: engine wedged → release for fresh remount');
     expect(mockEngine.release).toHaveBeenCalled();
-    // Lock released: a brand-new stream can engage afterwards.
+    // Lock released. A brand-new stream can engage afterwards — but only after the
+    // wedged stream's state is cleared, which in the real app is what the next
+    // generation turn does (resetStreamingSpeech on new-turn/stop). Without it the
+    // aborted stream's stale active/ended flags block re-engagement. (This test never
+    // ran in CI and had rotted to a bare one-flush assertion that skipped the reset.)
     speakMode = 'resolve';
-    feedStreamingText('Recovered.');
+    resetStreamingSpeech();
+    await flush();
+    feedStreamingText('Recovered. ');
+    finishStreamingText('Recovered.', 'm2');
     await flush();
     expect((mockEngine.speak.mock.calls as unknown as string[][]).map((c) => c[0])).toContain('Recovered.');
   });

@@ -24,6 +24,7 @@ import { KokoroEngine, type KokoroBridgeHandle } from '../../../pro/audio/engine
 const listDownloadedFiles =
   BareResourceFetcher.listDownloadedFiles as jest.Mock;
 const deleteResources = BareResourceFetcher.deleteResources as jest.Mock;
+const fetchResources = (BareResourceFetcher as any).fetch as jest.Mock;
 
 // The two shared core .pte models.
 const KOKORO_CORE_FILES = ['duration_predictor.pte', 'synthesizer.pte'];
@@ -48,7 +49,38 @@ describe('KokoroEngine install status', () => {
   beforeEach(() => {
     listDownloadedFiles.mockReset();
     deleteResources.mockReset().mockResolvedValue(undefined);
+    fetchResources?.mockReset().mockResolvedValue(undefined);
     listDownloadedFiles.mockResolvedValue([]);
+  });
+
+  it('REGRESSION: a benign "already downloading" collision does not leave the voice stuck at downloading (F23)', async () => {
+    // Two overlapping downloadAssets() for the same shared sources: executorch throws
+    // "already downloading" on the losing one. That fetch drives progress on ITS own
+    // instance, not this one, so returning early here would strand this instance at
+    // phase 'downloading' forever (the stuck Voice-row bug). We reconcile from disk.
+    const engine = new KokoroEngine();
+    // The concurrent (winning) fetch has completed the files on disk by the time our
+    // benign catch runs its reconcile scan.
+    listDownloadedFiles.mockResolvedValue(allOnDisk());
+    fetchResources.mockRejectedValueOnce(new Error('Resource is already downloading'));
+
+    await engine.downloadAssets(); // must not throw
+
+    // Settled from disk truth, not stuck at 'downloading'.
+    expect(engine.getPhase()).not.toBe('downloading');
+    expect(engine.getPhase()).toBe('idle'); // downloaded on disk, no bridge yet
+    expect(engine.isFullyDownloaded()).toBe(true);
+  });
+
+  it('REGRESSION: a benign collision with assets NOT yet on disk settles to idle, not stuck downloading (F23)', async () => {
+    const engine = new KokoroEngine();
+    listDownloadedFiles.mockResolvedValue([]); // concurrent fetch hasn't finished either
+    fetchResources.mockRejectedValueOnce(new Error('already downloading'));
+
+    await engine.downloadAssets();
+
+    expect(engine.getPhase()).toBe('idle'); // not 'downloading'
+    expect(engine.isFullyDownloaded()).toBe(false);
   });
 
   it('reports not-downloaded when disk is empty and nothing has loaded', async () => {

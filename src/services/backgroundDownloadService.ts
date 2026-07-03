@@ -84,6 +84,11 @@ class BackgroundDownloadService {
     // over-admit past the cap.
     const token = `reserve:${++this.startSeq}`;
     this.activeIds.add(token);
+    // Android 13+: prompt for notification permission so the foreground-service download
+    // notification is visible (the download still runs as an FGS if denied). Best-effort.
+    if (Platform.OS === 'android' && typeof DownloadManagerModule.requestNotificationPermission === 'function') {
+      try { DownloadManagerModule.requestNotificationPermission(); } catch { /* non-fatal */ }
+    }
     try {
       const result = await DownloadManagerModule.startDownload({
         url: params.url,
@@ -132,6 +137,43 @@ class BackgroundDownloadService {
       // updated size before considering the next queued item.
       this.beginDownload(next.params).then(next.resolve, next.reject);
     }
+  }
+
+  /**
+   * Reconcile the concurrency accounting against the native truth and pump the queue.
+   *
+   * A slot leaks when an id in `activeIds` no longer maps to a live native transfer but
+   * never got a terminal event to release it — most notably a vision model's mmproj
+   * sidecar, whose separate downloadId reserves a slot here but whose task the native
+   * layer folds into the main download's fileTasks (so only the main emits
+   * DownloadComplete). Left unfixed, `pump()` keeps seeing the cap as full and the
+   * effective concurrency collapses toward 1 (one leak per vision model downloaded).
+   *
+   * We drop only REAL ids the native active set no longer contains — never a `reserve:`
+   * token (a start still mid-flight, before it has a native id). A freshly-started
+   * download is already in the native active set by the time startDownload() resolves,
+   * so this cannot drop a live start; the worst case (a native poll lagging a terminal
+   * event) is at most one extra concurrent download that the next reconcile corrects —
+   * strictly better than being wedged at one.
+   */
+  async reconcileActiveIds(): Promise<void> {
+    if (!this.isAvailable() || this.activeIds.size === 0) return;
+    let nativeIds: Set<string>;
+    try {
+      const active = await DownloadManagerModule.getActiveDownloads();
+      nativeIds = new Set<string>((active ?? []).map((d: any) => String(d.downloadId ?? d.id)));
+    } catch {
+      return; // bridge unavailable — leave accounting untouched
+    }
+    let freed = false;
+    for (const id of [...this.activeIds]) {
+      if (id.startsWith('reserve:')) continue; // mid-start reservation, no native id yet
+      if (!nativeIds.has(id)) {
+        this.activeIds.delete(id);
+        freed = true;
+      }
+    }
+    if (freed) this.pump();
   }
 
   /**
@@ -187,6 +229,12 @@ class BackgroundDownloadService {
       throw new Error('retryDownload is only available on Android');
     }
     await DownloadManagerModule.retryDownload(downloadId);
+    // The failure that preceded this retry already released the slot (DownloadError ->
+    // release). Re-reserve it so the retried transfer counts against the cap and its
+    // eventual terminal event pumps the queue; without this, retry runs uncounted
+    // (concurrency can exceed the cap) and its completion can't promote a queued start.
+    // Set.add is idempotent, so re-reserving an id still present is a no-op.
+    this.activeIds.add(downloadId);
   }
 
   async cancelDownload(downloadId: string): Promise<void> {
@@ -223,6 +271,27 @@ class BackgroundDownloadService {
       reason: 'Download cancelled',
       reasonCode: 'user_cancelled',
     });
+  }
+
+  /**
+   * Drop a lingering native download record WITHOUT signalling a cancellation.
+   *
+   * Used by the idempotent finalize path: when a model is finalized from an
+   * already-on-disk file (native move skipped), the stale native record must be purged
+   * so restore can't re-adopt and re-finalize it every foreground. Unlike cancelDownload,
+   * this must NOT synthesize a DownloadError — the download SUCCEEDED, and the global
+   * onAnyError handler would otherwise briefly mark the just-finalized model as failed.
+   * It still frees the concurrency slot (native cancel emits no terminal event). Reuses
+   * the existing native cancel, so no new native method / contract change is needed.
+   */
+  async purgeNativeRecord(downloadId: string): Promise<void> {
+    if (!this.isAvailable()) return;
+    try {
+      await DownloadManagerModule.cancelDownload(downloadId);
+    } catch (e) {
+      logger.log('[BackgroundDownload] purgeNativeRecord failed (bridge may be torn down):', e);
+    }
+    this.release(downloadId);
   }
 
   async getActiveDownloads(): Promise<BackgroundDownloadInfo[]> {

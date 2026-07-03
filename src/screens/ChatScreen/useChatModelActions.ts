@@ -83,6 +83,10 @@ async function doLoadTextModel(deps: ModelActionDeps): Promise<void> {
 export async function initiateModelLoad(
   deps: ModelActionDeps,
   alreadyLoading: boolean,
+  /** When the load was requested to satisfy a chat turn, resume that turn after a
+   *  successful "Load Anyway". Non-generation callers (model select / reload) omit it,
+   *  so nothing is auto-resumed for them. */
+  onLoadedResume?: () => void,
 ): Promise<ModelReadyOutcome> {
   const { activeModel, activeModelId } = deps;
   if (!activeModel || !activeModelId) return { ok: false, reason: 'no-model-selected' };
@@ -101,7 +105,11 @@ export async function initiateModelLoad(
               deps.setIsModelLoading(true);
               deps.setLoadingModel(activeModel);
               deps.modelLoadStartTimeRef.current = Date.now();
-              waitForRenderFrame().then(() => doLoadTextModel(deps));
+              // Resume the turn after the forced load so the user's message isn't
+              // silently dropped (they'd otherwise have to retype it).
+              waitForRenderFrame()
+                .then(() => doLoadTextModel(deps))
+                .then(() => { if (onLoadedResume && llmService.isModelLoaded()) onLoadedResume(); });
             }
           },
         ],
@@ -173,6 +181,7 @@ export async function ensureTextModelForChatFn(deps: {
 
 export async function ensureModelLoadedFn(
   deps: ModelActionDeps,
+  onLoadedResume?: () => void,
 ): Promise<ModelReadyOutcome> {
   const { activeModel, activeModelId } = deps;
   if (!activeModel || !activeModelId) return { ok: false, reason: 'no-model-selected' };
@@ -182,7 +191,7 @@ export async function ensureModelLoadedFn(
       return { ok: true };
     }
     deps.setSupportsVision(!!activeModel.liteRTVision);
-    const outcome = await initiateModelLoad(deps, activeModelService.getActiveModels().text.isLoading);
+    const outcome = await initiateModelLoad(deps, activeModelService.getActiveModels().text.isLoading, onLoadedResume);
     if (!outcome.ok) return outcome;
     return liteRTService.isModelLoaded()
       ? { ok: true }
@@ -197,7 +206,7 @@ export async function ensureModelLoadedFn(
     return { ok: true };
   }
   const alreadyLoading = activeModelService.getActiveModels().text.isLoading;
-  return initiateModelLoad(deps, alreadyLoading);
+  return initiateModelLoad(deps, alreadyLoading, onLoadedResume);
 }
 
 export async function proceedWithModelLoadFn(

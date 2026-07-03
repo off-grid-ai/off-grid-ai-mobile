@@ -119,28 +119,41 @@ describe('ModelDownloadService', () => {
     await expect(modelDownloadService.retry('image:zzz')).resolves.toBeUndefined();
   });
 
-  it('cancels a queued (not-yet-started) download that no provider lists, matched by uniform id', async () => {
-    // 'text:m/a' isn't in any provider list (it's still waiting for a slot), so it
-    // lives only in the queue owner keyed by its platform modelKey.
+  it('cancels a queued text download using the SAME id the View dispatches (text:<modelKey>, not text:<repo>)', async () => {
+    // A queued text start carries modelId=<repo> but modelKey=<repo/file>. Its started-row
+    // id is text:<modelKey> (textProvider.list keys on modelKey), so the View dispatches
+    // text:m/a/a.gguf — NOT text:m/a. cancelQueuedStart must match on the modelKey-derived
+    // id via queuedUniformId, or cancelling a Queued text row silently no-ops and it
+    // downloads anyway. (Before the fix cancelQueuedStart derived text:m/a and missed.)
     mockBg.getQueuedItems.mockReturnValue([
-      { modelKey: 'm/a::a.gguf', modelId: 'm/a', fileName: 'a.gguf', modelType: 'text', totalBytes: 100 },
+      { modelKey: 'm/a/a.gguf', modelId: 'm/a', fileName: 'a.gguf', modelType: 'text', totalBytes: 100 },
     ]);
     mockBg.cancelQueued.mockReturnValue(true);
     modelDownloadService.register(makeProvider('text', [dl('text:other', 'text')]));
 
-    await modelDownloadService.cancel('text:m/a');
+    await modelDownloadService.cancel('text:m/a/a.gguf');
 
     // Routed to the queue owner by the SAME uniform id, using the queued item's modelKey.
-    expect(mockBg.cancelQueued).toHaveBeenCalledWith('m/a::a.gguf');
+    expect(mockBg.cancelQueued).toHaveBeenCalledWith('m/a/a.gguf');
     const lines = (logger.log as jest.Mock).mock.calls.map(c => c[0]);
-    expect(lines.some((l: string) => l.includes('cancel text:m/a → cancelled queued start'))).toBe(true);
+    expect(lines.some((l: string) => l.includes('cancel text:m/a/a.gguf → cancelled queued start'))).toBe(true);
+  });
+
+  it('does NOT match a queued text download by its bare-repo id (text:<repo>)', async () => {
+    // The bare-repo id is never what the View dispatches; matching it would be the old bug.
+    mockBg.getQueuedItems.mockReturnValue([
+      { modelKey: 'm/a/a.gguf', modelId: 'm/a', fileName: 'a.gguf', modelType: 'text', totalBytes: 100 },
+    ]);
+    mockBg.cancelQueued.mockReturnValue(true);
+    await modelDownloadService.cancel('text:m/a');
+    expect(mockBg.cancelQueued).not.toHaveBeenCalled();
   });
 
   it('does NOT route retry to the queue (a not-yet-started item cannot be retried)', async () => {
     mockBg.getQueuedItems.mockReturnValue([
-      { modelKey: 'm/a::a.gguf', modelId: 'm/a', fileName: 'a.gguf', modelType: 'text', totalBytes: 100 },
+      { modelKey: 'm/a/a.gguf', modelId: 'm/a', fileName: 'a.gguf', modelType: 'text', totalBytes: 100 },
     ]);
-    await modelDownloadService.retry('text:m/a');
+    await modelDownloadService.retry('text:m/a/a.gguf');
     expect(mockBg.cancelQueued).not.toHaveBeenCalled();
   });
 

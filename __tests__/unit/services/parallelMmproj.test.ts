@@ -38,6 +38,7 @@ jest.mock('../../../src/services/backgroundDownloadService', () => ({
     isAvailable: jest.fn(() => true),
     startDownload: jest.fn(),
     cancelDownload: jest.fn(() => Promise.resolve()),
+    purgeNativeRecord: jest.fn(() => Promise.resolve()),
     adoptActive: jest.fn(),
     getActiveDownloads: jest.fn(() => Promise.resolve([])),
     moveCompletedDownload: jest.fn(),
@@ -575,7 +576,7 @@ describe('Parallel mmproj download', () => {
       const onError = jest.fn();
       mockService.moveCompletedDownload.mockRejectedValue(new Error('Download 42 not completed yet'));
       mockedRNFS.exists.mockResolvedValue(true); // the final file IS on disk
-      mockService.cancelDownload.mockResolvedValue(undefined);
+      mockService.purgeNativeRecord.mockResolvedValue(undefined);
 
       watchBackgroundDownload({
         downloadId: '42',
@@ -591,7 +592,10 @@ describe('Parallel mmproj download', () => {
 
       expect(onComplete).toHaveBeenCalledTimes(1); // finalized from disk, not an error
       expect(onError).not.toHaveBeenCalled();
-      expect(mockService.cancelDownload).toHaveBeenCalledWith('42'); // stale record purged
+      // Purged via the listener-free path (NOT the finalize-path cancelDownload, which
+      // would synthesize a spurious DownloadError and flash the just-finalized model as
+      // failed — see F2). cancelDownload may still be called by the re-adopt path above.
+      expect(mockService.purgeNativeRecord).toHaveBeenCalledWith('42');
     });
 
     it('fails (not loops) when the native move rejects AND the file is genuinely absent', async () => {

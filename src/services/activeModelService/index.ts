@@ -148,11 +148,17 @@ class ActiveModelService {
     // Use estimated runtime RAM (file size + overhead), not just file size,
     // so the residency budget reflects the model's real memory footprint.
     const textSizeMB = Math.round((hardwareService.estimateModelRam(model) || 0) / (1024 * 1024));
+    // LiteRT weights + KV live in dirty/accelerator memory (not clean mmap'd GGUF file
+    // pages), so their footprint counts against REAL free RAM — budgeting them like
+    // mmap'd GGUF can green-light a load the native engine then OOMs (SIGABRT). Derived
+    // once here from the engine so makeRoomFor and register can't disagree. llama/GGUF
+    // stays clean (dirtyMemory undefined -> physical-cap budgeting, unchanged).
+    const textIsDirty = model.engine === 'litert';
     // Residency manager is authoritative: evict other generation models (and
     // extras) to fit the RAM budget before loading this text model. The evicted
     // models' unload fns are the non-locking internal variants (we already hold
     // the lock here), so this never deadlocks.
-    const room = await modelResidencyManager.makeRoomFor({ key: 'text', type: 'text', sizeMB: textSizeMB });
+    const room = await modelResidencyManager.makeRoomFor({ key: 'text', type: 'text', sizeMB: textSizeMB, dirtyMemory: textIsDirty });
     // makeRoomFor evicts nothing when the model won't fit even after freeing
     // others (it refuses to strand the device). Honor that signal here: loading
     // anyway is a guaranteed OOM crash. Throwing a memory error lets the caller
@@ -174,7 +180,7 @@ class ActiveModelService {
       onLoaded: id => {
         this.loadedTextModelId = id;
         modelResidencyManager.register(
-          { key: 'text', type: 'text', sizeMB: textSizeMB },
+          { key: 'text', type: 'text', sizeMB: textSizeMB, dirtyMemory: textIsDirty },
           () => this.doUnloadTextModelLocked(true), // eviction keeps the selection
         );
       },

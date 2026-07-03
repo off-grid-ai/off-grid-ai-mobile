@@ -12,6 +12,7 @@ import { getMmProjFileSize } from '../../../utils/modelHelpers';
 import { DownloadedModel, ONNXImageModel, RemoteModel } from '../../../types';
 import { ModelPickerType, LoadingState } from '../hooks/useHomeScreen';
 import { useRemoteServerStore } from '../../../stores';
+import { RemoteToolsToggle } from '../../../components/RemoteToolsToggle';
 
 type Props = {
   pickerType: ModelPickerType;
@@ -263,9 +264,14 @@ export const ModelPickerSheet: React.FC<Props> = ({
                             {model.name}{' '}
                             <Icon name="cloud" size={14} color={colors.primary} />
                           </Text>
-                          <Text style={styles.pickerItemMeta}>
-                            {[model.capabilities.supportsVision && 'Vision', model.capabilities.supportsToolCalling && 'Tools', model.capabilities.supportsThinking && 'Thinking'].filter(Boolean).join(' · ')}
-                          </Text>
+                          <View style={localStyles.remoteMetaRow}>
+                            {(model.capabilities.supportsVision || model.capabilities.supportsThinking) && (
+                              <Text style={styles.pickerItemMeta}>
+                                {[model.capabilities.supportsVision && 'Vision', model.capabilities.supportsThinking && 'Thinking'].filter(Boolean).join(' · ')}
+                              </Text>
+                            )}
+                            <RemoteToolsToggle model={model} />
+                          </View>
                         </View>
                         {activeRemoteTextModelId === model.id && activeServerId === model.serverId && (
                           <Icon name="check" size={18} color={colors.text} />
@@ -315,4 +321,5 @@ const localStyles = StyleSheet.create({
   emptyActions: { flexDirection: 'row' as const, gap: 10 },
   scrollContent: { paddingBottom: 16 },
   serverHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, marginBottom: 8 },
+  remoteMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
 });

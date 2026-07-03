@@ -81,7 +81,7 @@ describe('remoteServerDiscovery integration', () => {
     mockFetch = jest.fn();
     (globalThis as unknown as { fetch: typeof mockFetch }).fetch = mockFetch;
     // Reset servers and discovered models between tests
-    useRemoteServerStore.setState({ servers: [], discoveredModels: {} });
+    useRemoteServerStore.setState({ servers: [], discoveredModels: {}, toolCallingOverrides: {} });
   });
 
   // =========================================================================
@@ -529,6 +529,85 @@ describe('remoteServerDiscovery integration', () => {
       expect(stored[0].id).toBe('llava-v1.6');
       expect(stored[0].capabilities.supportsVision).toBe(true);
       expect(stored[0].capabilities.maxContextLength).toBe(8192);
+    });
+  });
+
+  // =========================================================================
+  // Manual tool calling override
+  // =========================================================================
+
+  describe('manual tool calling override', () => {
+    function mockServerWithCustomModel(): void {
+      mockFetch.mockImplementation((url: string) => {
+        if (url.endsWith('/v1/models')) {
+          return Promise.resolve(
+            jsonResponse({
+              object: 'list',
+              // Name matches no tool calling heuristic pattern
+              data: [{ id: 'my-custom-finetune' }],
+            }),
+          );
+        }
+        if (url.endsWith('/api/show')) {
+          // No capabilities array → detection falls back to name heuristics
+          return Promise.resolve(
+            jsonResponse({ model_info: { 'llama.context_length': 8192 } }),
+          );
+        }
+        return Promise.resolve(jsonResponse({}, false, 404));
+      });
+    }
+
+    it('heuristics mark a custom model as not supporting tools; the override fixes it', async () => {
+      addServer({ id: 'srv-custom', endpoint: 'http://192.168.1.10:11434' }); // NOSONAR
+      mockServerWithCustomModel();
+
+      const models = await useRemoteServerStore.getState().discoverModels('srv-custom');
+      expect(models[0].capabilities.supportsToolCalling).toBe(false);
+
+      useRemoteServerStore.getState().setToolCallingOverride('srv-custom', 'my-custom-finetune', true);
+
+      const stored = useRemoteServerStore.getState().discoveredModels['srv-custom'];
+      expect(stored[0].capabilities.supportsToolCalling).toBe(true);
+      expect(useRemoteServerStore.getState().getModelById('srv-custom', 'my-custom-finetune')?.capabilities.supportsToolCalling).toBe(true);
+    });
+
+    it('override survives re-discovery (which rebuilds capabilities from detection)', async () => {
+      addServer({ id: 'srv-custom', endpoint: 'http://192.168.1.10:11434' }); // NOSONAR
+      mockServerWithCustomModel();
+
+      await useRemoteServerStore.getState().discoverModels('srv-custom');
+      useRemoteServerStore.getState().setToolCallingOverride('srv-custom', 'my-custom-finetune', true);
+
+      // Simulates app restart / server test re-running discovery
+      const rediscovered = await useRemoteServerStore.getState().discoverModels('srv-custom');
+
+      expect(rediscovered[0].capabilities.supportsToolCalling).toBe(true);
+      expect(
+        useRemoteServerStore.getState().discoveredModels['srv-custom'][0].capabilities.supportsToolCalling,
+      ).toBe(true);
+    });
+
+    it('override can force tools off for a model the heuristics detect as tool-capable', async () => {
+      addServer({ id: 'srv-custom', endpoint: 'http://192.168.1.10:11434' }); // NOSONAR
+      mockFetch.mockImplementation((url: string) => {
+        if (url.endsWith('/v1/models')) {
+          // 'qwen' matches the tool calling name heuristic
+          return Promise.resolve(jsonResponse({ object: 'list', data: [{ id: 'qwen-custom' }] }));
+        }
+        if (url.endsWith('/api/show')) {
+          return Promise.resolve(jsonResponse({ model_info: { 'qwen.context_length': 8192 } }));
+        }
+        return Promise.resolve(jsonResponse({}, false, 404));
+      });
+
+      const models = await useRemoteServerStore.getState().discoverModels('srv-custom');
+      expect(models[0].capabilities.supportsToolCalling).toBe(true);
+
+      useRemoteServerStore.getState().setToolCallingOverride('srv-custom', 'qwen-custom', false);
+
+      const rediscovered = await useRemoteServerStore.getState().discoverModels('srv-custom');
+      expect(rediscovered[0].capabilities.supportsToolCalling).toBe(false);
     });
   });
 });

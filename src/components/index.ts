@@ -1,5 +1,6 @@
 export { AdvancedToggle } from './AdvancedToggle';
 export { Button } from './Button';
+export { RemoteToolsToggle } from './RemoteToolsToggle';
 export { Card } from './Card';
 export { ModelCard } from './ModelCard';
 export { ChatMessage } from './ChatMessage';

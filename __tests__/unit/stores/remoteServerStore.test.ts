@@ -904,4 +904,87 @@ describe('remoteServerStore', () => {
       expect(ids).not.toContain('nomic-embed-text');
     });
   });
+
+  describe('setToolCallingOverride', () => {
+    it('stores the override and applies it to already-discovered models', () => {
+      const serverId = addServerWithModel('my-custom-model', 'My Custom Model');
+
+      actStoreUpdate(() => {
+        useRemoteServerStore.getState().setToolCallingOverride(serverId, 'my-custom-model', true);
+      });
+
+      const state = useRemoteServerStore.getState();
+      expect(state.toolCallingOverrides[`${serverId}:my-custom-model`]).toBe(true);
+      expect(state.discoveredModels[serverId][0].capabilities.supportsToolCalling).toBe(true);
+    });
+
+    it('can disable tool calling for a model detected as supporting it', () => {
+      const serverId = addTestServer();
+      actStoreUpdate(() => {
+        useRemoteServerStore.getState().setDiscoveredModels(serverId, [
+          { id: 'qwen2.5', name: 'Qwen 2.5', serverId, capabilities: { supportsVision: false, supportsToolCalling: true, supportsThinking: false }, lastUpdated: new Date().toISOString() },
+        ]);
+        useRemoteServerStore.getState().setToolCallingOverride(serverId, 'qwen2.5', false);
+      });
+
+      const models = useRemoteServerStore.getState().discoveredModels[serverId];
+      expect(models[0].capabilities.supportsToolCalling).toBe(false);
+    });
+
+    it('only affects the targeted model', () => {
+      const serverId = addTestServer();
+      actStoreUpdate(() => {
+        useRemoteServerStore.getState().setDiscoveredModels(serverId, [
+          { id: 'model-a', name: 'A', serverId, capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false }, lastUpdated: new Date().toISOString() },
+          { id: 'model-b', name: 'B', serverId, capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false }, lastUpdated: new Date().toISOString() },
+        ]);
+        useRemoteServerStore.getState().setToolCallingOverride(serverId, 'model-a', true);
+      });
+
+      const models = useRemoteServerStore.getState().discoveredModels[serverId];
+      expect(models.find(m => m.id === 'model-a')?.capabilities.supportsToolCalling).toBe(true);
+      expect(models.find(m => m.id === 'model-b')?.capabilities.supportsToolCalling).toBe(false);
+    });
+
+    it('re-applies the override when models are re-set via setDiscoveredModels', () => {
+      const serverId = addServerWithModel('my-custom-model', 'My Custom Model');
+
+      actStoreUpdate(() => {
+        useRemoteServerStore.getState().setToolCallingOverride(serverId, 'my-custom-model', true);
+        // Simulates a fresh discovery result where detection says no tool support
+        useRemoteServerStore.getState().setDiscoveredModels(serverId, [
+          { id: 'my-custom-model', name: 'My Custom Model', serverId, capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false }, lastUpdated: new Date().toISOString() },
+        ]);
+      });
+
+      const models = useRemoteServerStore.getState().discoveredModels[serverId];
+      expect(models[0].capabilities.supportsToolCalling).toBe(true);
+    });
+
+    it('is removed when the server is removed', () => {
+      const serverId = addServerWithModel('my-custom-model', 'My Custom Model');
+      const otherServerId = addTestServer('Other', 'http://other:11434');
+
+      actStoreUpdate(() => {
+        useRemoteServerStore.getState().setToolCallingOverride(serverId, 'my-custom-model', true);
+        useRemoteServerStore.getState().setToolCallingOverride(otherServerId, 'other-model', true);
+        useRemoteServerStore.getState().removeServer(serverId);
+      });
+
+      const overrides = useRemoteServerStore.getState().toolCallingOverrides;
+      expect(overrides[`${serverId}:my-custom-model`]).toBeUndefined();
+      expect(overrides[`${otherServerId}:other-model`]).toBe(true);
+    });
+
+    it('is cleared by clearAllServers', () => {
+      const serverId = addServerWithModel('my-custom-model', 'My Custom Model');
+
+      actStoreUpdate(() => {
+        useRemoteServerStore.getState().setToolCallingOverride(serverId, 'my-custom-model', true);
+        useRemoteServerStore.getState().clearAllServers();
+      });
+
+      expect(useRemoteServerStore.getState().toolCallingOverrides).toEqual({});
+    });
+  });
 });

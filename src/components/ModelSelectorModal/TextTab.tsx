@@ -4,6 +4,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { DownloadedModel, RemoteModel } from '../../types';
 import { hardwareService } from '../../services';
+import { RemoteToolsToggle } from '../RemoteToolsToggle';
 import { createAllStyles } from './styles';
 
 export interface TextTabProps {
@@ -168,14 +169,8 @@ export const TextTab: React.FC<TextTabProps> = ({
                         </View>
                       </>
                     )}
-                    {model.capabilities.supportsToolCalling && (
-                      <>
-                        <Text style={styles.metaSeparator}>•</Text>
-                        <View style={styles.toolBadge}>
-                          <Icon name="tool" size={10} color={colors.warning} />
-                        </View>
-                      </>
-                    )}
+                    <Text style={styles.metaSeparator}>•</Text>
+                    <RemoteToolsToggle model={model} />
                     {model.capabilities.supportsThinking && (
                       <>
                         <Text style={styles.metaSeparator}>•</Text>

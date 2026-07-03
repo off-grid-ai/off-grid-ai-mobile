@@ -106,15 +106,6 @@ export const createRemoteStyles = (colors: ThemeColors, _shadows: ThemeShadows) 
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  toolBadge: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    backgroundColor: `${colors.warning}20`,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    gap: 4,
-  },
   thinkingBadge: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,

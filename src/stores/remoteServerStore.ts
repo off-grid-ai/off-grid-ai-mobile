@@ -29,6 +29,13 @@ interface RemoteServerState {
   activeServerId: string | null;
   /** Models discovered per server */
   discoveredModels: Record<string, RemoteModel[]>;
+  /**
+   * Manual tool calling overrides keyed by `${serverId}:${modelId}`.
+   * Capability detection is heuristic (name patterns, optional server metadata)
+   * and wrong for custom models — once the user sets this, it always wins
+   * over detection, including after re-discovery.
+   */
+  toolCallingOverrides: Record<string, boolean>;
   /** Server health status */
   serverHealth: Record<string, { isHealthy: boolean; lastCheck: string }>;
   /** Loading states */
@@ -61,6 +68,9 @@ interface RemoteServerState {
   setDiscoveredModels: (serverId: string, models: RemoteModel[]) => void;
   clearDiscoveredModels: (serverId: string) => void;
 
+  // Manual capability override
+  setToolCallingOverride: (serverId: string, modelId: string, supportsToolCalling: boolean) => void;
+
   // Health check
   testConnection: (serverId: string) => Promise<ServerTestResult>;
   testConnectionByEndpoint: (endpoint: string, apiKey?: string) => Promise<ServerTestResult>;
@@ -72,6 +82,24 @@ interface RemoteServerState {
   clearAllServers: () => void;
 }
 
+function overrideKey(serverId: string, modelId: string): string {
+  return `${serverId}:${modelId}`;
+}
+
+/** Replaces detected supportsToolCalling with the user's manual override where one exists. */
+function applyToolCallingOverrides(
+  serverId: string,
+  models: RemoteModel[],
+  overrides: Record<string, boolean>,
+): RemoteModel[] {
+  return models.map((model) => {
+    const override = overrides[overrideKey(serverId, model.id)];
+    if (override === undefined || model.capabilities.supportsToolCalling === override) {
+      return model;
+    }
+    return { ...model, capabilities: { ...model.capabilities, supportsToolCalling: override } };
+  });
+}
 
 export const useRemoteServerStore = create<RemoteServerState>()(
   persist(
@@ -79,6 +107,7 @@ export const useRemoteServerStore = create<RemoteServerState>()(
       servers: [],
       activeServerId: null,
       discoveredModels: {},
+      toolCallingOverrides: {},
       serverHealth: {},
       isLoading: false,
       testingServerId: null,
@@ -127,6 +156,9 @@ export const useRemoteServerStore = create<RemoteServerState>()(
           ),
           serverHealth: Object.fromEntries(
             Object.entries(prev.serverHealth).filter(([key]) => key !== id)
+          ),
+          toolCallingOverrides: Object.fromEntries(
+            Object.entries(prev.toolCallingOverrides).filter(([key]) => !key.startsWith(`${id}:`))
           ),
         }));
         logger.log('[RemoteServer] Removed server:', id);
@@ -180,16 +212,20 @@ export const useRemoteServerStore = create<RemoteServerState>()(
 
         try {
           const models = await fetchModelsFromServer(server);
-          set((state) => ({
-            discoveredModels: {
-              ...state.discoveredModels,
-              [serverId]: models,
-            },
-            isLoading: false,
-            discoveringServerId: null,
-          }));
-          logger.log('[RemoteServer] Discovered models:', models.length);
-          return models;
+          let merged: RemoteModel[] = models;
+          set((state) => {
+            merged = applyToolCallingOverrides(serverId, models, state.toolCallingOverrides);
+            return {
+              discoveredModels: {
+                ...state.discoveredModels,
+                [serverId]: merged,
+              },
+              isLoading: false,
+              discoveringServerId: null,
+            };
+          });
+          logger.log('[RemoteServer] Discovered models:', merged.length);
+          return merged;
         } catch (error) {
           set({ isLoading: false, discoveringServerId: null });
           throw error;
@@ -200,9 +236,29 @@ export const useRemoteServerStore = create<RemoteServerState>()(
         set((state) => ({
           discoveredModels: {
             ...state.discoveredModels,
-            [serverId]: models,
+            [serverId]: applyToolCallingOverrides(serverId, models, state.toolCallingOverrides),
           },
         }));
+      },
+
+      setToolCallingOverride: (serverId, modelId, supportsToolCalling) => {
+        set((state) => {
+          const overrides = {
+            ...state.toolCallingOverrides,
+            [overrideKey(serverId, modelId)]: supportsToolCalling,
+          };
+          const models = state.discoveredModels[serverId];
+          return {
+            toolCallingOverrides: overrides,
+            discoveredModels: models
+              ? {
+                  ...state.discoveredModels,
+                  [serverId]: applyToolCallingOverrides(serverId, models, overrides),
+                }
+              : state.discoveredModels,
+          };
+        });
+        logger.log('[RemoteServer] Tool calling override set:', serverId, modelId, supportsToolCalling);
       },
 
       clearDiscoveredModels: (serverId) => {
@@ -243,7 +299,7 @@ export const useRemoteServerStore = create<RemoteServerState>()(
             set((state) => ({
               discoveredModels: {
                 ...state.discoveredModels,
-                [serverId]: result.models!,
+                [serverId]: applyToolCallingOverrides(serverId, result.models!, state.toolCallingOverrides),
               },
             }));
           }
@@ -303,6 +359,7 @@ export const useRemoteServerStore = create<RemoteServerState>()(
           activeServerId: null,
           discoveredModels: {},
           serverHealth: {},
+          toolCallingOverrides: {},
           activeRemoteTextModelId: null,
           activeRemoteImageModelId: null,
         });
@@ -317,6 +374,7 @@ export const useRemoteServerStore = create<RemoteServerState>()(
         activeRemoteTextModelId: state.activeRemoteTextModelId,
         activeRemoteImageModelId: state.activeRemoteImageModelId,
         discoveredModels: state.discoveredModels,
+        toolCallingOverrides: state.toolCallingOverrides,
         // Don't persist health status - it should be refreshed
       }),
     }

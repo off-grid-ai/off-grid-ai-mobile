@@ -27,7 +27,8 @@ const mockModelManager = {
 };
 const mockHardwareService = { getModelTotalSize: jest.fn(() => 1000) };
 const mockHuggingFaceService = { getModelFiles: jest.fn() };
-const mockBackgroundDownloadService = { cancelDownload: jest.fn(), getActiveDownloads: jest.fn(), getQueuedItems: jest.fn(() => []) };
+const mockBackgroundDownloadService = { cancelDownload: jest.fn(), getActiveDownloads: jest.fn(), getQueuedItems: jest.fn(() => []), reconcileActiveIds: jest.fn().mockResolvedValue(undefined) };
+const mockSubscribe = jest.fn((_fn?: any) => () => {});
 
 const mockMDS = {
   retry: jest.fn(async (_id: string) => {}),
@@ -57,7 +58,7 @@ jest.mock('../../../../src/services', () => ({
   get backgroundDownloadService() { return mockBackgroundDownloadService; },
 }));
 jest.mock('../../../../src/services/modelDownloadService', () => ({
-  get modelDownloadService() { return { retry: (id: string) => mockMDS.retry(id), cancel: (id: string) => mockMDS.cancel(id), remove: (id: string) => mockMDS.remove(id), subscribe: () => () => {} }; },
+  get modelDownloadService() { return { retry: (id: string) => mockMDS.retry(id), cancel: (id: string) => mockMDS.cancel(id), remove: (id: string) => mockMDS.remove(id), subscribe: (fn: any) => mockSubscribe(fn) }; },
 }));
 jest.mock('../../../../src/services/modelDownloadService/providers/imageProvider', () => ({
   setImageDownloadOps: (...a: any[]) => mockSetImageDownloadOps(...a),
@@ -309,5 +310,23 @@ describe('activeItems mapping', () => {
     const { result } = renderHook(() => useDownloadManager());
     expect(result.current.isRepairingVision('org/repo/m.gguf')).toBe(true);
     expect(result.current.isRepairingVision('other')).toBe(false);
+  });
+});
+
+describe('queued-items subscription (F14 churn)', () => {
+  it('subscribes to the download service once and does NOT re-subscribe when downloads change each tick', () => {
+    const { rerender } = renderHook(() => useDownloadManager());
+    expect(mockSubscribe).toHaveBeenCalledTimes(1);
+
+    // Simulate progress ticks handing the selector a brand-new downloads object each
+    // render. Under the old [downloads] dep this tore down + rebuilt the subscription
+    // (and the 1s interval) every tick; with [] it must stay a single subscription.
+    const entry = (progress: number) => ({ 'a/x/f.gguf': { modelId: 'a/x', modelKey: 'a/x/f.gguf', fileName: 'f.gguf', modelType: 'text', status: 'running', progress, bytesDownloaded: 1, totalBytes: 100, quantization: 'Q4' } });
+    act(() => { downloads = entry(0.1); configureStores(); });
+    rerender({});
+    act(() => { downloads = entry(0.2); configureStores(); });
+    rerender({});
+
+    expect(mockSubscribe).toHaveBeenCalledTimes(1);
   });
 });

@@ -178,7 +178,12 @@ export function useDownloadManager(): UseDownloadManagerResult {
     const unsubscribe = modelDownloadService.subscribe(refresh);
     const t = setInterval(reconcileAndRefresh, 1000);
     return () => { unsubscribe(); clearInterval(t); };
-  }, [downloads]);
+    // Mount once: the subscription already fires on every store change (that's what
+    // drains the queue) and the interval covers the rest. Depending on `downloads` here
+    // tore down + rebuilt the subscription and interval on EVERY progress tick — pure
+    // churn while a download runs — and refresh reads from the service, not `downloads`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Voice (TTS) + transcription (STT) downloaded models, loaded from disk.
   const { voiceItems, buildDeleteAlert: buildVoiceDeleteAlert } = useVoiceDownloadItems(() => setAlertState(hideAlert()));

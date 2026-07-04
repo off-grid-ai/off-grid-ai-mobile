@@ -212,26 +212,15 @@ class ActiveModelService {
       await this.textLoadPromise;
     }
     const storeActiveModelId = useAppStore.getState().activeModelId;
-    // Engine-aware: a text model lives in llmService (GGUF/llama) OR liteRTService
-    // (LiteRT). The read side (getActiveModels/isTextModelCurrent) and the load side
-    // already dispatch per engine; the unload side must too, or unloading a loaded
-    // LiteRT model frees NOTHING (llmService.isModelLoaded() is false for it) — a RAM
-    // leak, and modelResidencyManager.release('text') below then desyncs (the budget
-    // thinks the RAM is free while LiteRT still holds it → a later load can OOM/jetsam).
-    const llamaLoaded = llmService.isModelLoaded();
-    const liteRTLoaded = liteRTService.isModelLoaded();
-    const isNativeLoaded = llamaLoaded || liteRTLoaded;
+    const isNativeLoaded = llmService.isModelLoaded();
     if (!storeActiveModelId && !this.loadedTextModelId && !isNativeLoaded) {
       return;
     }
     this.loadingState.text = true;
     this.notifyListeners();
     try {
-      if (llamaLoaded) {
+      if (isNativeLoaded) {
         await llmService.unloadModel();
-      }
-      if (liteRTLoaded) {
-        await liteRTService.unloadModel();
       }
       this.loadedTextModelId = null;
       if (!keepSelection) {

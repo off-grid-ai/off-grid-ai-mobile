@@ -66,6 +66,24 @@ export function isDownloadingStatus(status: DownloadStatus): boolean {
   return isActiveStatus(status) && status !== 'pending';
 }
 
+/**
+ * A "stale" download entry is one missing the basic fields needed to display or
+ * finalize it (modelId / fileName / combinedTotalBytes) — orphaned rows from an
+ * interrupted or malformed download that Storage Settings offers to clear. Single
+ * source of truth: the screen renders + clears from this, and it is unit-tested here,
+ * so the predicate can't drift between the UI and its coverage.
+ */
+export function isStaleDownload(entry: DownloadEntry): boolean {
+  return !entry.modelId || !entry.fileName || !entry.combinedTotalBytes;
+}
+
+/** All stale entries in a downloads map (the set Storage Settings' "Clear All" acts on). */
+export function selectStaleDownloads(
+  downloads: Record<ModelKey, DownloadEntry>,
+): DownloadEntry[] {
+  return Object.values(downloads).filter(isStaleDownload);
+}
+
 interface DownloadStoreState {
   downloads: Record<ModelKey, DownloadEntry>
   downloadIdIndex: Record<string, ModelKey>

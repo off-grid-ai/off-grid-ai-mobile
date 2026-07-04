@@ -101,6 +101,9 @@ jest.mock('../../../src/stores', () => ({
 }));
 
 jest.mock('../../../src/stores/downloadStore', () => ({
+  // Keep the REAL pure predicates (isStaleDownload / selectStaleDownloads) — they have
+  // no dependencies, so mocking them would only risk drift from the store's coverage.
+  ...jest.requireActual('../../../src/stores/downloadStore'),
   useDownloadStore: (selector?: any) => {
     const entries: Record<string, any> = {};
     mockStaleDownloadStoreEntries.forEach((e, i) => { entries[`key-${i}`] = e; });

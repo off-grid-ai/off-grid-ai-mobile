@@ -13,7 +13,7 @@ import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from
 import { useTheme, useThemedStyles } from '../theme';
 import { SPACING } from '../constants';
 import { useAppStore, useChatStore } from '../stores';
-import { useDownloadStore } from '../stores/downloadStore';
+import { useDownloadStore, selectStaleDownloads } from '../stores/downloadStore';
 import { hardwareService, modelManager } from '../services';
 import { OrphanedFilesSection } from './OrphanedFilesSection';
 import { createStyles } from './StorageSettingsScreen.styles';
@@ -36,11 +36,10 @@ export const StorageSettingsScreen: React.FC = () => {
 
   const imageStorageUsed = downloadedImageModels.reduce((total, m) => total + (m.size || 0), 0);
 
-  // A "stale" entry is a store entry missing the basic fields needed to
-  // display or finalize it. Now sourced from the unified download store.
-  const staleDownloads = Object.values(downloads).filter(entry => {
-    return !entry.modelId || !entry.fileName || !entry.combinedTotalBytes;
-  });
+  // A "stale" entry is a store entry missing the basic fields needed to display or
+  // finalize it. The predicate lives ONCE in the download store (selectStaleDownloads
+  // → isStaleDownload) so the screen and its tests can't drift.
+  const staleDownloads = selectStaleDownloads(downloads);
 
   const loadStorageInfo = useCallback(async () => {
     const used = await modelManager.getStorageUsed();

@@ -11,6 +11,7 @@ import type {
   OpenAIStreamState,
   OllamaChatRequest,
 } from './openAICompatibleTypes';
+import { shouldIncludeTools } from './openAICompatibleTypes';
 
 /**
  * Streaming parser for <think>...</think> tags embedded in delta.content.
@@ -286,8 +287,8 @@ export async function generateOllamaChatImpl(
 
   const requestBody: Record<string, unknown> = {
     model: modelId, messages: ollamaMessages, stream: true, think: thinkingEnabled,
-    // Mirror the OpenAI path: only send tools to a server that advertised tool-calling.
-    ...(supportsToolCalling && options.tools && options.tools.length > 0 && { tools: options.tools }),
+    // Same shared gate as the OpenAI path — only send tools to a tool-calling server.
+    ...(shouldIncludeTools(supportsToolCalling, options.tools) && { tools: options.tools }),
     options: {
       ...(options.temperature !== undefined && { temperature: options.temperature }),
       // num_predict intentionally omitted — Ollama defaults to -1 (until natural stop).

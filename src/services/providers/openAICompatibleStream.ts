@@ -238,7 +238,7 @@ export async function generateOllamaChatImpl(
   openaiMessages: OpenAIChatMessage[],
   req: OllamaChatRequest,
 ): Promise<void> {
-  const { options, callbacks, signal, endpoint, modelId, abort } = req;
+  const { options, callbacks, signal, endpoint, modelId, abort, supportsToolCalling } = req;
   const thinkingEnabled = options.enableThinking !== false;
 
   // Convert to Ollama message format
@@ -286,7 +286,8 @@ export async function generateOllamaChatImpl(
 
   const requestBody: Record<string, unknown> = {
     model: modelId, messages: ollamaMessages, stream: true, think: thinkingEnabled,
-    ...(options.tools && options.tools.length > 0 && { tools: options.tools }),
+    // Mirror the OpenAI path: only send tools to a server that advertised tool-calling.
+    ...(supportsToolCalling && options.tools && options.tools.length > 0 && { tools: options.tools }),
     options: {
       ...(options.temperature !== undefined && { temperature: options.temperature }),
       // num_predict intentionally omitted — Ollama defaults to -1 (until natural stop).

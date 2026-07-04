@@ -57,4 +57,7 @@ export interface OllamaChatRequest {
   endpoint: string;
   modelId: string;
   abort: () => void;
+  /** Discovered tool-calling capability. When false, tools are omitted from the
+   *  request body (a non-tool-calling model 400s or ignores a tools payload). */
+  supportsToolCalling: boolean;
 }

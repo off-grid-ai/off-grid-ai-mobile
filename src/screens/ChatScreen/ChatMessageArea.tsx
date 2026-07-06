@@ -57,6 +57,29 @@ export const computeFooterPaddingBottom = (keyboardVisible: boolean, insetBottom
   return Math.min(insetBottom, FOOTER_SAFE_CAP);
 };
 
+// Show the "tap to continue" bar when a selected text model was evicted and nothing is
+// currently (re)loading. Kept as a helper so the conditions don't inflate the component.
+const shouldShowEvictedBar = (chat: ReturnType<typeof useChatScreen>): boolean =>
+  !!chat.textModelEvicted && !chat.isModelLoading && !chat.isCompacting
+  && !!chat.activeModelId && !chat.activeModelInfo?.isRemote;
+
+// "Model unloaded to free memory — tap to continue": the active text model was evicted
+// (e.g. an image/TTS load in voice mode) but stays selected. Tapping reloads it.
+const ModelEvictedBar: React.FC<{ visible: boolean; onPress: () => void; styles: any; colors: any }> = ({
+  visible, onPress, styles, colors,
+}) => {
+  if (!visible) return null;
+  return (
+    <Animated.View entering={FadeIn.duration(200)}>
+      <AnimatedPressable style={styles.pendingSettingsBar} onPress={onPress}>
+        <Icon name="cpu" size={16} color={colors.warning} />
+        <Text style={styles.pendingSettingsText}>Model unloaded to free memory — tap to continue</Text>
+        <Icon name="refresh-cw" size={14} color={colors.warning} />
+      </AnimatedPressable>
+    </Animated.View>
+  );
+};
+
 // Small status bar above the input: classifying takes precedence over the
 // background model-load indicator.
 const ModelStatusBar: React.FC<{ loading: boolean; classifying: boolean; modelName?: string; styles: any; colors: any }> = ({
@@ -234,6 +257,14 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           </AnimatedPressable>
         </Animated.View>
       )}
+      {/* Text model evicted to free RAM (e.g. voice-mode image/TTS load) but still
+          selected — reload it on demand, even a large model. */}
+      <ModelEvictedBar
+        visible={shouldShowEvictedBar(chat)}
+        onPress={chat.handleReloadTextModel}
+        styles={styles}
+        colors={colors}
+      />
       {/* Single dismissible surface for every model failure (text/image/tts/stt/
           embedding). Reads modelFailureStore itself — no props. */}
       <ModelFailureCard />

@@ -95,6 +95,12 @@ interface AppState {
   removeDownloadedModel: (modelId: string) => void;
   activeModelId: string | null;
   setActiveModelId: (modelId: string | null) => void;
+  /** The active text model was EVICTED to free RAM (e.g. an image/TTS load in voice mode)
+   *  while still selected. Drives the chat "tap to continue" reload affordance so a big
+   *  model that got unloaded can be brought back on demand. Set by the service, cleared
+   *  when a text model loads. Not persisted (a relaunch has nothing loaded to evict). */
+  textModelEvicted: boolean;
+  setTextModelEvicted: (evicted: boolean) => void;
   /** Last text model the user explicitly selected. Persists across residency
    *  eviction so routing can reload it on demand. */
   lastTextModelId: string | null;
@@ -309,6 +315,8 @@ export const useAppStore = create<AppState>()(
         })),
       activeModelId: null,
       setActiveModelId: (modelId) => set({ activeModelId: modelId }),
+      textModelEvicted: false,
+      setTextModelEvicted: (evicted) => set({ textModelEvicted: evicted }),
       lastTextModelId: null,
       setLastTextModelId: (modelId) => set({ lastTextModelId: modelId }),
       isLoadingModel: false,

@@ -183,8 +183,9 @@ class ActiveModelService {
       loadedTextModelId: this.loadedTextModelId,
       onLoaded: id => {
         this.loadedTextModelId = id;
+        useAppStore.getState().setTextModelEvicted(false); // loaded → clear any prior eviction
         modelResidencyManager.register(
-          { key: 'text', type: 'text', sizeMB: textSizeMB, dirtyMemory: textIsDirty },
+          { key: 'text', type: 'text', modelId, sizeMB: textSizeMB, dirtyMemory: textIsDirty },
           () => this.doUnloadTextModelLocked(true), // eviction keeps the selection
         );
       },
@@ -227,9 +228,9 @@ class ActiveModelService {
         await llmService.unloadModel();
       }
       this.loadedTextModelId = null;
-      if (!keepSelection) {
-        useAppStore.getState().setActiveModelId(null);
-      }
+      // Eviction (keepSelection) keeps the selection & flags "tap to continue"; user unload clears both.
+      if (keepSelection) { if (isNativeLoaded) useAppStore.getState().setTextModelEvicted(true); }
+      else { useAppStore.getState().setActiveModelId(null); useAppStore.getState().setTextModelEvicted(false); }
       modelResidencyManager.release('text');
     } finally {
       this.loadingState.text = false;

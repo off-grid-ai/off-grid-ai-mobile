@@ -138,6 +138,36 @@ describe('ActiveModelService Integration', () => {
       expect(getAppState().activeModelId).toBe('test-model-1');
     });
 
+    it('flags textModelEvicted on an eviction (keepSelection) and clears it on reload', async () => {
+      const model = createDownloadedModel({ id: 'evict-me' });
+      useAppStore.setState({ downloadedModels: [model], textModelEvicted: false });
+      mockLlmService.loadModel.mockResolvedValue(undefined);
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      await activeModelService.loadTextModel('evict-me');
+      expect(getAppState().textModelEvicted).toBe(false); // loaded → not evicted
+
+      // Residency evicts it to free RAM (keepSelection=true) while a native model is loaded.
+      await activeModelService.unloadTextModel(true);
+      expect(getAppState().textModelEvicted).toBe(true);   // flagged → chat shows "continue"
+      expect(getAppState().activeModelId).toBe('evict-me'); // selection kept
+
+      // Reloading (the "continue" tap) clears the flag.
+      mockLlmService.isModelLoaded.mockReturnValue(false);
+      await activeModelService.loadTextModel('evict-me');
+      expect(getAppState().textModelEvicted).toBe(false);
+    });
+
+    it('a user-initiated unload clears the selection and does NOT flag textModelEvicted', async () => {
+      const model = createDownloadedModel({ id: 'user-unload' });
+      useAppStore.setState({ downloadedModels: [model], textModelEvicted: false });
+      mockLlmService.loadModel.mockResolvedValue(undefined);
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      await activeModelService.loadTextModel('user-unload');
+      await activeModelService.unloadTextModel(false); // user unload
+      expect(getAppState().textModelEvicted).toBe(false);
+      expect(getAppState().activeModelId).toBeNull();
+    });
+
     it('budgets a LiteRT text model as dirty memory and a GGUF as clean (F9)', async () => {
       const spy = jest.spyOn(modelResidencyManager, 'makeRoomFor');
       mockLlmService.isModelLoaded.mockReturnValue(true);

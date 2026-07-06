@@ -145,7 +145,7 @@ export const useChatScreen = () => {
     downloadedImageModels, setDownloadedImageModels,
     setIsGeneratingImage: setAppIsGeneratingImage,
     setImageGenerationStatus: setAppImageGenerationStatus,
-    removeImagesByConversationId, loadedSettings,
+    removeImagesByConversationId, loadedSettings, textModelEvicted,
   } = useAppStore();
 
   // Remote model state - use proper selectors for reactivity
@@ -382,7 +382,7 @@ export const useChatScreen = () => {
     imageGenerationProgress: imageGenState.progress,
     imageGenerationStatus: imageGenState.status,
     imagePreviewPath: imageGenState.previewPath,
-    isStreaming, isThinking, isCompacting, isGeneratingForThisConversation, hasPendingSettings, handleReloadTextModel, displayMessages, downloadedModels, hasAvailableModels, projects, settings,
+    isStreaming, isThinking, isCompacting, isGeneratingForThisConversation, hasPendingSettings, handleReloadTextModel, textModelEvicted, displayMessages, downloadedModels, hasAvailableModels, projects, settings,
     navigation, hardwareService,
     handleSend,
     handleStop: () => handleStopFn(genDeps),

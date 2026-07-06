@@ -15,6 +15,7 @@ import {
   RecommendedConfig,
 } from './ModelCardContent';
 import { QUEUED_ICON } from '../utils/downloadStatusIcon';
+import { formatBytes } from '../utils/formatBytes';
 
 interface ModelCardProps {
   model: {
@@ -91,16 +92,25 @@ const DownloadProgressSection: React.FC<{
   return (
   <View style={styles.progressSection}>
     <View style={[styles.progressContainer, tight && styles.progressContainerTight]}>
+      {/* Queued shows an EMPTY bar (0 progress) so it reads as "not started yet". */}
       <View style={styles.progressBar}>
-        <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
+        <View style={[styles.progressFill, { width: `${(queued ? 0 : progress) * 100}%` }]} />
       </View>
+      {/* End-of-bar label: "Queued" while waiting for a slot, otherwise the percent. */}
       <View style={styles.progressLabelRow}>
-        {queued
-          ? <Icon name={QUEUED_ICON} size={14} color={colors.textMuted} accessibilityLabel="Queued" />
-          : <Text style={[styles.progressText, tight && styles.progressTextTight]}>{`${Math.round(progress * 100)}%`}</Text>}
+        {queued ? (
+          <>
+            <Icon name={QUEUED_ICON} size={12} color={colors.textMuted} accessibilityLabel="Queued" />
+            <Text style={[styles.progressText, styles.queuedText, tight && styles.progressTextTight]}>Queued</Text>
+          </>
+        ) : (
+          <Text style={[styles.progressText, tight && styles.progressTextTight]}>{`${Math.round(progress * 100)}%`}</Text>
+        )}
       </View>
     </View>
-    {!queued && bytes && bytes.total > 0 && (
+    {/* Bytes shown for every in-flight state (queued reads "0 B / 142 MB" — the size
+        you're about to fetch), standardized across the Text/Image/STT cards. */}
+    {bytes && bytes.total > 0 && (
       <Text style={styles.progressBytesText}>
         {formatBytes(bytes.downloaded)} / {formatBytes(bytes.total)}
       </Text>
@@ -293,9 +303,3 @@ function formatNumber(num: number): string {
   return num.toString();
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${bytes} B`;
-}

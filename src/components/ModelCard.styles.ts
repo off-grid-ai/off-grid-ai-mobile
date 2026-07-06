@@ -253,6 +253,9 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: colors.textSecondary,
     textAlign: 'right' as const,
   },
+  queuedText: {
+    color: colors.textMuted,
+  },
   // LiteRT card only: tighten the gap and hug the percentage to the bar so it
   // doesn't appear to float. Other model cards keep the default spacing.
   progressContainerTight: {

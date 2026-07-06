@@ -166,6 +166,42 @@ const FlashAttentionSection: React.FC<{ trackColor: { false: string; true: strin
   );
 };
 
+// ─── Aggressive Loading ───────────────────────────────────────────────────────
+
+/**
+ * Aggressive model loading toggle. Shared by the llama AND LiteRT advanced panels
+ * (both go through the same residency memory gate) and reads/writes the single
+ * `settings.aggressiveModelLoading` source of truth — so this toggle, the in-chat
+ * settings, and the residency manager never disagree. The boolean is projected
+ * onto the residency manager by loadPolicySync; this View only dispatches intent.
+ */
+export const AggressiveLoadingSection: React.FC<{ trackColor: { false: string; true: string } }> = ({ trackColor }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const { settings, updateSettings } = useAppStore();
+  const on = !!settings.aggressiveModelLoading;
+
+  return (
+    <View style={styles.toggleRow}>
+      <View style={styles.toggleInfo}>
+        <Text style={styles.toggleLabel}>Aggressive Loading</Text>
+        <Text style={styles.toggleDesc}>
+          Commit more of your RAM and hold a smaller reserve so larger models load. If a
+          model still will not fit, you can override the safeguards and load it anyway.
+          Larger models run slower and can be less stable.
+        </Text>
+      </View>
+      <Switch
+        testID="aggressive-loading-switch"
+        value={on}
+        onValueChange={(value) => updateSettings({ aggressiveModelLoading: value })}
+        trackColor={trackColor}
+        thumbColor={on ? colors.primary : colors.textMuted}
+      />
+    </View>
+  );
+};
+
 // ─── KV Cache Section ─────────────────────────────────────────────────────────
 
 const KvCacheSection: React.FC<{ cacheDisabled: boolean }> = ({ cacheDisabled }) => {
@@ -255,6 +291,7 @@ export const TextGenerationAdvanced: React.FC = () => {
       <BackendSelectorSection />
       <FlashAttentionSection trackColor={trackColor} />
       <KvCacheSection cacheDisabled={cacheDisabled} />
+      <AggressiveLoadingSection trackColor={trackColor} />
     </>
   );
 };
@@ -262,7 +299,9 @@ export const TextGenerationAdvanced: React.FC = () => {
 // ─── LiteRT Advanced ─────────────────────────────────────────────────────────
 
 export const LiteRTTextGenerationAdvanced: React.FC = () => {
+  const { colors } = useTheme();
   const { settings, updateSettings } = useAppStore();
+  const trackColor = { false: colors.surfaceLight, true: `${colors.primary}80` };
 
   return (
     <>
@@ -276,6 +315,7 @@ export const LiteRTTextGenerationAdvanced: React.FC = () => {
       />
 
       <LiteRTBackendSelectorSection />
+      <AggressiveLoadingSection trackColor={trackColor} />
     </>
   );
 };

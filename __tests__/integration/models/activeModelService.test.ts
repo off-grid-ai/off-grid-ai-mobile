@@ -426,6 +426,61 @@ describe('ActiveModelService Integration', () => {
     });
   });
 
+  describe('extreme mode (aggressive) — single-model switching text/image/STT', () => {
+    beforeEach(() => modelResidencyManager.setLoadPolicy('aggressive'));
+    afterEach(() => modelResidencyManager.setLoadPolicy('balanced'));
+
+    it('switching text -> image evicts the text model (single model, not co-resident)', async () => {
+      const textModel = createDownloadedModel({ id: 'txt-1' });
+      const imageModel = createONNXImageModel({ id: 'img-1' });
+      useAppStore.setState({ downloadedModels: [textModel], downloadedImageModels: [imageModel], settings: { imageThreads: 4 } as any });
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+
+      await activeModelService.loadTextModel('txt-1');
+      expect(modelResidencyManager.isResident('text')).toBe(true);
+
+      // Under aggressive single-model, loading the image evicts the resident text model.
+      await activeModelService.loadImageModel('img-1');
+      expect(mockLlmService.unloadModel).toHaveBeenCalled();
+      expect(modelResidencyManager.isResident('text')).toBe(false);
+      expect(modelResidencyManager.isResident('image')).toBe(true);
+      expect(getAppState().activeImageModelId).toBe('img-1');
+    });
+
+    it('switching image -> text evicts the image model', async () => {
+      const textModel = createDownloadedModel({ id: 'txt-1' });
+      const imageModel = createONNXImageModel({ id: 'img-1' });
+      useAppStore.setState({ downloadedModels: [textModel], downloadedImageModels: [imageModel], settings: { imageThreads: 4 } as any });
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+
+      await activeModelService.loadImageModel('img-1');
+      expect(modelResidencyManager.isResident('image')).toBe(true);
+
+      await activeModelService.loadTextModel('txt-1');
+      expect(mockLocalDreamService.unloadModel).toHaveBeenCalled();
+      expect(modelResidencyManager.isResident('image')).toBe(false);
+      expect(modelResidencyManager.isResident('text')).toBe(true);
+    });
+
+    it('a full text -> image -> text round-trip loads each and keeps exactly one generation model', async () => {
+      const textModel = createDownloadedModel({ id: 'txt-1' });
+      const imageModel = createONNXImageModel({ id: 'img-1' });
+      useAppStore.setState({ downloadedModels: [textModel], downloadedImageModels: [imageModel], settings: { imageThreads: 4 } as any });
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+
+      await activeModelService.loadTextModel('txt-1');
+      await activeModelService.loadImageModel('img-1');
+      await activeModelService.loadTextModel('txt-1');
+
+      // Ends with exactly the text model resident — never both.
+      expect(modelResidencyManager.isResident('text')).toBe(true);
+      expect(modelResidencyManager.isResident('image')).toBe(false);
+    });
+  });
+
   describe('Image Model Unloading', () => {
     it('should unload image model and clear store', async () => {
       const imageModel = createONNXImageModel({ id: 'img-model' });

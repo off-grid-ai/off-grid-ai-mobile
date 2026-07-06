@@ -16,6 +16,7 @@ import { cancelSyntheticImageDownload } from '../ModelsScreen/imageDownloadActio
 import { parseEntryMetadata, retryImageDownload } from './retryHandlers';
 import { modelDownloadService } from '../../services/modelDownloadService';
 import { uniformDownloadId } from '../../services/modelDownloadService/uniformId';
+import { imageBackendLabel } from '../../utils/imageBackend';
 import { setImageDownloadOps } from '../../services/modelDownloadService/providers/imageProvider';
 import { useEffect } from 'react';
 
@@ -56,10 +57,7 @@ function getActiveItemFileName(
 }
 
 function getImageAuthor(backend?: string): string {
-  if (backend === 'coreml') return 'Core ML';
-  if (backend === 'qnn') return 'NPU';
-  if (backend === 'mnn') return 'GPU';
-  return 'Image Generation';
+  return imageBackendLabel(backend, 'Image Generation');
 }
 
 function getActiveItemAuthor(

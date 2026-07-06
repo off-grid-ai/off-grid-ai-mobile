@@ -2,6 +2,7 @@ import RNFS from 'react-native-fs';
 import { guessStyle, HFImageModel } from '../../services/huggingFaceModelBrowser';
 import { ModelInfo, ImageModelRecommendation, SoCInfo } from '../../types';
 import { ImageModelDescriptor, ModelTypeFilter } from './types';
+import { imageBackendLabel } from '../../utils/imageBackend';
 
 // Re-export the canonical byte formatter so existing importers keep working while
 // there is only ONE implementation (see src/utils/formatBytes.ts).
@@ -143,8 +144,7 @@ export function hfModelToDescriptor(
     name: hfModel.displayName,
     description: (() => {
       if (hfModel._coreml) return `Core ML model from ${hfModel.repo}`;
-      const backendLabel = hfModel.backend === 'qnn' ? 'NPU' : 'GPU';
-      return `${backendLabel} model from ${hfModel.repo}`;
+      return `${imageBackendLabel(hfModel.backend, 'GPU')} model from ${hfModel.repo}`;
     })(),
     downloadUrl: hfModel.downloadUrl,
     size: hfModel.size,

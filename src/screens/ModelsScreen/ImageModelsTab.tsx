@@ -10,6 +10,7 @@ import { HFImageModel, getVariantLabel } from '../../services/huggingFaceModelBr
 import { ImageModelRecommendation } from '../../types';
 import { useDownloadStore, isActiveStatus, isQueuedStatus, isDownloadingStatus } from '../../stores/downloadStore';
 import { makeImageModelKey } from '../../utils/modelKey';
+import { imageBackendLabel } from '../../utils/imageBackend';
 import { createStyles } from './styles';
 import { ModelsScreenViewModel } from './useModelsScreen';
 import { ImageFilterBar } from './ImageFilterBar';
@@ -67,10 +68,7 @@ export const ImageModelCardItem: React.FC<ImageModelCardProps> = ({
   const isQueued = !!entry && isQueuedStatus(entry.status);
   const isDownloading = !!entry && isDownloadingStatus(entry.status);
   const progressValue = entry?.progress ?? 0;
-  let authorLabel: string;
-  if (model._coreml) authorLabel = 'Core ML';
-  else if (model.backend === 'qnn') authorLabel = 'NPU';
-  else authorLabel = 'GPU';
+  const authorLabel = model._coreml ? 'Core ML' : imageBackendLabel(model.backend);
   const variantSuffix = model.variant ? ` \u00B7 ${getVariantLabel(model.variant)}` : '';
   return (
     <View>

@@ -31,7 +31,7 @@ const ANDROID_BASE_BACKENDS: BackendOption[] = [
   { id: INFERENCE_BACKENDS.OPENCL, label: 'GPU' },
 ];
 
-const HTP_BACKEND: BackendOption = { id: INFERENCE_BACKENDS.HTP, label: 'NPU' };
+const HTP_BACKEND: BackendOption = { id: INFERENCE_BACKENDS.HTP, label: 'NPU (Beta)' };
 
 const BackendSelectorSection: React.FC = () => {
   const styles = useThemedStyles(createStyles);
@@ -61,7 +61,7 @@ const BackendSelectorSection: React.FC = () => {
           <Text style={styles.toggleDesc}>
             {current === INFERENCE_BACKENDS.CPU && 'Running on CPU threads only.'}
             {current === INFERENCE_BACKENDS.OPENCL && 'Offload layers to the GPU (OpenCL). Faster on most devices.'}
-            {current === INFERENCE_BACKENDS.HTP && 'Offloading layers to Hexagon NPU.'}
+            {current === INFERENCE_BACKENDS.HTP && 'Offloading layers to Hexagon NPU. Experimental — works best with Llama- and Qwen-style models; some (e.g. Gemma) fall back to CPU or produce invalid output.'}
             {current === INFERENCE_BACKENDS.METAL && 'Offloading layers to GPU via Metal.'}
           </Text>
         </View>

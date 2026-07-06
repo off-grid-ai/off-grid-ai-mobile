@@ -34,7 +34,7 @@ const ANDROID_BASE_BACKENDS: BackendOption[] = [
 ];
 
 const HTP_BACKEND: BackendOption = {
-  id: INFERENCE_BACKENDS.HTP, label: 'NPU', desc: 'Offload layers to Hexagon NPU on Snapdragon devices. Best for large models. Requires model reload.',
+  id: INFERENCE_BACKENDS.HTP, label: 'NPU (Beta)', desc: 'Experimental — works best with Llama- and Qwen-style models. Some models (e.g. Gemma) fall back to CPU or produce invalid output. Requires model reload.',
 };
 
 export const BackendSelector: React.FC = () => {

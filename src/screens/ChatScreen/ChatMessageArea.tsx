@@ -11,6 +11,7 @@ import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { generationService } from '../../services';
 import { EmptyChat, ImageProgressIndicator } from './ChatScreenComponents';
 import { getPlaceholderText, useChatScreen } from './useChatScreen';
+import { AccelerationTip } from './useAccelerationTip';
 import { createStyles } from './styles';
 import { useTheme } from '../../theme';
 import { useAppStore } from '../../stores';
@@ -55,6 +56,36 @@ export const computeFooterPaddingBottom = (keyboardVisible: boolean, insetBottom
   if (insetBottom > OVERLAY_INSET_MAX) return insetBottom;
   // Thin overlay inset: keep the symmetric-with-top cap.
   return Math.min(insetBottom, FOOTER_SAFE_CAP);
+};
+
+// "Go faster on the GPU/NPU" nudge. Renders nothing unless the tip is visible and no
+// higher-priority bar (reload / compacting) is showing. All the decisions live in the
+// useAccelerationTip hook — this only projects them.
+const AccelerationTipBar: React.FC<{ tip: AccelerationTip; hidden: boolean; styles: any; colors: any }> = ({
+  tip, hidden, styles, colors,
+}) => {
+  if (!tip.visible || hidden) return null;
+  const hardware = tip.hasNpu ? 'NPU' : 'GPU';
+  return (
+    <Animated.View entering={FadeIn.duration(200)} style={styles.accelTipBar}>
+      <View style={styles.accelTipHeaderRow}>
+        <Icon name="zap" size={16} color={colors.primary} />
+        <Text style={styles.accelTipText}>
+          {`This device has a${tip.hasNpu ? 'n' : ''} ${hardware}. Turn it on, or get a Q4_0 build, for faster replies.`}
+        </Text>
+      </View>
+      <View style={styles.accelTipActionsRow}>
+        <AnimatedPressable style={[styles.accelTipButton, styles.accelTipButtonPrimary]} onPress={tip.enableAcceleration}>
+          <Icon name="cpu" size={13} color={colors.primary} />
+          <Text style={styles.accelTipButtonTextPrimary}>{`Enable ${hardware}`}</Text>
+        </AnimatedPressable>
+        <AnimatedPressable style={styles.accelTipButton} onPress={tip.getAcceleratedModel}>
+          <Icon name="download" size={13} color={colors.textSecondary} />
+          <Text style={styles.accelTipButtonText}>Get Q4_0 version</Text>
+        </AnimatedPressable>
+      </View>
+    </Animated.View>
+  );
 };
 
 // Small status bar above the input: classifying takes precedence over the
@@ -234,6 +265,14 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           </AnimatedPressable>
         </Animated.View>
       )}
+      {/* Faster-on-GPU/NPU nudge. Hidden while the reload banner is up (enabling the
+          NPU marks settings pending, which flips this off and that on). */}
+      <AccelerationTipBar
+        tip={chat.accelerationTip}
+        hidden={chat.hasPendingSettings || chat.isCompacting}
+        styles={styles}
+        colors={colors}
+      />
       {/* Single dismissible surface for every model failure (text/image/tts/stt/
           embedding). Reads modelFailureStore itself — no props. */}
       <ModelFailureCard />

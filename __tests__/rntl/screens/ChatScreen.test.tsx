@@ -178,6 +178,7 @@ jest.mock('../../../src/services/hardware', () => ({
       totalMemory: 8 * 1024 * 1024 * 1024,
       availableMemory: 4 * 1024 * 1024 * 1024,
     })),
+    getAccelerationCapability: jest.fn(() => Promise.resolve({ hasNpu: false, hasGpu: false })),
     formatBytes: jest.fn((bytes: number) => {
       if (bytes < 1024) return `${bytes} B`;
       if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;

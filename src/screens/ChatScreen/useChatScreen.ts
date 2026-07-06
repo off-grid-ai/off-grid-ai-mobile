@@ -19,6 +19,7 @@ import { ensureModelLoadedFn, ensureTextModelForChatFn, handleModelSelectFn, han
 import { startGenerationFn, handleSendFn, handleStopFn, handleSelectProjectFn, dispatchGenerationFn } from './useChatGenerationActions';
 import { handleRetryMessageFn, handleEditMessageFn, handleDeleteConversationFn, handleGenerateImageFromMsgFn } from './useChatMessageHandlers';
 import { getDisplayMessages, getPlaceholderText, ChatMessageItem, StreamingState } from './types';
+import { useAccelerationTip } from './useAccelerationTip';
 import { saveImageToGallery } from './useSaveImage';
 import {
   isSuspiciousRecoveredImageModel,
@@ -324,6 +325,10 @@ export const useChatScreen = () => {
   };
   // Whether settings changed since the model was loaded (drives the reload banner).
   const hasPendingSettings = computePendingSettings(activeModel?.engine, settings, loadedSettings);
+  // "You can go faster on the GPU/NPU" chat tip — the hook owns capability + decision.
+  const accelerationTip = useAccelerationTip({
+    activeModel, isRemote: activeModelInfo.isRemote, inferenceBackend: settings.inferenceBackend as string | undefined,
+  });
 
   const handleReloadTextModel = useCallback(async () => {
     if (!activeModelInfo.modelId || activeModelInfo.isRemote) return;
@@ -376,7 +381,7 @@ export const useChatScreen = () => {
     imageGenerationProgress: imageGenState.progress,
     imageGenerationStatus: imageGenState.status,
     imagePreviewPath: imageGenState.previewPath,
-    isStreaming, isThinking, isCompacting, isGeneratingForThisConversation, hasPendingSettings, handleReloadTextModel, displayMessages, downloadedModels, hasAvailableModels, projects, settings,
+    isStreaming, isThinking, isCompacting, isGeneratingForThisConversation, hasPendingSettings, handleReloadTextModel, accelerationTip, displayMessages, downloadedModels, hasAvailableModels, projects, settings,
     navigation, hardwareService,
     handleSend,
     handleStop: () => handleStopFn(genDeps),

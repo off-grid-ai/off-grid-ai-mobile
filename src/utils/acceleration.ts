@@ -11,7 +11,7 @@
  * So the accelerable GGUF quants are Q4_0 / Q8_0; LiteRT files are always GPU.
  * See docs/plans/best-backend-per-device.md and the HTP/OpenCL research.
  */
-import { ModelInfo, ModelFile } from '../types';
+import { ModelInfo, ModelFile, InferenceBackend, INFERENCE_BACKENDS } from '../types';
 
 /** GGUF quantizations the NPU (HTP) / GPU (OpenCL) backends actually accelerate. */
 export const ACCELERABLE_QUANTS = ['Q4_0', 'Q8_0'] as const;
@@ -36,4 +36,45 @@ function isLiteRTFile(file: ModelFile): boolean {
  */
 export function modelSupportsNpuGpu(model: Pick<ModelInfo, 'files'>): boolean {
   return (model.files ?? []).some(f => isLiteRTFile(f) || isAccelerableQuant(f.quantization));
+}
+
+/** The device's llama.rn acceleration options (from hardwareService.getAccelerationCapability). */
+export interface AccelerationCapability {
+  hasNpu: boolean;
+  hasGpu: boolean;
+}
+
+/**
+ * Whether to nudge the user toward hardware acceleration in chat: a local llama.rn
+ * (GGUF) model is loaded, the device has an NPU or GPU, and generation is still on
+ * CPU. LiteRT models manage their own backend and remote models run off-device, so
+ * neither qualifies. Pure so a single test guards both platforms.
+ */
+export function shouldSuggestAcceleration(params: {
+  engine: string | undefined;
+  isRemote: boolean;
+  inferenceBackend: InferenceBackend | undefined;
+  capability: AccelerationCapability;
+}): boolean {
+  const { engine, isRemote, inferenceBackend, capability } = params;
+  if (isRemote || engine !== 'llama') return false;
+  if (!capability.hasNpu && !capability.hasGpu) return false;
+  return inferenceBackend === INFERENCE_BACKENDS.CPU;
+}
+
+/** The backend to switch to when the user accepts the tip: prefer the NPU, else the GPU. */
+export function acceleratedBackendFor(capability: AccelerationCapability): InferenceBackend {
+  return capability.hasNpu ? INFERENCE_BACKENDS.HTP : INFERENCE_BACKENDS.OPENCL;
+}
+
+/**
+ * The HuggingFace search term to prefill on the Models tab so the user can grab an
+ * accelerable (Q4_0) build of the model they're on. Strips a trailing quant suffix
+ * (…-Q4_K_M) from the model id and its author prefix, then appends the target quant.
+ */
+export function acceleratedSearchQuery(modelId: string | undefined | null): string {
+  if (!modelId) return 'Q4_0';
+  const base = modelId.split('/').pop() ?? modelId;
+  const withoutQuant = base.replace(/[-_.]?Q\d[_.].*$/i, '').replace(/[-_.]?(gguf|litertlm)$/i, '');
+  return `${withoutQuant.trim()} Q4_0`.trim();
 }

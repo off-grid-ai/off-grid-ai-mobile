@@ -12,6 +12,7 @@ import {
   ImageModelRecommendation,
 } from '../types';
 import { MODEL_RECOMMENDATIONS, RECOMMENDED_MODELS } from '../constants';
+import { HTP_ENABLED } from '../config/featureFlags';
 /**
  * QNN variant tiers — mirrors local-dream's chipsetModelSuffixes map exactly.
  * Source: https://github.com/xororz/local-dream — Model.kt getChipsetSuffix()
@@ -433,6 +434,19 @@ class HardwareService {
     const cores = await this.getCpuCoreCount();
     return cores <= 4 ? cores : Math.floor(cores * 0.8);
   }
+  /**
+   * The device's llama.rn hardware-acceleration options, composed ONCE from the same
+   * probes the Inference-Backend settings use: NPU/HTP (Qualcomm Hexagon, gated by the
+   * HTP feature flag) and GPU/OpenCL (Adreno/Mali). This is the single source for "can
+   * this device go faster than CPU?", so the settings screen and the chat acceleration
+   * tip agree instead of each re-deriving it.
+   */
+  async getAccelerationCapability(): Promise<{ hasNpu: boolean; hasGpu: boolean }> {
+    if (Platform.OS !== 'android') return { hasNpu: false, hasGpu: false };
+    const [soc, opencl] = await Promise.all([this.getSoCInfo(), this.getOpenCLCapability()]);
+    return { hasNpu: HTP_ENABLED && soc.hasNPU, hasGpu: opencl.supported };
+  }
+
   async getOpenCLCapability(): Promise<{ supported: boolean; reason?: string }> {
     if (this.cachedOpenCLCapability) return this.cachedOpenCLCapability;
     if (Platform.OS !== 'android') return { supported: false, reason: 'not_android' };

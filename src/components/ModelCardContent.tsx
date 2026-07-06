@@ -54,6 +54,8 @@ interface CompactModelCardContentProps {
   credibilityInfo: CredibilityInfo | null;
   isTrending?: boolean;
   recommended?: RecommendedConfig;
+  /** Model can run on the GPU/NPU (LiteRT or Q4_0/Q8_0 GGUF) → show the badge. */
+  supportsAcceleration?: boolean;
 }
 
 function formatNumber(num: number): string {
@@ -94,6 +96,7 @@ export const CompactModelCardContent: React.FC<CompactModelCardContentProps> = (
   credibilityInfo,
   isTrending,
   recommended,
+  supportsAcceleration,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -146,8 +149,15 @@ export const CompactModelCardContent: React.FC<CompactModelCardContentProps> = (
             </View>
           ))}
         </View>
-      ) : (model.modelType || model.paramCount) && (
+      ) : (model.modelType || model.paramCount || supportsAcceleration) && (
         <View style={[styles.infoRow, styles.infoRowCompact]}>
+          {/* Capability badge: this model can run on the GPU/NPU (a LiteRT model or a
+              Q4_0/Q8_0 GGUF). K-quants silently fall back to CPU, so they get no badge. */}
+          {supportsAcceleration && (
+            <View style={styles.accelBadge} testID="npu-gpu-badge">
+              <Text style={styles.accelBadgeText}>NPU/GPU</Text>
+            </View>
+          )}
           {model.modelType && (
             <View style={[styles.infoBadge, modelTypeBadgeStyle(styles, model.modelType)]}>
               <Text style={[styles.infoText, modelTypeTextStyle(styles, model.modelType)]}>

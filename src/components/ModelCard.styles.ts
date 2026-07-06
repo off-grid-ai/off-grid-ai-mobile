@@ -176,6 +176,17 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     ...TYPOGRAPHY.meta,
     color: colors.primary,
   },
+  // GPU/NPU capability badge — emerald accent to signal hardware acceleration.
+  accelBadge: {
+    backgroundColor: `${colors.primary}20`,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  accelBadgeText: {
+    ...TYPOGRAPHY.meta,
+    color: colors.primary,
+  },
   warningBadge: {
     backgroundColor: `${colors.warning}30`,
     paddingHorizontal: 8,

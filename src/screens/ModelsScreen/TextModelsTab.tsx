@@ -17,6 +17,7 @@ import { createStyles } from './styles';
 import { ModelsScreenViewModel } from './useModelsScreen';
 import { useDownloadStore, isActiveStatus, isQueuedStatus } from '../../stores/downloadStore';
 import { makeModelKey } from '../../utils/modelKey';
+import { modelSupportsNpuGpu } from '../../utils/acceleration';
 import { TextFiltersSection } from './TextFiltersSection';
 import { FilterState, SortOption } from './types';
 import { SORT_OPTIONS } from './constants';
@@ -338,11 +339,10 @@ const ModelListItem: React.FC<ModelListItemProps> = ({ item, index, focusTrigger
   const activeEntry = useDownloadStore(s => Object.values(s.downloads).find(e => e.modelKey.startsWith(`${item.id}/`) && isActiveStatus(e.status)));
   const cardIsQueued = !!activeEntry && isQueuedStatus(activeEntry.status);
   const cardIsDownloading = !!activeEntry && !isQueuedStatus(activeEntry.status);
-  // Strip files for the LiteRT parent so ModelCard doesn't render the size-range
-  // and "N files" badges — the curated chips already convey the relevant info.
-  // The original item (with files) still flows through onPress → handleSelectModel.
+  // Strip files for the LiteRT parent so ModelCard skips the size-range / "N files"
+  // badges (curated chips cover it); the original item still flows through onPress.
   const cardModel = isLiteRTParent ? { ...item, files: undefined } : item;
-  const card = (<AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={cardModel} isDownloaded={isDownloaded} isDownloading={cardIsDownloading} isQueued={cardIsQueued} downloadProgress={activeEntry?.progress} isCompatible={isCompatible} incompatibleReason={incompatibleReason} onPress={isCompatible ? onPress : undefined} testID={`model-card-${index}`} compact isTrending={isTrending} recommended={recommended} /></AnimatedEntry>);
+  const card = (<AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={cardModel} isDownloaded={isDownloaded} isDownloading={cardIsDownloading} isQueued={cardIsQueued} downloadProgress={activeEntry?.progress} isCompatible={isCompatible} incompatibleReason={incompatibleReason} onPress={isCompatible ? onPress : undefined} testID={`model-card-${index}`} compact isTrending={isTrending} recommended={recommended} supportsAcceleration={!isLiteRTParent && modelSupportsNpuGpu(item)} /></AnimatedEntry>);
   return index === 0 ? <AttachStep index={0} fill>{card}</AttachStep> : card;
 };
 

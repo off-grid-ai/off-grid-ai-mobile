@@ -54,6 +54,8 @@ interface ModelCardProps {
   compact?: boolean;
   isTrending?: boolean;
   recommended?: RecommendedConfig;
+  /** Model can run on the GPU/NPU (LiteRT or Q4_0/Q8_0 GGUF) → show the badge. */
+  supportsAcceleration?: boolean;
   failedState?: {
     errorMessage: string;
     bytesDownloaded: number;
@@ -177,6 +179,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
   compact,
   isTrending,
   recommended,
+  supportsAcceleration,
   failedState,
 }) => {
   const styles = useThemedStyles(createStyles);
@@ -224,6 +227,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
               credibilityInfo={credibilityInfo}
               isTrending={isTrending}
               recommended={recommended}
+              supportsAcceleration={supportsAcceleration}
             />
           ) : (
             <StandardModelCardContent

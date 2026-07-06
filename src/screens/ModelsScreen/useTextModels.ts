@@ -9,6 +9,7 @@ import { useDownloadStore } from '../../stores/downloadStore';
 import { huggingFaceService, modelManager, hardwareService, activeModelService } from '../../services';
 import { startModelDownload } from '../../services/startModelDownload';
 import { ramFitScore } from '../../utils/recommendedModels';
+import { modelSupportsNpuGpu } from '../../utils/acceleration';
 import { ModelInfo, ModelFile, DownloadedModel } from '../../types';
 import { FilterDimension, FilterState, ModelTypeFilter, CredibilityFilter, SizeFilter, SortOption } from './types';
 import { initialFilterState, SIZE_OPTIONS, VISION_PIPELINE_TAG, CODE_FALLBACK_QUERY } from './constants';
@@ -310,7 +311,12 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
         return true;
       })
       .map(m => mapCuratedModel(m, recommendedModelDetails));
-    return applySort(models, filterState.sort, ramGB);
+    const sorted = applySort(models, filterState.sort, ramGB);
+    // Prioritize NPU/GPU-accelerable models (LiteRT or Q4_0/Q8_0) to the top of the
+    // recommended list, keeping the existing order stable within each group. Only for
+    // the editorial 'recommended' sort — explicit sorts (size/downloads/…) are honored.
+    if (filterState.sort !== 'recommended') return sorted;
+    return [...sorted].sort((a, b) => Number(modelSupportsNpuGpu(b)) - Number(modelSupportsNpuGpu(a)));
   }, [deviceRecommendation.maxParameters, filterState.type, filterState.orgs, filterState.size, filterState.sort, recommendedModelDetails, ramGB]);
 
   const trendingAsModelInfo = useMemo((): ModelInfo[] => {

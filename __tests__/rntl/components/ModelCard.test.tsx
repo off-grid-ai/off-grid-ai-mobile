@@ -284,6 +284,22 @@ describe('ModelCard', () => {
       expect(getByText('7B params')).toBeTruthy();
     });
 
+    it('shows the NPU/GPU badge when supportsAcceleration is set', () => {
+      const { getByText, queryByTestId } = render(
+        <ModelCard model={{ ...baseModel, paramCount: 7 }} compact={true} supportsAcceleration />
+      );
+      expect(getByText('NPU/GPU')).toBeTruthy();
+      expect(queryByTestId('npu-gpu-badge')).toBeTruthy();
+    });
+
+    it('hides the NPU/GPU badge when the model is not accelerable', () => {
+      const { queryByText, queryByTestId } = render(
+        <ModelCard model={{ ...baseModel, paramCount: 7 }} compact={true} supportsAcceleration={false} />
+      );
+      expect(queryByText('NPU/GPU')).toBeNull();
+      expect(queryByTestId('npu-gpu-badge')).toBeNull();
+    });
+
     it('shows min RAM badge in compact mode', () => {
       const { getByText } = render(
         <ModelCard

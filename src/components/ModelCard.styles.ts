@@ -166,12 +166,6 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     ...TYPOGRAPHY.h3,
     color: colors.text,
   },
-  recommendedHighlight: {
-    ...TYPOGRAPHY.meta,
-    color: colors.primary,
-    marginTop: -4,
-    marginBottom: 12,
-  },
   recommendedChip: {
     backgroundColor: `${colors.primary}20`,
     paddingHorizontal: 10,
@@ -181,11 +175,6 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   recommendedChipText: {
     ...TYPOGRAPHY.meta,
     color: colors.primary,
-  },
-  recommendedHighlightCompact: {
-    ...TYPOGRAPHY.meta,
-    color: colors.primary,
-    marginTop: 6,
   },
   warningBadge: {
     backgroundColor: `${colors.warning}30`,

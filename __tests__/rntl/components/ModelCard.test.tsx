@@ -872,7 +872,7 @@ describe('ModelCard', () => {
       expect(queryByText('Vision')).toBeTruthy();
     });
 
-    it('renders the highlight line below chips in compact mode', () => {
+    it('renders the highlight as part of the common description (compact)', () => {
       const { getByText } = render(
         <ModelCard
           model={baseModel}
@@ -883,16 +883,27 @@ describe('ModelCard', () => {
       expect(getByText('Hardware-accelerated inference with vision support')).toBeTruthy();
     });
 
-    it('suppresses the compact description when highlightText is provided', () => {
-      const { queryByText } = render(
+    it('shows description AND highlight together in the common slot (no suppression)', () => {
+      const { getByText } = render(
         <ModelCard
-          model={{ ...baseModel, description: 'Should not appear in compact' }}
+          model={{ ...baseModel, description: 'Gemma model' }}
           compact={true}
-          recommended={{ highlightText: 'Replaces description in compact' }}
+          recommended={{ highlightText: 'Up to 2x faster via GPU' }}
         />,
       );
-      expect(queryByText('Should not appear in compact')).toBeNull();
-      expect(queryByText('Replaces description in compact')).toBeTruthy();
+      // Both render, combined into one common muted description line.
+      expect(getByText('Gemma model Up to 2x faster via GPU')).toBeTruthy();
+    });
+
+    it('does not duplicate when description equals the highlight (deduped)', () => {
+      const { getAllByText } = render(
+        <ModelCard
+          model={{ ...baseModel, description: 'Up to 2x faster via GPU' }}
+          compact={true}
+          recommended={{ highlightText: 'Up to 2x faster via GPU' }}
+        />,
+      );
+      expect(getAllByText('Up to 2x faster via GPU')).toHaveLength(1);
     });
 
     it('still renders the description when no highlightText is provided', () => {
@@ -906,7 +917,7 @@ describe('ModelCard', () => {
       expect(getByText('Visible description')).toBeTruthy();
     });
 
-    it('renders pill + highlight in standard (non-compact) mode below description', () => {
+    it('renders pill + combined description/highlight in standard (non-compact) mode', () => {
       const { getByText } = render(
         <ModelCard
           model={{ ...baseModel, description: 'Detail description' }}
@@ -914,8 +925,8 @@ describe('ModelCard', () => {
         />,
       );
       expect(getByText('Recommended')).toBeTruthy();
-      expect(getByText('Detail description')).toBeTruthy();
-      expect(getByText('Up to 2x faster via GPU')).toBeTruthy();
+      // Description + highlight render as one common line (not a separate colour/slot).
+      expect(getByText('Detail description Up to 2x faster via GPU')).toBeTruthy();
     });
 
     it('does not render pill or highlight when recommended prop is absent', () => {

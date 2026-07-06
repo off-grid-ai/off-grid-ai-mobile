@@ -99,7 +99,7 @@ const LiteRTModelCard: React.FC<LiteRTCardProps> = ({ file, index, curatedEntry,
     downloadProgress={progress?.progress}
     downloadBytes={progress?.bytes}
     isCompatible={file.size / (1024 ** 3) < totalRamGB * modelBudgetFraction(totalRamGB)}
-    recommended={{ pillLabel: 'Recommended', highlightText: curatedEntry?.highlight }}
+    recommended={{ pillLabel: 'Recommended' }}
     onPress={() => {}}
     onDownload={downloaded ? undefined : onDownload}
     onCancel={progress ? onCancel : undefined}

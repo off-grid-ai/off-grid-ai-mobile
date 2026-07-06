@@ -315,7 +315,7 @@ export const LITERT_RECOMMENDED_MODEL: ModelInfo = {
 const LITERT_PARENT_RECOMMENDED = {
   pillLabel: 'Recommended',
   chips: ['Vision', 'GPU'],
-  highlightText: 'Hardware-accelerated inference with vision support',
+  // No highlightText — the model description already carries it (rendered commonly).
 };
 
 const DeviceBanner: React.FC<{ ramGB: number; rec: { maxParameters: number; recommendedQuantization: string }; showTitle: boolean; styles: any }> = ({ ramGB, rec, showTitle, styles }) => (

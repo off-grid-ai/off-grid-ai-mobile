@@ -18,11 +18,26 @@ interface CredibilityInfo {
 
 export interface RecommendedConfig {
   pillLabel?: string;
+  /** An extra descriptive line for a curated/recommended model (e.g. "Up to 2x
+   *  faster than CPU via GPU"). Rendered as part of the SAME common description
+   *  line as every other card — not a separately coloured/positioned highlight. */
   highlightText?: string;
   // When provided, replaces the default modelType/paramCount/RAM chips in
   // compact mode. Lets curated entries surface custom badges (e.g. "Vision",
   // "GPU") instead of the auto-derived ones.
   chips?: string[];
+}
+
+/**
+ * The ONE description string a card shows: the model's description plus any
+ * recommended highlight line, deduped (a curated entry whose description IS its
+ * highlight must not print twice) and joined. Rendered identically on every card
+ * in the common muted description slot — no special-case colour or position.
+ */
+export function cardDescription(description?: string, highlightText?: string): string | undefined {
+  const parts = [description, highlightText].filter((v): v is string => !!v);
+  const unique = parts.filter((v, i) => parts.indexOf(v) === i);
+  return unique.length ? unique.join(' ') : undefined;
 }
 
 interface CompactModelCardContentProps {
@@ -116,9 +131,11 @@ export const CompactModelCardContent: React.FC<CompactModelCardContentProps> = (
           </View>
         )}
       </View>
-      {model.description && !recommended?.highlightText && (
-        <Text style={styles.descriptionCompact} numberOfLines={1}>
-          {model.description}
+      {/* One common description line for EVERY compact card: model description +
+          any recommended highlight, same slot (under the name), same muted style. */}
+      {cardDescription(model.description, recommended?.highlightText) && (
+        <Text style={styles.descriptionCompact} numberOfLines={2}>
+          {cardDescription(model.description, recommended?.highlightText)}
         </Text>
       )}
       {recommended?.chips && recommended.chips.length > 0 ? (
@@ -149,9 +166,6 @@ export const CompactModelCardContent: React.FC<CompactModelCardContentProps> = (
             </View>
           )}
         </View>
-      )}
-      {recommended?.highlightText && (
-        <Text style={styles.recommendedHighlightCompact}>{recommended.highlightText}</Text>
       )}
     </>
   );
@@ -218,13 +232,10 @@ export const StandardModelCardContent: React.FC<StandardModelCardContentProps> =
           </>
         )}
       </View>
-      {model.description && (
+      {cardDescription(model.description, recommended?.highlightText) && (
         <Text style={styles.description} numberOfLines={2}>
-          {model.description}
+          {cardDescription(model.description, recommended?.highlightText)}
         </Text>
-      )}
-      {recommended?.highlightText && (
-        <Text style={styles.recommendedHighlight}>{recommended.highlightText}</Text>
       )}
     </>
   );

@@ -131,7 +131,10 @@ export const ImageTab: React.FC<ImageTabProps> = ({
       {/* Remote Vision Models */}
       {remoteVisionModels.map(({ serverId, serverName, models }) => (
         <View key={serverId}>
-          <Text style={styles.sectionSubTitle}>🌐 {serverName}</Text>
+          <View style={styles.sectionHeaderRow}>
+            <Icon name="wifi" size={14} color={colors.textMuted} />
+            <Text style={styles.sectionSubTitle}>{serverName}</Text>
+          </View>
           {models.map((model) => {
             const isCurrent = activeRemoteImageModelId === model.id;
             return (

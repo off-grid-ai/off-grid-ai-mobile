@@ -117,7 +117,11 @@ export function computeBudgetMB(
  * evict EVERY evictable resident (still honoring pinned + in-use veto) rather than
  * co-residing whatever fits. This is the extreme-mode intent: give the one model the
  * maximum RAM instead of sharing it, so a big model has the best chance to load/run.
+ *
+ * (max-params disabled below: four clear positional inputs — residents, incoming,
+ * budget, options — reads clearer than an options-object wrapper on this hot pure fn.)
  */
+// eslint-disable-next-line max-params
 export function planEviction(
   current: Resident[],
   incoming: IncomingModel,

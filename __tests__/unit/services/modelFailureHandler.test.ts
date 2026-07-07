@@ -6,6 +6,7 @@
  */
 import { reportModelFailure, clearModelFailure } from '../../../src/services/modelFailureHandler';
 import { useModelFailureStore } from '../../../src/stores/modelFailureStore';
+import { OverridableMemoryError } from '../../../src/services/modelLoadErrors';
 
 describe('reportModelFailure', () => {
   beforeEach(() => useModelFailureStore.getState().clear());
@@ -57,5 +58,38 @@ describe('reportModelFailure', () => {
     reportModelFailure('stt', new Error('boom'));
     clearModelFailure('stt');
     expect(useModelFailureStore.getState().failures).toHaveLength(0);
+  });
+
+  // The "Load Anyway" override — the discriminant is read from the TYPED error, once,
+  // here. These guard that a caller ignoring the verdict (offering override on a
+  // non-overridable error, or on a warning) cannot happen.
+  it('marks an overridable memory-gate error and keeps the Load Anyway handler', () => {
+    const onLoadAnyway = jest.fn();
+    const f = reportModelFailure(
+      'image',
+      new OverridableMemoryError('Not enough memory to load Model X. Free up space or choose a smaller model.'),
+      { onLoadAnyway },
+    );
+    expect(f.overridable).toBe(true);
+    expect(f.onLoadAnyway).toBe(onLoadAnyway);
+    expect(f.memoryPressure).toBe(true);
+  });
+
+  it('does NOT offer Load Anyway for a non-overridable error even when a handler is passed', () => {
+    const onLoadAnyway = jest.fn();
+    const f = reportModelFailure('image', new Error('Pipeline failed'), { onLoadAnyway });
+    expect(f.overridable).toBe(false);
+    expect(f.onLoadAnyway).toBeUndefined();
+  });
+
+  it('does NOT offer Load Anyway on a soft warning even when the cause is overridable', () => {
+    const onLoadAnyway = jest.fn();
+    const f = reportModelFailure('text', new OverridableMemoryError('Not enough memory'), {
+      severity: 'warning',
+      message: 'Prompt enhancement skipped.',
+      onLoadAnyway,
+    });
+    expect(f.overridable).toBe(false);
+    expect(f.onLoadAnyway).toBeUndefined();
   });
 });

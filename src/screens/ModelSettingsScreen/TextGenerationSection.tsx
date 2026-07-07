@@ -1,41 +1,16 @@
 import React, { useState } from 'react';
-import { View, Text, Switch } from 'react-native';
+import { Text } from 'react-native';
 import { AdvancedToggle, Card } from '../../components';
 import { SliderSetting } from '../../components/SliderSetting';
-import { useTheme, useThemedStyles } from '../../theme';
+import { useThemedStyles } from '../../theme';
 import { useAppStore, selectIsLiteRT } from '../../stores';
 import { hardwareService } from '../../services';
 import { createStyles } from './styles';
 import { TextGenerationAdvanced, LiteRTTextGenerationAdvanced } from './TextGenerationAdvanced';
+import { ShowGenerationDetailsToggle } from '../../components/settings/textGenAdvancedSections';
 
 const formatContext = (v: number) => v >= 1024 ? `${(v / 1024).toFixed(0)}K` : String(v);
 const formatMaxTokens = (v: number) => v >= 1024 ? `${(v / 1024).toFixed(1)}K` : String(v);
-
-// ─── Shared ───────────────────────────────────────────────────────────────────
-
-const ShowGenerationDetailsToggle: React.FC = () => {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  const { settings, updateSettings } = useAppStore();
-  const trackColor = { false: colors.surfaceLight, true: `${colors.primary}80` };
-
-  return (
-    <View style={styles.toggleRow}>
-      <View style={styles.toggleInfo}>
-        <Text style={styles.toggleLabel}>Show Generation Details</Text>
-        <Text style={styles.toggleDesc}>
-          Display tokens/sec, timing, and memory usage on responses
-        </Text>
-      </View>
-      <Switch
-        value={settings?.showGenerationDetails ?? false}
-        onValueChange={(value) => updateSettings({ showGenerationDetails: value })}
-        trackColor={trackColor}
-        thumbColor={settings?.showGenerationDetails ? colors.primary : colors.textMuted}
-      />
-    </View>
-  );
-};
 
 // ─── LiteRT Settings ─────────────────────────────────────────────────────────
 

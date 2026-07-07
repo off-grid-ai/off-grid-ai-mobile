@@ -25,6 +25,7 @@ const mockRNFS = {
   unlink: jest.fn(),
 };
 jest.mock('react-native-fs', () => ({
+  CachesDirectoryPath: '/caches',
   exists: (p: string) => mockRNFS.exists(p),
   unlink: (p: string) => mockRNFS.unlink(p),
 }));
@@ -136,11 +137,13 @@ describe('resolveToWav', () => {
     expect(mockRNFS.unlink).not.toHaveBeenCalled();
   });
 
-  it('decodes a .m4a to a temp WAV and cleanup removes it', async () => {
+  it('decodes a .m4a to a temp WAV in the caches dir (not recordings) and cleanup removes it', async () => {
     mockNormalize.mockResolvedValue('ok');
     const { wavPath, cleanup } = await resolveToWav('/docs/rec-1.m4a');
-    expect(mockNormalize).toHaveBeenCalledWith('/docs/rec-1.m4a', expect.stringMatching(/\.decode-rec-1\.wav$/));
-    expect(wavPath).toMatch(/\.decode-rec-1\.wav$/);
+    // Temp lands in the CACHES dir (not the recordings dir, so recovery can't
+    // surface it) with a unique name (so concurrent jobs don't collide).
+    expect(mockNormalize).toHaveBeenCalledWith('/docs/rec-1.m4a', expect.stringMatching(/^\/caches\/decode-rec-1-[^/]+\.wav$/));
+    expect(wavPath).toMatch(/^\/caches\/decode-rec-1-[^/]+\.wav$/);
     await cleanup();
     expect(mockRNFS.unlink).toHaveBeenCalledWith(wavPath);
   });

@@ -107,11 +107,27 @@ describe('recoverOrphans - by-directory scoping (Gap 4 fix)', () => {
     expect(report.added).toBe(1);
   });
 
-  it('ignores non-.wav files in the directory', async () => {
+  it('ignores non-audio files in the directory', async () => {
     mockRNFS.readDir.mockResolvedValue([entry('notes.txt'), entry('cover.jpg')]);
     const report = await recoverOrphans({ force: true });
     expect(report.added).toBe(0);
     expect(report.skippedBadName).toBe(2);
+  });
+
+  it('recovers a compressed .m4a recording (bug #3: was dropped after store wipe)', async () => {
+    // A recording the user compressed becomes rec-<epoch>.m4a with the .wav
+    // deleted. Recovery must find it or it vanishes from the archive on a wipe.
+    mockRNFS.stat.mockResolvedValue({ size: 300_000, mtime: 1_000_000 });
+    mockRNFS.readDir.mockResolvedValue([entry('rec-1720000000000.m4a')]);
+    const report = await recoverOrphans({ force: true });
+    expect(report.added).toBe(1);
+    // No WAV header on an .m4a, so it is never flagged "header damaged".
+    expect(report.staleHeaderDetected).toBe(0);
+    const queued = mockAddRecoveredBatch.mock.calls[0][0] as { name: string; durationMs: number }[];
+    expect(queued[0].name).toBe('Recovered');
+    // Duration is ESTIMATED from the AAC bitrate (24 kbps mono = 3000 B/s), not
+    // the WAV PCM-size math: 300000 / 3000 * 1000 = 100000 ms.
+    expect(queued[0].durationMs).toBe(100_000);
   });
 });
 

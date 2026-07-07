@@ -26,6 +26,7 @@ jest.mock('react-native', () => ({
 
 const mockUnlink = jest.fn().mockResolvedValue(undefined);
 jest.mock('react-native-fs', () => ({
+  CachesDirectoryPath: '/caches',
   exists: jest.fn().mockResolvedValue(true),
   unlink: (p: string) => mockUnlink(p),
 }));
@@ -72,9 +73,9 @@ beforeEach(() => {
 it('decodes a compressed .m4a once, then slices the DECODED wav (never the m4a)', async () => {
   await transcribeChunked({ id: 'rec-1', path: '/docs/rec-100.m4a', durationMs: 60_000 });
 
-  // decoded exactly once, from the .m4a
+  // decoded exactly once, from the .m4a, into the caches dir with a unique name
   expect(mockNormalize).toHaveBeenCalledTimes(1);
-  expect(mockNormalize).toHaveBeenCalledWith('/docs/rec-100.m4a', expect.stringMatching(/\.decode-rec-100\.wav$/));
+  expect(mockNormalize).toHaveBeenCalledWith('/docs/rec-100.m4a', expect.stringMatching(/^\/caches\/decode-rec-100-[^/]+\.wav$/));
   const decodedWav = mockNormalize.mock.calls[0][1];
 
   // every slice targets the DECODED wav, and NEVER the .m4a

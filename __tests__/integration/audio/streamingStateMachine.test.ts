@@ -50,6 +50,7 @@ jest.mock('../../../pro/audio/ttsStore', () => ({
 import { useTTSStore } from '../../../pro/audio/ttsStore';
 import {
   feedStreamingText, finishStreamingText, resetStreamingSpeech, isStreamingSpeechActive, _setSpeakTimeoutForTest,
+  stopStreamingSpeechForTurn,
 } from '../../../pro/audio/streamingSpeech';
 import { _setSmSink, type SmEvent } from '../../../pro/audio/ttsLog';
 
@@ -216,5 +217,51 @@ describe('streaming state machine — reset always reclaims the lock', () => {
     await flush();
     expect(names()).toContain('stream ENGAGE (engine warm)');
     expect((mockEngine.speak.mock.calls as unknown as string[][]).map((c) => c[0])).toContain('Fresh.');
+  });
+});
+
+// The device bug: pausing a streaming auto-speak fed the paused engine more segments,
+// which timed out and tripped the 2-failure "engine wedged → release" path — unloading
+// the engine so ALL later playback died. "Stop" (stopStreamingSpeechForTurn) must abort
+// cleanly: no wedge, no release, and remaining tokens for the turn must NOT re-engage.
+describe('streaming state machine — user stops mid-stream', () => {
+  it('aborts cleanly without wedging/releasing the engine, and suppresses the rest of the turn', async () => {
+    speakMode = 'hang'; // engine can't complete (as if paused) — the exact device condition
+    feedStreamingText('One. Two. Three. ');
+    await flush();
+    expect(isStreamingSpeechActive()).toBe(true);
+    expect(mockEngine.speak).toHaveBeenCalledTimes(1); // segment 1 in flight (hung)
+
+    stopStreamingSpeechForTurn(); // user hits STOP mid-segment
+
+    // Let the hung speak time out; the orphaned drain must exit, not advance/wedge.
+    await new Promise((r) => setTimeout(r, 80));
+    await flush();
+
+    expect(names()).toContain('stopStreamingSpeechForTurn (user stop — suppress rest of turn)');
+    expect(names()).not.toContain('stream drain ABORT: engine wedged → release for fresh remount');
+    expect(mockEngine.release).not.toHaveBeenCalled();
+    expect(mockEngine.speak).toHaveBeenCalledTimes(1); // never advanced to segment 2
+    expect(isStreamingSpeechActive()).toBe(false);
+
+    // More tokens on the SAME turn must not restart speech.
+    feedStreamingText('One. Two. Three. Four. ');
+    await flush();
+    expect(isStreamingSpeechActive()).toBe(false);
+    expect(mockEngine.speak).toHaveBeenCalledTimes(1);
+  });
+
+  it('a new turn (resetStreamingSpeech) clears the suppression and streams again', async () => {
+    feedStreamingText('Alpha. ');
+    await flush();
+    stopStreamingSpeechForTurn();
+    feedStreamingText('Alpha. Beta. ');
+    await flush();
+    expect(isStreamingSpeechActive()).toBe(false); // still suppressed this turn
+
+    resetStreamingSpeech(); // audio.stop fires this at the next turn
+    feedStreamingText('Gamma. ');
+    await flush();
+    expect(isStreamingSpeechActive()).toBe(true);
   });
 });

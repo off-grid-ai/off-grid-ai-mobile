@@ -99,6 +99,27 @@ jobs:
 
           cat release-notes.md
 
+      # Decode signing material BEFORE building the APK so the GitHub-release APK is
+      # RELEASE-signed, not debug-signed. build.gradle gates release signing on
+      # project.hasProperty('OFFGRID_UPLOAD_STORE_FILE'), so the props are exported to
+      # $GITHUB_ENV as ORG_GRADLE_PROJECT_* (Gradle project properties) and are visible to
+      # every later gradle/fastlane step (APK + AAB). Skipped when secrets are absent, so
+      # the APK falls back to debug signing and the GitHub Release path still works.
+      - name: Decode signing secrets
+        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' && env.PLAY_STORE_JSON_KEY != '' }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
+          # PLAY_STORE_JSON_KEY may be stored raw-JSON or base64 — handle both (matches uat-dev.yml).
+          echo "$PLAY_STORE_JSON_KEY" | base64 --decode > "$RUNNER_TEMP/play-key.json" \
+            || printf '%s' "$PLAY_STORE_JSON_KEY" > "$RUNNER_TEMP/play-key.json"
+          echo "PLAY_UPLOAD=1" >> $GITHUB_ENV
+          {
+            echo "ORG_GRADLE_PROJECT_OFFGRID_UPLOAD_STORE_FILE=$RUNNER_TEMP/release.keystore"
+            echo "ORG_GRADLE_PROJECT_OFFGRID_UPLOAD_STORE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
+            echo "ORG_GRADLE_PROJECT_OFFGRID_UPLOAD_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}"
+            echo "ORG_GRADLE_PROJECT_OFFGRID_UPLOAD_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}"
+          } >> $GITHUB_ENV
+
       - name: Build Android Release APK
         run: |
           cd android
@@ -127,28 +148,12 @@ jobs:
           if-no-files-found: error
 
       # ── Play Store upload (in addition to the GitHub Release above) ──────────
-      # Decodes the production keystore + Play service-account key from secrets, builds
-      # a signed AAB, and uploads to the Play production track as a DRAFT (a human
-      # confirms rollout in the Play Console). Skipped automatically if the secrets are
-      # absent, so the GitHub Release path still works without them.
-      - name: Decode signing secrets
-        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' && env.PLAY_STORE_JSON_KEY != '' }}
-        run: |
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
-          # PLAY_STORE_JSON_KEY may be stored raw-JSON or base64 — handle both (matches uat-dev.yml).
-          echo "$PLAY_STORE_JSON_KEY" | base64 --decode > "$RUNNER_TEMP/play-key.json" \
-            || printf '%s' "$PLAY_STORE_JSON_KEY" > "$RUNNER_TEMP/play-key.json"
-          echo "PLAY_UPLOAD=1" >> $GITHUB_ENV
-
+      # Builds the signed AAB and uploads it to the Play production track as a DRAFT (a
+      # human confirms rollout in the Play Console). The signing props + play-key were set
+      # up by the "Decode signing secrets" step above (ORG_GRADLE_PROJECT_* in $GITHUB_ENV),
+      # so this reuses them. Skipped when the secrets are absent (PLAY_UPLOAD unset).
       - name: Build signed AAB + upload to Play (draft)
         if: ${{ env.PLAY_UPLOAD == '1' }}
         env:
           PLAY_STORE_JSON_KEY_PATH: ${{ runner.temp }}/play-key.json
-          # build.gradle gates release signing on project.hasProperty(...), so these must be
-          # Gradle PROJECT properties (ORG_GRADLE_PROJECT_<name>), not plain env — otherwise
-          # the AAB falls back to debug signing and Play rejects it.
-          ORG_GRADLE_PROJECT_OFFGRID_UPLOAD_STORE_FILE: ${{ runner.temp }}/release.keystore
-          ORG_GRADLE_PROJECT_OFFGRID_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ORG_GRADLE_PROJECT_OFFGRID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ORG_GRADLE_PROJECT_OFFGRID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: bundle exec fastlane android release

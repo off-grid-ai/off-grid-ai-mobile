@@ -1618,6 +1618,43 @@ describe('Image Generation Flow Integration', () => {
   // re-run the load forcing past the budget. Before the fix, imageGenerationService
   // stringified the typed OverridableMemoryError, so the override was never offered.
   // ============================================================================
+  describe('size floor (never generate at a garbage sub-256 resolution)', () => {
+    it('floors a stale 128 setting up to 256 before it reaches the native pipeline', async () => {
+      const imageModel = setupImageModelState();
+      // Simulate the on-device state: user had dragged size down to 128 (garbage for SD1.5).
+      useAppStore.setState({ settings: { ...useAppStore.getState().settings, imageWidth: 128, imageHeight: 128 } });
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: null, isLoaded: false, isLoading: false },
+        image: { model: imageModel, isLoaded: true, isLoading: false },
+      });
+
+      await imageGenerationService.generateImage({ prompt: 'a dog' });
+
+      expect(mockLocalDreamService.generateImage).toHaveBeenCalledWith(
+        expect.objectContaining({ width: 256, height: 256 }),
+        expect.any(Function),
+        expect.any(Function),
+      );
+    });
+
+    it('passes a valid 512 through unchanged', async () => {
+      const imageModel = setupImageModelState();
+      useAppStore.setState({ settings: { ...useAppStore.getState().settings, imageWidth: 512, imageHeight: 512 } });
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: null, isLoaded: false, isLoading: false },
+        image: { model: imageModel, isLoaded: true, isLoading: false },
+      });
+
+      await imageGenerationService.generateImage({ prompt: 'a dog' });
+
+      expect(mockLocalDreamService.generateImage).toHaveBeenCalledWith(
+        expect.objectContaining({ width: 512, height: 512 }),
+        expect.any(Function),
+        expect.any(Function),
+      );
+    });
+  });
+
   describe('Load Anyway override (overridable memory gate)', () => {
     beforeEach(() => useModelFailureStore.getState().clear());
 

@@ -99,3 +99,33 @@ rest stay in the register with an honest verdict rather than a risky change.
 2. **fix-the-guard** → fix the condition, add a fails-before/passes-after test that exercises the now-reachable branch.
 3. **instrument-and-revisit** → add a `[*-SM]` trace + a Provit journey; only decide delete-vs-keep after observing it live.
 4. **Standing gate** → add `knip` (or `ts-prune`) to CI to catch category-1 (unreferenced) dead code continuously, so this register only ever needs the reasoning-heavy categories.
+
+---
+
+## Image-gen QNN over-recommendation on non-flagship Snapdragons - 2026-07-08
+
+**Verdict: fix-the-guard (DEFERRED - needs a curated SoC allowlist + on-device rounds, intentionally out of the current release).**
+
+**Symptom (observed live on an AC2001 / OnePlus Nord, SoC SM7250):** the app recommends
+a QNN/NPU image model, the user downloads + loads it, and the native local-dream process
+crashes: `Failed to load image model: Server process exited with code 1. Your device
+(SM7250) may not support this model's backend. Try a CPU model instead.` So it recommends
+NPU and then reports NPU unsupported - a self-contradiction.
+
+**Root cause (`src/services/hardware.ts`):**
+- `classifySmNumber` buckets every non-flagship Snapdragon into `'min'` (the catch-all,
+  the `return 'min'` after the 8gen1/8gen2 sets).
+- `hasNPU = vendor === 'qualcomm' && !!qnnVariant` → `'min'` counts as NPU-capable → `true`.
+- `getQualcommImageRec` returns `recommendedBackend: 'qnn'` for ALL variants (incl. `'min'`),
+  with `compatibleBackends: ['qnn','mnn']`.
+- So a SoC like SM7250 (Hexagon that can't actually run the QNN image binaries) is told QNN
+  works, passes the pre-load gate (`checkImageModelCanLoad` only blocks qnn when `!hasNPU`),
+  and crashes at runtime.
+
+**Fix direction (do properly, not rushed):** QNN capability must be a narrow, verified set
+(8gen1/8gen2, or an explicit allowlist), not "any Snapdragon". Then `hasNPU`/recommendation
+key off ACTUAL QNN-capability; the catch-all recommends `mnn` (reliable GPU/CPU). That fixes
+both the bad recommendation and the runtime crash (the pre-load gate would also block a
+manually-selected qnn model with a clear message instead of a hard crash). Needs device
+verification on affected SoCs (SM7250 and at least one true 8gen1/8gen2) before shipping -
+hence deferred, not patched blind.

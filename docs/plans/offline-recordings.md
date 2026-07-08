@@ -42,7 +42,7 @@ Pro-gating, and storage management.
 - Background recording: in scope (iOS background-audio + AVAudioSession; Android
   foreground service + mic notification).
 
-## Stories (single epic — no sprint assignment yet)
+## Stories (single epic - no sprint assignment yet)
 
 1. Recordings data layer
    `recordingStore` (Zustand) + SQLite table:

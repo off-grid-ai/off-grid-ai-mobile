@@ -31,7 +31,9 @@ on:
 
 concurrency:
   group: uat-${{ github.ref }}
-  cancel-in-progress: true
+  # Do NOT cancel a run in flight: once it starts publishing (Play + TestFlight), a mid-run
+  # cancel could half-publish. Let it finish; the next push queues behind it.
+  cancel-in-progress: false
 
 permissions:
   contents: write   # uat.sh pushes the beta bump commit + tag and creates the GH release
@@ -40,12 +42,26 @@ jobs:
   beta:
     # Single macOS runner: it has Xcode AND the Android SDK, so one machine builds both and
     # runs scripts/uat.sh end to end (bump -> build all -> publish all -> tag -> GH release).
+    # Skip runs triggered by the bot's back-merge of main -> dev (that push isn't a real
+    # change to ship a beta for); real human pushes to dev and manual dispatch still run.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.actor != 'github-actions[bot]' }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false         # pro/ is a private repo — fetch it below with a PAT
           fetch-depth: 0            # uat.sh needs full tag history to compute the next beta N
+      - name: Check out pro submodule (private)
+        # pro/ lives in a separate private repo; the default GITHUB_TOKEN can't read it, so
+        # authenticate with PRO_SUBMODULE_PAT (same mechanism as ci.yml). uat.sh's build needs
+        # the real @offgrid/pro package present.
+        env:
+          PRO_PAT: ${{ secrets.PRO_SUBMODULE_PAT }}
+        run: |
+          if [ -z "$PRO_PAT" ]; then echo "PRO_SUBMODULE_PAT not set — cannot fetch private pro/ submodule"; exit 1; fi
+          git config --global url."https://x-access-token:${PRO_PAT}@github.com/".insteadOf "https://github.com/"
+          git submodule update --init --recursive pro
+          git config --global --unset url."https://x-access-token:${PRO_PAT}@github.com/".insteadOf || true
       - uses: actions/setup-node@v4
         with: { node-version: '20', cache: npm }
       - run: npm ci

@@ -122,7 +122,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: OffgridMobile-v${{ env.NEW_VERSION }}
-          path: android/app/build/outputs/apk/standard/release/OffgridMobile-v${{ env.NEW_VERSION }}.apk
+          # No product flavors, so the APK lives under apk/release/ (not apk/standard/release/).
+          path: android/app/build/outputs/apk/release/OffgridMobile-v${{ env.NEW_VERSION }}.apk
           if-no-files-found: error
 
       # ── Play Store upload (in addition to the GitHub Release above) ──────────
@@ -141,8 +142,11 @@ jobs:
         if: ${{ env.PLAY_UPLOAD == '1' }}
         env:
           PLAY_STORE_JSON_KEY_PATH: ${{ runner.temp }}/play-key.json
-          OFFGRID_UPLOAD_STORE_FILE: ${{ runner.temp }}/release.keystore
-          OFFGRID_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          OFFGRID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          OFFGRID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          # build.gradle gates release signing on project.hasProperty(...), so these must be
+          # Gradle PROJECT properties (ORG_GRADLE_PROJECT_<name>), not plain env — otherwise
+          # the AAB falls back to debug signing and Play rejects it.
+          ORG_GRADLE_PROJECT_OFFGRID_UPLOAD_STORE_FILE: ${{ runner.temp }}/release.keystore
+          ORG_GRADLE_PROJECT_OFFGRID_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_OFFGRID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_OFFGRID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: bundle exec fastlane android release

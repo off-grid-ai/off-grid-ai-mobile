@@ -40,13 +40,30 @@ def require_env(*keys)
   UI.user_error!("Missing required env var(s): #{missing.join(', ')}. See fastlane/.env.example")
 end
 
+# Temp files that hold decoded secrets (P12 / profile / ASC .p8). Registered here and
+# shredded on process exit so credentials don't linger in the tmpdir after the lane runs
+# (matters most on shared/CI runners).
+TMP_SECRETS = []
+at_exit do
+  TMP_SECRETS.each { |p| File.delete(p) if p && File.exist?(p) }
+rescue StandardError
+  nil
+end
+
+# Register a secret temp file for exit-time cleanup, with owner-only permissions.
+def track_tmp_secret(path)
+  File.chmod(0o600, path) if File.exist?(path)
+  TMP_SECRETS << path
+  path
+end
+
 # Decode a base64 secret to a temp file and return its path (for P12 / profile / keys).
 def write_tmp_b64(b64, filename)
   require "base64"
   require "tmpdir"
   path = File.join(Dir.tmpdir, filename)
   File.binwrite(path, Base64.decode64(b64))
-  path
+  track_tmp_secret(path)
 end
 
 # Apple Developer Team ID (from ios/ExportOptions.plist). Override via APPLE_TEAM_ID.

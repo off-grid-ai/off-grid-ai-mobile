@@ -6,7 +6,7 @@
  */
 import { reportModelFailure, clearModelFailure } from '../../../src/services/modelFailureHandler';
 import { useModelFailureStore } from '../../../src/stores/modelFailureStore';
-import { OverridableMemoryError } from '../../../src/services/modelLoadErrors';
+import { OverridableMemoryError, ImageModelIncompleteError } from '../../../src/services/modelLoadErrors';
 
 describe('reportModelFailure', () => {
   beforeEach(() => useModelFailureStore.getState().clear());
@@ -80,6 +80,23 @@ describe('reportModelFailure', () => {
     const f = reportModelFailure('image', new Error('Pipeline failed'), { onLoadAnyway });
     expect(f.overridable).toBe(false);
     expect(f.onLoadAnyway).toBeUndefined();
+  });
+
+  // The two "can't load an image model" failures must be DISTINGUISHABLE to the user:
+  //  - memory gate  → OverridableMemoryError  → "Load Anyway" offered
+  //  - missing files → ImageModelIncompleteError → NO "Load Anyway" (re-download instead)
+  it('an incomplete-model error is NOT overridable — no Load Anyway (re-download, not force)', () => {
+    const onLoadAnyway = jest.fn();
+    const f = reportModelFailure('image', new ImageModelIncompleteError(['pos_emb.bin', 'clip_v2.mnn.weight']), { onLoadAnyway });
+    expect(f.overridable).toBe(false);
+    expect(f.onLoadAnyway).toBeUndefined();
+  });
+
+  it('by contrast, the memory-gate error IS overridable — Load Anyway offered (the OP repro)', () => {
+    const onLoadAnyway = jest.fn();
+    const f = reportModelFailure('image', new OverridableMemoryError('Not enough memory to load Absolute Reality. Free up space or choose a smaller model.'), { onLoadAnyway });
+    expect(f.overridable).toBe(true);
+    expect(f.onLoadAnyway).toBe(onLoadAnyway);
   });
 
   it('does NOT offer Load Anyway on a soft warning even when the cause is overridable', () => {

@@ -1584,6 +1584,32 @@ describe('Image Generation Flow Integration', () => {
       // A successful generation warms the model so the notice never shows again.
       expect(useAppStore.getState().warmedImageModels).toContain(imageModel.id);
     });
+
+    it('once steps advance on a first run, the label says "Generating" — NOT "GPU optimization in progress"', async () => {
+      const imageModel = setupImageModelState();
+      useAppStore.setState({ warmedImageModels: [] }); // first run
+      useAppStore.setState({ settings: { ...useAppStore.getState().settings, imageUseOpenCL: false } });
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+      mockLocalDreamService.getLoadedThreads.mockReturnValue(4);
+      // Fire progress past the first step so we exercise the mid-generation label.
+      mockLocalDreamService.generateImage.mockImplementation(async (_p, onProgress) => {
+        onProgress?.({ step: 1, totalSteps: 20, progress: 0.05 });
+        onProgress?.({ step: 6, totalSteps: 20, progress: 0.3 });
+        return { id: 'img-1', prompt: 'test', imagePath: '/path/img.png', width: 512, height: 512, steps: 20, seed: 1, modelId: imageModel.id, createdAt: new Date().toISOString() };
+      });
+
+      const statusUpdates: (string | null)[] = [];
+      const unsub = imageGenerationService.subscribe(s => { if (s.status) statusUpdates.push(s.status); });
+      await imageGenerationService.generateImage({ prompt: 'a dog' });
+      unsub();
+
+      // The misleading "GPU optimization in progress (N/steps)" must be gone...
+      expect(statusUpdates.some(s => s?.includes('GPU optimization in progress'))).toBe(false);
+      // ...replaced by an honest "Generating image (6/20)" (with a one-time optimize aside).
+      const midStep = statusUpdates.find(s => s?.includes('6/20'));
+      expect(midStep).toContain('Generating image');
+      expect(midStep).toContain('one-time');
+    });
   });
 
   // ============================================================================

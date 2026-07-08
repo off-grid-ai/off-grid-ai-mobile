@@ -12,6 +12,7 @@ import { useDownloadStore, isActiveStatus } from '../../stores/downloadStore';
 import { makeImageModelKey } from '../../utils/modelKey';
 import { ImageModelDescriptor } from './types';
 import { getQnnWarningMessage, showQnnWarningAlert } from './imageDownloadQnn';
+import { ensureImageExtractionComplete } from '../../utils/imageModelIntegrity';
 import logger from '../../utils/logger';
 
 export interface ImageDownloadDeps {
@@ -388,8 +389,7 @@ export async function proceedWithDownload(
     return;
   }
 
-  // Zip flow: native WorkManager handles the download; useDownloads at app root routes
-  // progress/error to the store. We only wire completion to run zip-extract finalization.
+  // Zip flow: native WorkManager downloads; useDownloads routes progress; we wire completion.
   const fileName = `${modelInfo.id}.zip`;
   const metadata: ImageMetadata = {
     imageDownloadType: 'zip',
@@ -415,10 +415,8 @@ export async function proceedWithDownload(
     return;
   }
 
-  // Publish a QUEUED row IMMEDIATELY, before awaiting the (slot-limited) native start —
-  // same pattern startModelDownload uses for text. Without it a queued image download had
-  // no store entry until a slot freed, so ImageModelsTab's card (reading the store by
-  // makeImageModelKey) showed the plain arrow while the Download Manager listed it queued.
+  // Publish a QUEUED row IMMEDIATELY, before awaiting the (slot-limited) native start (same
+  // pattern as text) — else a queued image download has no store entry until a slot frees.
   const placeholderId = `queued:${modelKey}`; // reconciled to the real id on start
   const created = addImageEntry({
     modelId: modelInfo.id,
@@ -452,6 +450,8 @@ export async function proceedWithDownload(
         const t1 = Date.now();
         await unzip(zipPath, modelDir);
         logger.log(`[ImageDownload] unzip took ${Date.now() - t1}ms modelId=${modelInfo.id}`);
+        // A partial unzip must NEVER be marked _ready (see ensureImageExtractionComplete).
+        await ensureImageExtractionComplete({ backend: modelInfo.backend, modelDir, zipPath, modelId: modelInfo.id });
         const resolvedModelDir = modelInfo.backend === 'coreml' ? await resolveCoreMLModelDir(modelDir) : modelDir;
         await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8').catch(() => {});
         await RNFS.unlink(zipPath).catch(() => {});

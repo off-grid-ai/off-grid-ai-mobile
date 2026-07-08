@@ -13,6 +13,18 @@ try {
   // Built-in matchers in v12.4+, or no matchers needed for basic tests
 }
 
+// Raise RNTL's async-util timeout (waitFor/findBy) from the 1s default to 5s. Under heavy
+// parallelism (the pre-push --findRelatedTests run fans hundreds of Message-importing
+// suites across all workers), the 1s default starves — a genuinely-passing waitFor poll
+// doesn't get scheduled in time and flakes. 5s is load-tolerant yet well under the 10s
+// jest testTimeout, so passing tests stay fast and only starved ones get grace. Removes a
+// whole class of load-dependent flakiness without changing any assertion.
+try {
+  require('@testing-library/react-native').configure({ asyncUtilTimeout: 5000 });
+} catch {
+  // RNTL not present in a given suite's module graph — nothing to configure.
+}
+
 const shouldPrintJestConsole = process.env.DEBUG_JEST_CONSOLE === '1';
 
 // react-native-keyboard-controller ships a jest mock; without it, any test that

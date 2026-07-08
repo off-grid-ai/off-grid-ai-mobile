@@ -25,6 +25,14 @@ jest.mock('react-native-zip-archive', () => ({
   unzip: jest.fn(() => Promise.resolve('/unzipped')),
 }));
 
+// Integrity is a boundary here (these tests cover download orchestration, not the
+// completeness rule — that has its own tests). Default it to "complete" so the mocked
+// RNFS fixtures don't trip the post-unzip gate.
+jest.mock('../../../../src/utils/imageModelIntegrity', () => ({
+  validateImageModelDir: jest.fn(async () => ({ complete: true, missing: [] })),
+  ensureImageExtractionComplete: jest.fn(async () => {}),
+}));
+
 jest.mock('../../../../src/components/CustomAlert', () => ({
   showAlert: jest.fn((...args: any[]) => ({ visible: true, title: args[0], message: args[1], buttons: args[2] })),
   hideAlert: jest.fn(() => ({ visible: false })),

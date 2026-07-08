@@ -19,6 +19,7 @@ import {
   modelNotReadyAlert,
   type ModelNotReadyReason,
 } from './modelFailureReasons';
+import { isOverridableMemoryError } from './modelLoadErrors';
 import {
   useModelFailureStore,
   type ModelFailure,
@@ -45,6 +46,11 @@ export interface ReportFailureContext {
   title?: string;
   /** When set on an 'error', the card shows a Retry button that runs this. */
   onRetry?: () => void;
+  /** When the error is the OVERRIDABLE memory gate, the card shows "Load Anyway"
+   *  that runs this (re-attempt forcing past the budget). Ignored for non-overridable
+   *  errors and for warnings — so a caller can pass it unconditionally and it only
+   *  surfaces when the gate is actually overridable. */
+  onLoadAnyway?: () => void;
   /** Stable id so repeated reports for the same surface replace, not stack.
    *  Defaults to the modelType (one card per subsystem). */
   id?: string;
@@ -64,6 +70,11 @@ export function reportModelFailure(
   const reason: ModelNotReadyReason | null = severity === 'error' ? reasonFromLoadError(error) : null;
   const detail = error instanceof Error ? error.message : error ? String(error) : undefined;
   const copy = reason ? modelNotReadyAlert(reason, detail) : null;
+  // "Load Anyway" is offered only for a hard error whose CAUSE is the overridable
+  // memory gate — derived once here from the typed discriminant (never re-sniffed
+  // from the message). Callers pass onLoadAnyway unconditionally; it's dropped unless
+  // the gate is genuinely overridable, so a non-memory failure never shows the button.
+  const overridable = severity === 'error' && isOverridableMemoryError(error);
 
   const failure: ModelFailure = {
     id: ctx.id ?? modelType,
@@ -73,6 +84,8 @@ export function reportModelFailure(
     message: ctx.message ?? copy?.message ?? (detail ?? 'Something went wrong.'),
     onRetry: severity === 'error' ? ctx.onRetry : undefined,
     memoryPressure: reason === 'insufficient-memory',
+    overridable,
+    onLoadAnyway: overridable ? ctx.onLoadAnyway : undefined,
   };
 
   // [FAIL-SM] trace (kept forever): every model failure, its derived reason and

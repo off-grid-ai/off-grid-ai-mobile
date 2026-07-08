@@ -27,6 +27,15 @@ import { createDownloadedModel, createONNXImageModel, createDeviceInfo } from '.
 jest.mock('../../../src/services/llm');
 jest.mock('../../../src/services/localDreamGenerator');
 jest.mock('../../../src/services/hardware');
+// Integrity is a boundary for these residency/memory tests (the model files aren't laid
+// down on a real disk here). The completeness rule has its own dedicated tests.
+jest.mock('../../../src/utils/imageModelIntegrity', () => ({
+  validateImageModelDir: jest.fn(async () => ({ complete: true, missing: [] })),
+  ensureImageExtractionComplete: jest.fn(async () => {}),
+}));
+
+import { validateImageModelDir } from '../../../src/utils/imageModelIntegrity';
+import { ImageModelIncompleteError } from '../../../src/services/modelLoadErrors';
 
 const mockLlmService = llmService as jest.Mocked<typeof llmService>;
 const mockLocalDreamService = localDreamGeneratorService as jest.Mocked<typeof localDreamGeneratorService>;
@@ -455,6 +464,19 @@ describe('ActiveModelService Integration', () => {
         4,
         { backend: 'auto', cpuOnly: false, attentionVariant: undefined },
       );
+    });
+
+    it('refuses an INCOMPLETE model — throws ImageModelIncompleteError and never reaches native load (B respects the verdict)', async () => {
+      const broken = createONNXImageModel({ id: 'img-broken', backend: 'mnn' });
+      useAppStore.setState({ downloadedImageModels: [broken], settings: { imageThreads: 4 } as any });
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(false);
+      // Force the REAL loadImageModel to see an INCOMPLETE verdict from the integrity
+      // boundary. Assert the CONSEQUENCE (throws + native load never happens), not the call —
+      // this catches a caller that queries integrity but ignores `complete: false`.
+      (validateImageModelDir as jest.Mock).mockResolvedValueOnce({ complete: false, missing: ['pos_emb.bin', 'clip_v2.mnn.weight'] });
+
+      await expect(activeModelService.loadImageModel('img-broken')).rejects.toBeInstanceOf(ImageModelIncompleteError);
+      expect(mockLocalDreamService.loadModel).not.toHaveBeenCalled();
     });
   });
 

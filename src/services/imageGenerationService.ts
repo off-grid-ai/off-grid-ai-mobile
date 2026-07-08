@@ -7,9 +7,11 @@ import { GeneratedImage } from '../types';
 import logger from '../utils/logger';
 import { shouldShowSharePrompt, emitSharePrompt } from '../utils/sharePrompt';
 import { checkProPromptForImage } from '../utils/proPrompt';
+import { SWEET_SPOT_SIZE } from '../utils/imageGenAdvice';
 import { buildEnhancementMessages, getConversationContext, cleanEnhancedPrompt, buildImageGenMeta } from './imageGenerationHelpers';
 import { reportModelFailure } from './modelFailureHandler';
 import { reasonFromLoadError } from './modelFailureReasons';
+import { isOverridableMemoryError } from './modelLoadErrors';
 
 const SHARE_PROMPT_DELAY_MS = 2000;
 
@@ -147,10 +149,17 @@ class ImageGenerationService {
    * surface the reason via the common dismissible failure card (modelFailureHandler)
    * — NOT a flat chat message. So a failure is never silent, never a chat bubble,
    * and the handling is defined once. The card detects insufficient-memory from the
-   * error text and offers "Free memory & Retry" (re-runs the last request).
+   * error text and offers "Free memory & Retry" (re-runs the last request); when the
+   * underlying cause is the OVERRIDABLE memory gate it ALSO offers "Load Anyway"
+   * (re-run forcing the load past the budget) — parity with the text-model path.
    * Returns null for `return this._fail(...)`.
+   *
+   * `opts.cause` carries the ORIGINAL thrown error (not just its message) so the
+   * failure surface can read the OverridableMemoryError discriminant. Without it the
+   * typed error is lost to a string and the override can never be offered — the exact
+   * bug this fixes.
    */
-  private _fail(error: string, _conversationId: string | null = this.state.conversationId): null {
+  private _fail(error: string, opts?: { cause?: unknown }): null {
     this.updateState({ phase: 'error', progress: null, status: null, previewPath: null, error });
     // On a memory-pressure failure the card offers "Free memory & Retry" — so the retry
     // must ACTUALLY free memory (eject resident models) before re-running, not just
@@ -164,7 +173,16 @@ class ImageGenerationService {
           void this.generateImage(this._lastParams as GenerateImageParams);
         }
       : undefined;
-    reportModelFailure('image', error, { message: error, onRetry });
+    // Load Anyway: only when the cause is the overridable memory gate. Re-run the last
+    // request forcing the image-model load past the budget (override evicts every
+    // evictable resident, then loads). reportModelFailure ignores onLoadAnyway unless
+    // the cause is actually overridable, so passing it here is safe for other errors.
+    const onLoadAnyway = isOverridableMemoryError(opts?.cause) && this._lastParams
+      ? () => { void this.generateImage(this._lastParams as GenerateImageParams, { override: true }); }
+      : undefined;
+    // Report with the typed cause (not the wrapped string) so the overridable
+    // discriminant survives; `message` keeps the user-facing wrapped text.
+    reportModelFailure('image', opts?.cause ?? error, { message: error, onRetry, onLoadAnyway });
     return null;
   }
 
@@ -296,11 +314,11 @@ class ImageGenerationService {
     }
   }
 
-  private async _ensureImageModelLoaded(activeImageModelId: string | null, activeImageModel: ActiveImageModel, desiredThreads: number): Promise<boolean> {
+  private async _ensureImageModelLoaded(activeImageModelId: string | null, activeImageModel: ActiveImageModel, opts: { desiredThreads: number; override?: boolean }): Promise<boolean> {
     const isImageModelLoaded = await onnxImageGeneratorService.isModelLoaded();
     const loadedPath = await onnxImageGeneratorService.getLoadedModelPath();
     const loadedThreads = onnxImageGeneratorService.getLoadedThreads();
-    const needsThreadReload = loadedThreads == null || loadedThreads !== desiredThreads;
+    const needsThreadReload = loadedThreads == null || loadedThreads !== opts.desiredThreads;
     if (isImageModelLoaded && loadedPath === activeImageModel.modelPath && !needsThreadReload) return true;
     if (!activeImageModelId) {
       this._fail('No image model selected');
@@ -308,10 +326,12 @@ class ImageGenerationService {
     }
     try {
       this.updateState({ phase: 'loading', status: `Loading ${activeImageModel.name}...` });
-      await activeModelService.loadImageModel(activeImageModelId);
+      await activeModelService.loadImageModel(activeImageModelId, undefined, opts.override ? { override: true } : undefined);
       return true;
     } catch (error: any) {
-      this._fail(`Failed to load image model: ${error?.message || 'Unknown error'}`);
+      // Pass the TYPED error as `cause` — an OverridableMemoryError here is what lets
+      // the failure card offer "Load Anyway". Stringifying it (as before) hid it.
+      this._fail(`Failed to load image model: ${error?.message || 'Unknown error'}`, { cause: error });
       return false;
     }
   }
@@ -373,16 +393,13 @@ class ImageGenerationService {
         (progress) => {
           if (this.cancelRequested) return;
           const displayStep = Math.min(progress.step, steps);
-          if (isFirstRun) {
-            this.updateState({
-              progress: { step: displayStep, totalSteps: steps },
-              status: displayStep <= 1
-                ? 'Optimizing GPU for your device (~120s, one-time)...'
-                : `GPU optimization in progress... (${displayStep}/${steps})`,
-            });
-          } else {
-            this.updateState({ progress: { step: displayStep, totalSteps: steps }, status: `Generating image (${displayStep}/${steps})...` });
-          }
+          // Once steps are advancing it IS generating — don't mislabel it "GPU
+          // optimization" (which read as if generation hadn't started). On the first run
+          // the GPU is still warming, so note that as a one-time aside, not the headline.
+          const status = displayStep <= 1 && isFirstRun
+            ? 'Optimizing GPU for your device (~120s, one-time)...'
+            : `Generating image (${displayStep}/${steps})...${isFirstRun ? ' (optimizing GPU, one-time)' : ''}`;
+          this.updateState({ progress: { step: displayStep, totalSteps: steps }, status });
         },
         (preview) => {
           if (this.cancelRequested) return;
@@ -419,7 +436,7 @@ class ImageGenerationService {
    * Generate an image. Runs independently of UI lifecycle.
    * If conversationId is provided, the result will be added as a chat message.
    */
-  async generateImage(params: GenerateImageParams): Promise<GeneratedImage | null> {
+  async generateImage(params: GenerateImageParams, opts?: { override?: boolean }): Promise<GeneratedImage | null> {
     if (isInFlight(this.state.phase)) {
       logger.log('[ImageGenerationService] Already generating, ignoring request');
       return null;
@@ -427,12 +444,15 @@ class ImageGenerationService {
     this._lastParams = params; // so a failure card's Retry can re-run this exact request
     const { settings, activeImageModelId, downloadedImageModels } = useAppStore.getState();
     const activeImageModel = downloadedImageModels.find(m => m.id === activeImageModelId);
-    if (!activeImageModel) return this._fail('No image model selected', params.conversationId || null);
+    if (!activeImageModel) return this._fail('No image model selected');
 
     const steps = params.steps || settings.imageSteps || 8;
     const guidanceScale = params.guidanceScale || settings.imageGuidanceScale || 2.0;
-    const imageWidth = settings.imageWidth || 256;
-    const imageHeight = settings.imageHeight || 256;
+    // Floor to 256: SD-class models render garbage (incoherent, not "smaller") below 256,
+    // so a stale sub-256 setting must never reach the pipeline. The slider min is also 256;
+    // this guards the persisted-value + programmatic paths so the user never sees garbage.
+    const imageWidth = Math.max(SWEET_SPOT_SIZE, settings.imageWidth || SWEET_SPOT_SIZE);
+    const imageHeight = Math.max(SWEET_SPOT_SIZE, settings.imageHeight || SWEET_SPOT_SIZE);
 
     const enhancedPrompt = await this._enhancePrompt(params, steps);
     logger.log('[ImageGen] enhanceImagePrompts setting:', settings.enhanceImagePrompts);
@@ -450,7 +470,7 @@ class ImageGenerationService {
       progress: { step: 0, totalSteps: steps }, error: null, result: null,
     });
 
-    const loaded = await this._ensureImageModelLoaded(activeImageModelId, activeImageModel, settings.imageThreads ?? 4);
+    const loaded = await this._ensureImageModelLoaded(activeImageModelId, activeImageModel, { desiredThreads: settings.imageThreads ?? 4, override: opts?.override });
     if (!loaded) return null;
     if (this.cancelRequested) { this.resetState(); return null; }
 

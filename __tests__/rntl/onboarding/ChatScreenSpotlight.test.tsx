@@ -151,6 +151,7 @@ jest.mock('../../../src/components', () => ({
   },
   ThinkingIndicator: () => null,
   ModelFailureCard: () => null,
+  ImageGenAdviceCard: () => null,
   ModelSelectorModal: () => null,
   GenerationSettingsModal: () => null,
   ProjectSelectorSheet: () => null,

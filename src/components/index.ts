@@ -13,6 +13,7 @@ export type { AlertButton, AlertState, CustomAlertProps } from './CustomAlert';
 export { CenteredAlert } from './CenteredAlert';
 export type { CenteredAlertProps } from './CenteredAlert';
 export { ModelFailureCard } from './ModelFailureCard';
+export { ImageGenAdviceCard } from './ImageGenAdviceCard';
 export { ThinkingIndicator } from './ThinkingIndicator';
 export { AnimatedPressable } from './AnimatedPressable';
 export type { AnimatedPressableProps } from './AnimatedPressable';

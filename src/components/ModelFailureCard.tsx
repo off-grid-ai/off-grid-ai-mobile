@@ -20,8 +20,27 @@ import {
  *
  * Severity drives the look only — 'error' (blocking) vs 'warning' (soft notice) —
  * never branches on a concrete modelType.
+ *
+ * Design system: brutalist/terminal per ../../brand/DESIGN_PHILOSOPHY.md +
+ * docs/design/DESIGN_PHILOSOPHY_SYSTEM.md + docs/design/VISUAL_HIERARCHY_STANDARD.md.
+ * All colour/spacing/type from tokens (COLORS/SPACING/TYPOGRAPHY), weights ≤400, and
+ * actions use Feather vector icons only (never emoji) — see the actions row below.
  */
 const ICON_FOR_SEVERITY = { error: 'alert-octagon', warning: 'alert-triangle' } as const;
+
+/** One row action (Retry / Load Anyway) — a single shape both actions share so they
+ *  never drift and a third action is a one-liner. `label` doubles as the a11y label. */
+function ActionButton({ icon, color, label, testID, onPress, styles }: {
+  icon: string; color: string; label: string; testID: string; onPress: () => void;
+  styles: ReturnType<typeof createStyles>;
+}): React.ReactElement {
+  return (
+    <AnimatedPressable onPress={onPress} style={styles.actionButton} accessibilityLabel={label} testID={testID}>
+      <Icon name={icon} size={12} color={color} style={styles.actionIcon} />
+      <Text style={[styles.actionText, { color }]}>{label}</Text>
+    </AnimatedPressable>
+  );
+}
 
 function FailureRow({ failure, onDismiss }: { failure: ModelFailure; onDismiss: () => void }): React.ReactElement {
   const styles = useThemedStyles(createStyles);
@@ -38,16 +57,29 @@ function FailureRow({ failure, onDismiss }: { failure: ModelFailure; onDismiss: 
         </AnimatedPressable>
       </View>
       <Text style={styles.message}>{failure.message}</Text>
-      {failure.onRetry && (
-        <AnimatedPressable
-          onPress={() => { onDismiss(); failure.onRetry?.(); }}
-          style={styles.retryButton}
-          accessibilityLabel="Retry"
-          testID={`model-failure-retry-${failure.modelType}`}
-        >
-          <Icon name="refresh-cw" size={12} color={colors.primary} style={styles.retryIcon} />
-          <Text style={styles.retryText}>{failure.memoryPressure ? 'Free memory & Retry' : 'Retry'}</Text>
-        </AnimatedPressable>
+      {(failure.onRetry || (failure.overridable && failure.onLoadAnyway)) && (
+        <View style={styles.actionsRow}>
+          {failure.onRetry && (
+            <ActionButton
+              icon="refresh-cw"
+              color={colors.primary}
+              label={failure.memoryPressure ? 'Free memory & Retry' : 'Retry'}
+              testID={`model-failure-retry-${failure.modelType}`}
+              onPress={() => { onDismiss(); failure.onRetry?.(); }}
+              styles={styles}
+            />
+          )}
+          {failure.overridable && failure.onLoadAnyway && (
+            <ActionButton
+              icon="zap"
+              color={colors.error}
+              label="Load Anyway"
+              testID={`model-failure-load-anyway-${failure.modelType}`}
+              onPress={() => { onDismiss(); failure.onLoadAnyway?.(); }}
+              styles={styles}
+            />
+          )}
+        </View>
       )}
     </View>
   );
@@ -104,17 +136,22 @@ const createStyles = (colors: ThemeColors) => ({
     color: colors.textSecondary,
     marginTop: SPACING.xs,
   },
-  retryButton: {
+  actionsRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    alignSelf: 'flex-start' as const,
+    flexWrap: 'wrap' as const,
     marginTop: SPACING.sm,
+    gap: SPACING.lg,
+  },
+  actionButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     paddingVertical: SPACING.xs,
   },
-  retryIcon: {
+  actionIcon: {
     marginRight: SPACING.xs,
   },
-  retryText: {
+  actionText: {
     ...TYPOGRAPHY.label,
     color: colors.primary,
   },

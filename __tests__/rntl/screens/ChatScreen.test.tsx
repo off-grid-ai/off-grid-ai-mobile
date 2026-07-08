@@ -296,6 +296,7 @@ jest.mock('../../../src/components', () => ({
   },
   ThinkingIndicator: () => null,
   ModelFailureCard: () => null,
+  ImageGenAdviceCard: () => null,
   ModelSelectorModal: ({ visible, onClose, onSelectModel, onUnloadModel }: any) => {
     const { View, Text, TouchableOpacity } = require('react-native');
     if (!visible) return null;

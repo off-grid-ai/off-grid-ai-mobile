@@ -20,6 +20,8 @@ import {
 } from '../../utils/testHelpers';
 import { createONNXImageModel, createGeneratedImage, createMessage } from '../../utils/factories';
 import { Message } from '../../../src/types';
+import { useModelFailureStore } from '../../../src/stores/modelFailureStore';
+import { OverridableMemoryError } from '../../../src/services/modelLoadErrors';
 
 // Mock the services
 jest.mock('../../../src/services/localDreamGenerator');
@@ -456,8 +458,9 @@ describe('Image Generation Flow Integration', () => {
 
       await imageGenerationService.generateImage({ prompt: 'Test' });
 
-      // Should have tried to load model
-      expect(mockActiveModelService.loadImageModel).toHaveBeenCalledWith('img-model-1');
+      // Should have tried to load model (override opts threaded through — undefined on
+      // the normal path, { override: true } only on a Load-Anyway retry).
+      expect(mockActiveModelService.loadImageModel).toHaveBeenCalledWith('img-model-1', undefined, undefined);
     });
 
     it('should reload model if threads changed', async () => {
@@ -1581,6 +1584,154 @@ describe('Image Generation Flow Integration', () => {
       // A successful generation warms the model so the notice never shows again.
       expect(useAppStore.getState().warmedImageModels).toContain(imageModel.id);
     });
+
+    it('once steps advance on a first run, the label says "Generating" — NOT "GPU optimization in progress"', async () => {
+      const imageModel = setupImageModelState();
+      useAppStore.setState({ warmedImageModels: [] }); // first run
+      useAppStore.setState({ settings: { ...useAppStore.getState().settings, imageUseOpenCL: false } });
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+      mockLocalDreamService.getLoadedThreads.mockReturnValue(4);
+      // Fire progress past the first step so we exercise the mid-generation label.
+      mockLocalDreamService.generateImage.mockImplementation(async (_p, onProgress) => {
+        onProgress?.({ step: 1, totalSteps: 20, progress: 0.05 });
+        onProgress?.({ step: 6, totalSteps: 20, progress: 0.3 });
+        return { id: 'img-1', prompt: 'test', imagePath: '/path/img.png', width: 512, height: 512, steps: 20, seed: 1, modelId: imageModel.id, createdAt: new Date().toISOString() };
+      });
+
+      const statusUpdates: (string | null)[] = [];
+      const unsub = imageGenerationService.subscribe(s => { if (s.status) statusUpdates.push(s.status); });
+      await imageGenerationService.generateImage({ prompt: 'a dog' });
+      unsub();
+
+      // The misleading "GPU optimization in progress (N/steps)" must be gone...
+      expect(statusUpdates.some(s => s?.includes('GPU optimization in progress'))).toBe(false);
+      // ...replaced by an honest "Generating image (6/20)" (with a one-time optimize aside).
+      const midStep = statusUpdates.find(s => s?.includes('6/20'));
+      expect(midStep).toContain('Generating image');
+      expect(midStep).toContain('one-time');
+    });
+  });
+
+  // ============================================================================
+  // Load Anyway override parity: an OVERRIDABLE memory-gate failure on image load
+  // must surface the same "Load Anyway" the text path has, and invoking it must
+  // re-run the load forcing past the budget. Before the fix, imageGenerationService
+  // stringified the typed OverridableMemoryError, so the override was never offered.
+  // ============================================================================
+  describe('size floor (never generate at a garbage sub-256 resolution)', () => {
+    it('floors a stale 128 setting up to 256 before it reaches the native pipeline', async () => {
+      const imageModel = setupImageModelState();
+      // Simulate the on-device state: user had dragged size down to 128 (garbage for SD1.5).
+      useAppStore.setState({ settings: { ...useAppStore.getState().settings, imageWidth: 128, imageHeight: 128 } });
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: null, isLoaded: false, isLoading: false },
+        image: { model: imageModel, isLoaded: true, isLoading: false },
+      });
+
+      await imageGenerationService.generateImage({ prompt: 'a dog' });
+
+      expect(mockLocalDreamService.generateImage).toHaveBeenCalledWith(
+        expect.objectContaining({ width: 256, height: 256 }),
+        expect.any(Function),
+        expect.any(Function),
+      );
+    });
+
+    it('passes a valid 512 through unchanged', async () => {
+      const imageModel = setupImageModelState();
+      useAppStore.setState({ settings: { ...useAppStore.getState().settings, imageWidth: 512, imageHeight: 512 } });
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: null, isLoaded: false, isLoading: false },
+        image: { model: imageModel, isLoaded: true, isLoading: false },
+      });
+
+      await imageGenerationService.generateImage({ prompt: 'a dog' });
+
+      expect(mockLocalDreamService.generateImage).toHaveBeenCalledWith(
+        expect.objectContaining({ width: 512, height: 512 }),
+        expect.any(Function),
+        expect.any(Function),
+      );
+    });
+  });
+
+  describe('Load Anyway override (overridable memory gate)', () => {
+    beforeEach(() => useModelFailureStore.getState().clear());
+
+    it('offers Load Anyway on an overridable gate, and the retry forces the load with { override: true }', async () => {
+      setupImageModelState();
+      // Model not resident → a load is attempted; the gate rejects it as overridable,
+      // then the forced retry succeeds.
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(false);
+      mockActiveModelService.loadImageModel
+        .mockRejectedValueOnce(
+          new OverridableMemoryError('Not enough memory to load Test Model. Free up space or choose a smaller model.'),
+        )
+        .mockResolvedValue();
+
+      const result = await imageGenerationService.generateImage({ prompt: 'a fox in snow' });
+      expect(result).toBeNull();
+
+      const failure = useModelFailureStore.getState().failures.find(f => f.modelType === 'image');
+      expect(failure).toBeDefined();
+      // The discriminant survived the layers (this is the exact regression).
+      expect(failure!.overridable).toBe(true);
+      expect(typeof failure!.onLoadAnyway).toBe('function');
+
+      // Invoke "Load Anyway" → it must re-attempt the load FORCING past the budget.
+      failure!.onLoadAnyway!();
+      for (let i = 0; i < 6; i++) await flushPromises();
+
+      expect(mockActiveModelService.loadImageModel).toHaveBeenLastCalledWith(
+        'img-model-1',
+        undefined,
+        { override: true },
+      );
+    });
+
+    it('stops offering Load Anyway once the override retry also fails (no repeated no-op)', async () => {
+      setupImageModelState();
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(false);
+      // First load: an overridable gate. The override retry hits the survival floor, so
+      // the service reports it as a NON-overridable hard limit (a plain Error) — the exact
+      // behavior checkImageModelCanLoad now produces under { override: true }.
+      mockActiveModelService.loadImageModel
+        .mockRejectedValueOnce(
+          new OverridableMemoryError('Not enough memory to load Test Model. Free up space or choose a smaller model.'),
+        )
+        .mockRejectedValue(
+          new Error('Not enough memory to load Test Model, even after freeing other models. Close other apps or choose a smaller model.'),
+        );
+
+      await imageGenerationService.generateImage({ prompt: 'a fox' });
+      const first = useModelFailureStore.getState().failures.find(f => f.modelType === 'image');
+      expect(first!.overridable).toBe(true);
+      expect(typeof first!.onLoadAnyway).toBe('function');
+
+      // Press "Load Anyway" → the forced retry fails as a hard limit.
+      first!.onLoadAnyway!();
+      for (let i = 0; i < 6; i++) await flushPromises();
+
+      // The card must NOT keep offering "Load Anyway" — the action would be a no-op.
+      const after = useModelFailureStore.getState().failures.find(f => f.modelType === 'image');
+      expect(after).toBeDefined();
+      expect(after!.overridable).toBeFalsy();
+      expect(after!.onLoadAnyway).toBeUndefined();
+    });
+
+    it('does NOT offer Load Anyway for a NON-overridable load failure (false branch)', async () => {
+      setupImageModelState();
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(false);
+      mockActiveModelService.loadImageModel.mockRejectedValue(new Error('Pipeline failed: model corrupt'));
+
+      const result = await imageGenerationService.generateImage({ prompt: 'a fox' });
+      expect(result).toBeNull();
+
+      const failure = useModelFailureStore.getState().failures.find(f => f.modelType === 'image');
+      expect(failure).toBeDefined();
+      expect(failure!.overridable).toBeFalsy();
+      expect(failure!.onLoadAnyway).toBeUndefined();
+    });
   });
 
   describe('_ensureImageModelLoaded with null activeImageModelId', () => {
@@ -1590,7 +1741,7 @@ describe('Image Generation Flow Integration', () => {
       mockLocalDreamService.getLoadedModelPath.mockResolvedValue(null);
       mockLocalDreamService.getLoadedThreads.mockReturnValue(4);
 
-      const result = await (imageGenerationService as any)._ensureImageModelLoaded(null, fakeModel, 4);
+      const result = await (imageGenerationService as any)._ensureImageModelLoaded(null, fakeModel, { desiredThreads: 4 });
 
       expect(result).toBe(false);
       expect(imageGenerationService.getState().error).toBe('No image model selected');

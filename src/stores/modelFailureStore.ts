@@ -21,6 +21,13 @@ export interface ModelFailure {
   onRetry?: () => void;
   /** Insufficient-memory failure → the card adds "close other apps to free RAM". */
   memoryPressure?: boolean;
+  /** The failure came from the OVERRIDABLE memory gate (OverridableMemoryError) —
+   *  the same discriminant the text path uses to offer "Load Anyway". Derived once
+   *  in reportModelFailure from the error type, never re-sniffed from the message. */
+  overridable?: boolean;
+  /** When set (and `overridable`), the card shows a "Load Anyway" button that runs
+   *  this — re-attempts the load forcing past the budget ({ override: true }). */
+  onLoadAnyway?: () => void;
 }
 
 interface ModelFailureState {

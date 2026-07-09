@@ -7,6 +7,7 @@
  */
 
 import logger from '../utils/logger';
+import { templateEmitsReasoning } from '../utils/messageContent';
 
 export interface RemoteModelInfo {
   contextLength: number;
@@ -348,12 +349,17 @@ export function parsePropsCapabilities(data: unknown): RemoteModelInfo | null {
   // reports supports_preserve_reasoning=false). The reliable capability signal is the
   // chat template exposing an `enable_thinking` switch or `<think>` blocks.
   const template = typeof root.chat_template === 'string' ? root.chat_template : '';
-  // A template that references `enable_thinking` honors the chat_template_kwargs
-  // switch — the request builder can toggle reasoning per request on this server.
+  // A template referencing `enable_thinking` honors the chat_template_kwargs switch,
+  // so the request builder can toggle reasoning per request on this server. This is a
+  // distinct signal from supportsThinking (capability) and is returned for the builder.
   const acceptsThinkingKwarg = /enable_thinking/.test(template);
+  // Template-based reasoning detection goes through the SHARED predicate
+  // (templateEmitsReasoning) so remote and on-device (llmHelpers.detectThinkingSupport)
+  // never diverge on the same template - it covers both the enable_thinking kwarg switch
+  // and the <think>/channel output delimiters. The server-reported signals below are
+  // extra capability evidence specific to the remote path.
   const supportsThinking =
-    acceptsThinkingKwarg ||
-    /<think>/.test(template) ||
+    templateEmitsReasoning(template) ||
     templateCaps?.supports_preserve_reasoning === true ||
     (reasoningFormat !== 'none' && reasoningFormat !== '');
 

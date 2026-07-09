@@ -27,6 +27,14 @@ describe('templateEmitsReasoning', () => {
     expect(templateEmitsReasoning('a <|channel|>analysis<|message|> b')).toBe(true);
   });
 
+  it('detects an enable_thinking-kwarg template (capability, no literal <think> in the template)', () => {
+    // The reliable reasoning-capability signal remoteModelCapabilities keys on: a
+    // template that exposes the enable_thinking switch supports reasoning on demand
+    // even if it does not embed a literal <think>. Local detection MUST agree with
+    // remote, or a model reads reasoning-capable on the gateway but not on-device (OD7 §C).
+    expect(templateEmitsReasoning('{%- if enable_thinking %}...{%- endif %}')).toBe(true);
+  });
+
   it('returns false for a plain (non-reasoning) chat template', () => {
     expect(templateEmitsReasoning('{{ bos }}{{ system }}{{ user }}{{ assistant }}')).toBe(false);
   });

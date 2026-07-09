@@ -661,6 +661,10 @@ function resolveToolCalls(fullResponse: string, toolCalls: ToolCall[]) {
     if (fullResponse.includes('<|tool_call>') || fullResponse.includes('<tool_call:')) {
       const parsed = parseGemmaNativeToolCalls(fullResponse);
       if (parsed.toolCalls.length > 0) {
+        // FALLBACK FIRED: native tool_calls were empty but raw Gemma markup was present, so we
+        // hand-parsed. With reasoning_format:'auto' this should stop happening once llama.cpp parses
+        // Gemma natively — if this never logs on-device, the hand-parser is safe to delete (Step 5).
+        logger.log(`[ToolLoop][GEMMA-FALLBACK] hand-parsed ${parsed.toolCalls.length} tool call(s) from raw markup — native tool_calls were empty`);
         effectiveToolCalls = parsed.toolCalls;
         displayResponse = parsed.cleanText;
       }

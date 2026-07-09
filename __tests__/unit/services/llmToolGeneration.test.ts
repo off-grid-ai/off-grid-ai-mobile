@@ -130,6 +130,20 @@ describe('generateWithToolsImpl', () => {
       expect(callArgs.reasoning_format).toBe('deepseek');
     });
 
+    it('uses reasoning_format auto for Gemma 4 so llama.cpp parses its channel format natively', async () => {
+      // Native-first: instead of forcing 'none' and hand-parsing Gemma's <|channel>thought format,
+      // let llama.cpp detect the chat_format and populate reasoning_content/tool_calls itself. Our
+      // hand-parse fallback only runs when those come back empty, so this is safe.
+      const completion = jest.fn(async (_params: any, _cb: any) => ({}));
+      const deps = createMockDeps({ context: { completion }, isThinkingEnabled: true, isGemma4Model: true });
+
+      await generateWithToolsImpl(deps, [createUserMessage('Hello')], { tools: SAMPLE_TOOLS });
+
+      const callArgs = completion.mock.calls[0][0];
+      expect(callArgs.enable_thinking).toBe(true);
+      expect(callArgs.reasoning_format).toBe('auto');
+    });
+
     it('disables llama.rn reasoning extraction when thinking is off', async () => {
       const completion = jest.fn(async (_params: any, _cb: any) => ({}));
       const deps = createMockDeps({ context: { completion }, isThinkingEnabled: false });

@@ -268,10 +268,17 @@ export function supportsNativeThinking(context: LlamaContext | null): boolean {
     return false;
   }
 }
-export function buildThinkingCompletionParams(enableThinking: boolean, isGemma4: boolean = false): { enable_thinking: boolean; reasoning_format: 'none' | 'deepseek' } {
-  // Gemma 4 uses its own <|channel>thought\n...<channel|> format — not DeepSeek's <think> tags.
-  // Set reasoning_format:'none' so llama.rn doesn't try to strip DeepSeek tags; we parse it ourselves.
-  return { enable_thinking: enableThinking, reasoning_format: (enableThinking && !isGemma4) ? 'deepseek' : 'none' };
+export function buildThinkingCompletionParams(enableThinking: boolean, isGemma4: boolean = false): { enable_thinking: boolean; reasoning_format: 'none' | 'auto' | 'deepseek' } {
+  if (!enableThinking) return { enable_thinking: false, reasoning_format: 'none' };
+  // Native-first (parse-once at the runtime boundary): Gemma 4 uses its own
+  // <|channel>thought\n...<channel|> format, not DeepSeek's <think> tags. reasoning_format:'auto'
+  // lets llama.cpp detect the model's chat_format and parse reasoning + tool calls NATIVELY —
+  // populating reasoning_content/tool_calls and returning already-filtered content — instead of
+  // forcing 'none' and hand-parsing the raw channel tags ourselves. Safe by construction: finalize
+  // and resolveToolCalls only fall back to our hand-parser when the native fields are empty, so
+  // native wins when it works and the hand-parser is a pure fallback. (Non-Gemma reasoning models
+  // keep the known-good 'deepseek' path.)
+  return { enable_thinking: true, reasoning_format: isGemma4 ? 'auto' : 'deepseek' };
 }
 export function getStreamingDelta(nextValue: string | undefined, previousValue: string): string | undefined {
   if (!nextValue) return undefined;

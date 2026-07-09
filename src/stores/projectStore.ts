@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Project } from '../types';
 import { generateId } from '../utils/generateId';
 import { ragService } from '../services/rag';
+import { mergeById } from '@offgrid/sync/portable';
 import logger from '../utils/logger';
 
 interface ProjectState {
@@ -15,6 +16,11 @@ interface ProjectState {
   deleteProject: (id: string) => void;
   getProject: (id: string) => Project | undefined;
   duplicateProject: (id: string) => Project | null;
+  /**
+   * Additively merge imported projects (restore). Projects whose id already
+   * exists are left untouched; only new ids are added. Returns the ids added.
+   */
+  importProjects: (incoming: Project[]) => string[];
 }
 
 // Default projects as examples
@@ -140,6 +146,12 @@ export const useProjectStore = create<ProjectState>()(
         }));
 
         return duplicate;
+      },
+
+      importProjects: (incoming) => {
+        const { merged, addedIds } = mergeById(get().projects, incoming);
+        if (addedIds.length > 0) set({ projects: merged });
+        return addedIds;
       },
     }),
     {

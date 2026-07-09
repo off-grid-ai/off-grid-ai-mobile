@@ -11,7 +11,7 @@
  */
 
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, act } from '@testing-library/react-native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { useProjectStore } from '../../../src/stores/projectStore';
@@ -76,11 +76,16 @@ jest.mock('../../../src/components/CustomAlert', () => ({
       <View testID="custom-alert">
         <Text testID="alert-title">{title}</Text>
         <Text testID="alert-message">{message}</Text>
-        {buttons && buttons.map((btn: any, i: number) => (
-          <TO key={i} testID={`alert-button-${btn.text}`} onPress={btn.onPress}>
-            <Text>{btn.text}</Text>
-          </TO>
-        ))}
+        {buttons &&
+          buttons.map((btn: any, i: number) => (
+            <TO
+              key={i}
+              testID={`alert-button-${btn.text}`}
+              onPress={btn.onPress}
+            >
+              <Text>{btn.text}</Text>
+            </TO>
+          ))}
       </View>
     );
   },
@@ -115,6 +120,18 @@ jest.mock('../../../src/services', () => ({
   },
   remoteServerManager: {
     clearActiveRemoteModel: jest.fn(),
+  },
+}));
+
+// Mock the backup service boundary: the screen test proves the export action is
+// WIRED to exportConversation; the export logic itself is tested in the engine +
+// data-port suites.
+const mockExportConversation = jest.fn((..._args: unknown[]) =>
+  Promise.resolve({ method: 'shared' }),
+);
+jest.mock('../../../src/services/backup', () => ({
+  backupService: {
+    exportConversation: (...args: any[]) => mockExportConversation(...args),
   },
 }));
 
@@ -531,8 +548,10 @@ describe('ChatsListScreen', () => {
       for (const btn of touchables) {
         mockShowAlert.mockClear();
         fireEvent.press(btn);
-        if (mockShowAlert.mock.calls.length > 0 &&
-            mockShowAlert.mock.calls[0][0] === 'Delete Chat') {
+        if (
+          mockShowAlert.mock.calls.length > 0 &&
+          mockShowAlert.mock.calls[0][0] === 'Delete Chat'
+        ) {
           break;
         }
       }
@@ -542,6 +561,18 @@ describe('ChatsListScreen', () => {
         expect.stringContaining('Delete Me'),
         expect.any(Array),
       );
+    });
+
+    it('exports a conversation when the export swipe action is pressed', async () => {
+      const conv = createConversation({ title: 'Export Me' });
+      useChatStore.setState({ conversations: [conv] });
+
+      const { getByTestId } = render(<ChatsListScreen />);
+      await act(async () => {
+        fireEvent.press(getByTestId(`export-chat-${conv.id}`));
+      });
+
+      expect(mockExportConversation).toHaveBeenCalledWith(conv.id);
     });
 
     it('deletes conversation and images when confirmed', async () => {
@@ -558,8 +589,10 @@ describe('ChatsListScreen', () => {
       for (const btn of touchables) {
         mockShowAlert.mockClear();
         fireEvent.press(btn);
-        if (mockShowAlert.mock.calls.length > 0 &&
-            mockShowAlert.mock.calls[0][0] === 'Delete Chat') {
+        if (
+          mockShowAlert.mock.calls.length > 0 &&
+          mockShowAlert.mock.calls[0][0] === 'Delete Chat'
+        ) {
           break;
         }
       }

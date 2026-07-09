@@ -30,6 +30,23 @@ export interface StoredEmbedding {
   embedding: number[];
 }
 
+/** A chunk as it travels in a backup: its text, order, and vector (null if none). */
+export interface ExportedChunk {
+  content: string;
+  position: number;
+  embedding: number[] | null;
+}
+
+/** A knowledge-base document as it travels in a backup — no device-local ids. */
+export interface ExportedDocument {
+  name: string;
+  path: string;
+  size: number;
+  enabled: boolean;
+  createdAt: string;
+  chunks: ExportedChunk[];
+}
+
 class RagDatabase {
   private db: DB | null = null;
   private ready = false;
@@ -204,6 +221,84 @@ class RagDatabase {
       [projectId, topK]
     );
     return (result.rows ?? []) as unknown as RagSearchResult[];
+  }
+
+  /**
+   * Export a project's full knowledge base as a portable tree (no row ids): each
+   * document with its chunks in order, each chunk carrying its embedding vector
+   * (null when the chunk was never embedded). Includes disabled documents so the
+   * enabled/disabled state survives a restore.
+   */
+  exportProjectDocuments(projectId: string): ExportedDocument[] {
+    const db = this.getDb();
+    const docs = this.getDocumentsByProject(projectId);
+    return docs.map((doc) => {
+      const chunkRows = db.executeSync(
+        'SELECT id, content, position FROM rag_chunks WHERE doc_id = ? ORDER BY position',
+        [doc.id],
+      );
+      const chunks = (chunkRows.rows ?? []) as unknown as { id: number; content: string; position: number }[];
+      const embRows = db.executeSync(
+        'SELECT chunk_rowid, embedding FROM rag_embeddings WHERE doc_id = ?',
+        [doc.id],
+      );
+      const byChunk = new Map<number, number[]>();
+      for (const row of (embRows.rows ?? []) as unknown as { chunk_rowid: number; embedding: unknown }[]) {
+        byChunk.set(row.chunk_rowid, this.blobToEmbedding(row.embedding));
+      }
+      return {
+        name: doc.name,
+        path: doc.path,
+        size: doc.size,
+        enabled: doc.enabled === 1,
+        createdAt: doc.created_at,
+        chunks: chunks.map((c) => ({
+          content: c.content,
+          position: c.position,
+          embedding: byChunk.get(c.id) ?? null,
+        })),
+      };
+    });
+  }
+
+  /**
+   * Import one document into a project, rebuilding its chunk/embedding tree with
+   * fresh local ids in a single transaction. NON-DESTRUCTIVE: if a document with
+   * the same name already exists in the project it is skipped (returns false).
+   * Chunk embeddings that are null are left unembedded for the caller to backfill.
+   */
+  importDocument(projectId: string, doc: ExportedDocument): boolean {
+    const db = this.getDb();
+    const existing = this.getDocumentsByProject(projectId);
+    if (existing.some((d) => d.name === doc.name)) return false;
+    db.executeSync('BEGIN');
+    try {
+      const docResult = db.executeSync(
+        'INSERT INTO rag_documents (project_id, name, path, size, created_at, enabled) VALUES (?, ?, ?, ?, ?, ?)',
+        [projectId, doc.name, doc.path, doc.size, doc.createdAt, doc.enabled ? 1 : 0],
+      );
+      const docId = docResult.insertId;
+      if (docId == null) throw new Error('Failed to insert document: no insertId returned');
+      for (const chunk of doc.chunks) {
+        const chunkResult = db.executeSync(
+          'INSERT INTO rag_chunks (content, doc_id, position) VALUES (?, ?, ?)',
+          [chunk.content, docId, chunk.position],
+        );
+        const chunkId = chunkResult.insertId;
+        if (chunkId == null) throw new Error('Failed to insert chunk: no insertId returned');
+        if (chunk.embedding) {
+          db.executeSync(
+            'INSERT INTO rag_embeddings (chunk_rowid, doc_id, embedding) VALUES (?, ?, ?)',
+            [chunkId, docId, this.embeddingToBlob(chunk.embedding)],
+          );
+        }
+      }
+      db.executeSync('COMMIT');
+      return true;
+    } catch (e) {
+      db.executeSync('ROLLBACK');
+      throw e;
+    }
   }
 
   deleteDocumentsByProject(projectId: string): void {

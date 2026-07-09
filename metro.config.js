@@ -8,11 +8,26 @@ const proStubPath = path.resolve(__dirname, 'src/bootstrap/proStub.js');
 // for a real file inside it (package.json) to detect a populated submodule.
 const proExists = fs.existsSync(path.resolve(proPackagePath, 'package.json'));
 
+// The shared @offgrid/sync package (portable-bundle core + transport) lives
+// outside the project root, so Metro must watch its source and follow the
+// file: symlink npm drops in node_modules.
+const syncPackagePath = path.resolve(
+  __dirname,
+  '..',
+  'shared',
+  'packages',
+  'sync',
+);
+
 const config = {
   // pro/ is a submodule inside the project root, so Metro already watches it by
   // default; nothing extra needed here. (When absent it's just an empty dir.)
-  watchFolders: [],
+  // The shared sync package is outside the root, so it IS listed here.
+  watchFolders: [syncPackagePath],
   resolver: {
+    // @offgrid/sync ships subpath exports (`@offgrid/sync/portable`, `/rn`),
+    // so Metro must honour the package `exports` field to resolve them.
+    unstable_enablePackageExports: true,
     // When resolving modules from outside the project root (i.e. @offgrid/pro),
     // Metro falls back here so @babel/runtime and all other peer deps are found.
     nodeModulesPaths: [path.resolve(__dirname, 'node_modules')],
@@ -28,7 +43,10 @@ const config = {
       // maintained fork '@dr.pogodin/react-native-fs'. Shipping both produces
       // duplicate RNFS Objective-C symbols at link time on iOS, so we alias the
       // old name onto the fork and keep a single native module.
-      'react-native-fs': path.resolve(__dirname, 'src/shims/react-native-fs.ts'),
+      'react-native-fs': path.resolve(
+        __dirname,
+        'src/shims/react-native-fs.ts',
+      ),
     },
   },
 };

@@ -30,6 +30,8 @@ import { WhisperPickerSheet } from '../../components/models/WhisperPickerSheet';
 import { VoiceModelsSheet } from '../../components/models/VoiceModelsSheet';
 import { useWhisperStore } from '../../stores/whisperStore';
 import { WHISPER_MODELS } from '../../services';
+import { useScreenReaderEnabled } from '../../hooks/useScreenReaderEnabled';
+import { focusMovingScrollAllowed, shouldFollowStream } from './autoScroll';
 
 function countConversationImages(conv: Conversation | undefined): number {
   return (conv?.messages || []).reduce((n: number, m: Message) =>
@@ -38,6 +40,8 @@ function countConversationImages(conv: Conversation | undefined): number {
 export const ChatScreen: React.FC = () => {
   const flatListRef = React.useRef<FlatList>(null);
   const isNearBottomRef = React.useRef(true);
+  // Screen-reader state gates the chat's focus-moving auto-scroll (see autoScroll.ts).
+  const screenReaderEnabled = useScreenReaderEnabled();
   const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -180,18 +184,25 @@ export const ChatScreen: React.FC = () => {
   }, [generatedImages.length, shownSpotlights, onboardingChecklist.triedImageGen, markSpotlightShown, goTo]);
 
   React.useEffect(() => {
-    if (chat.activeConversation?.messages.length && isNearBottomRef.current) {
+    if (
+      chat.activeConversation?.messages.length &&
+      shouldFollowStream({ isNearBottom: isNearBottomRef.current, screenReaderEnabled })
+    ) {
       setTimeout(() => { flatListRef.current?.scrollToEnd({ animated: true }); }, 100);
     }
-  }, [chat.activeConversation?.messages.length]);
+  }, [chat.activeConversation?.messages.length, screenReaderEnabled]);
 
   React.useEffect(() => {
     const event = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const sub = Keyboard.addListener(event, () => {
-      flatListRef.current?.scrollToEnd({ animated: true });
+      // Revealing the input on keyboard-open still moves focus, so a screen
+      // reader vetoes it too.
+      if (focusMovingScrollAllowed(screenReaderEnabled)) {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }
     });
     return () => sub.remove();
-  }, []);
+  }, [screenReaderEnabled]);
 
   // Reset scroll when switching between chat/audio interface modes
   const interfaceMode = useUiModeStore((s) => s.interfaceMode);
@@ -303,6 +314,7 @@ export const ChatScreen: React.FC = () => {
         <ChatMessageArea
           flatListRef={flatListRef}
           isNearBottomRef={isNearBottomRef}
+          screenReaderEnabled={screenReaderEnabled}
           chat={chat}
           styles={styles}
           colors={colors}

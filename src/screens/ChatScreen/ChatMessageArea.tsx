@@ -22,10 +22,12 @@ import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
+import { focusMovingScrollAllowed, shouldFollowStream } from './autoScroll';
 
 export type ChatMessageAreaProps = {
   flatListRef: React.RefObject<FlatList | null>;
   isNearBottomRef: React.MutableRefObject<boolean>;
+  screenReaderEnabled: boolean;
   chat: ReturnType<typeof useChatScreen>;
   styles: ReturnType<typeof createStyles>;
   colors: ReturnType<typeof useTheme>['colors'];
@@ -112,7 +114,7 @@ const ModelStatusBar: React.FC<{ loading: boolean; classifying: boolean; modelNa
 };
 
 export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
-  flatListRef, isNearBottomRef, chat, styles, colors, handleScroll, renderItem, chatSpotlight,
+  flatListRef, isNearBottomRef, screenReaderEnabled, chat, styles, colors, handleScroll, renderItem, chatSpotlight,
 }) => {
   // Hide FlatList until initial layout + scroll is complete to prevent visible scroll jump
   const [isListReady, setIsListReady] = useState(false);
@@ -203,7 +205,7 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
               requestAnimationFrame(() => {
                 requestAnimationFrame(() => setIsListReady(true));
               });
-            } else if (isNearBottomRef.current) {
+            } else if (shouldFollowStream({ isNearBottom: isNearBottomRef.current, screenReaderEnabled })) {
               flatListRef.current?.scrollToEnd({ animated: false });
             }
           }}
@@ -211,7 +213,7 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
             const newHeight = e.nativeEvent.layout.height;
             const prevHeight = flatListHeightRef.current;
             flatListHeightRef.current = newHeight;
-            if (prevHeight > 0 && newHeight < prevHeight) {
+            if (prevHeight > 0 && newHeight < prevHeight && focusMovingScrollAllowed(screenReaderEnabled)) {
               setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
             }
           }}
@@ -219,7 +221,13 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
           onTouchStart={() => Keyboard.dismiss()}
-          maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: 100 }}
+          // Re-anchoring content position moves the screen reader's focus, so
+          // disable it while a screen reader is active (capability-as-data).
+          maintainVisibleContentPosition={
+            focusMovingScrollAllowed(screenReaderEnabled)
+              ? { minIndexForVisible: 0, autoscrollToTopThreshold: 100 }
+              : undefined
+          }
           removeClippedSubviews={Platform.OS !== 'android'}
         />
       )}

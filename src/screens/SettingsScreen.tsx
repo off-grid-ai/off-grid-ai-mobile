@@ -193,6 +193,7 @@ export const SettingsScreen: React.FC = () => {
               { icon: 'lock', title: 'Security', desc: 'Passphrase and app lock', screen: 'SecuritySettings' as const },
               { icon: 'smartphone', title: 'Device Information', desc: 'Hardware and compatibility', screen: 'DeviceInfo' as const },
               { icon: 'hard-drive', title: 'Storage', desc: 'Models and data usage', screen: 'StorageSettings' as const },
+              { icon: 'download-cloud', title: 'Backup & Restore', desc: 'Export your projects and chats to a file, or restore them', screen: 'BackupRestore' as const },
             ].map((item, index, arr) => (
               <AnimatedListItem
                 key={item.screen}

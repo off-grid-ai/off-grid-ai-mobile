@@ -17,6 +17,7 @@ export type RootStackParamList = {
   RemoteServers: undefined;
   DeviceInfo: undefined;
   StorageSettings: undefined;
+  BackupRestore: undefined;
   SecuritySettings: undefined;
   // Already in RootStack
   DownloadManager: undefined;

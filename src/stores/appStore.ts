@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, CacheType, InferenceBackend, INFERENCE_BACKENDS, LiteRTBackend, GeneratedImage } from '../types';
+import { mergeById } from '@offgrid/sync/portable';
 
 function isUnknownLike(value: string): boolean {
   const normalized = value.trim().toLowerCase();
@@ -45,7 +46,7 @@ type OnboardingChecklist = {
   triedImageGen: boolean; exploredSettings: boolean; createdProject: boolean;
 };
 
-type AppSettings = {
+export type AppSettings = {
   systemPrompt: string; temperature: number; maxTokens: number;
   topP: number; repeatPenalty: number; contextLength: number;
   nThreads: number; nBatch: number;
@@ -128,6 +129,8 @@ interface AppState {
   setImagePreviewPath: (path: string | null) => void;
   generatedImages: GeneratedImage[];
   addGeneratedImage: (image: GeneratedImage) => void;
+  /** Additively merge imported gallery images (restore). Only new ids are added. Returns ids added. */
+  importGeneratedImages: (images: GeneratedImage[]) => string[];
   removeGeneratedImage: (imageId: string) => void;
   removeImagesByConversationId: (conversationId: string) => string[];
   clearGeneratedImages: () => void;
@@ -361,6 +364,11 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           generatedImages: [image, ...state.generatedImages],
         })),
+      importGeneratedImages: (images) => {
+        const { merged, addedIds } = mergeById(get().generatedImages, images);
+        if (addedIds.length > 0) set({ generatedImages: merged });
+        return addedIds;
+      },
       removeGeneratedImage: (imageId) =>
         set((state) => ({
           generatedImages: state.generatedImages.filter((img) => img.id !== imageId),

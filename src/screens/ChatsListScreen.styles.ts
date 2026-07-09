@@ -1,0 +1,140 @@
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { TYPOGRAPHY, SPACING } from '../constants';
+
+export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  swipeableContainer: {
+    overflow: 'visible' as const,
+  },
+  header: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface,
+    ...shadows.small,
+    zIndex: 1,
+  },
+  title: {
+    ...TYPOGRAPHY.h2,
+    color: colors.text,
+  },
+  list: {
+    padding: SPACING.lg,
+  },
+  chatItem: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: colors.surface,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm + 2,
+    borderRadius: 10,
+    marginBottom: SPACING.md,
+    ...shadows.small,
+  },
+  chatContent: {
+    flex: 1,
+  },
+  chatHeader: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+  },
+  chatTitle: {
+    ...TYPOGRAPHY.bodySmall,
+    color: colors.text,
+    flex: 1,
+    marginRight: SPACING.sm,
+  },
+  chatDate: {
+    ...TYPOGRAPHY.metaSmall,
+    color: colors.textMuted,
+  },
+  chatPreview: {
+    ...TYPOGRAPHY.meta,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  projectBadge: {
+    alignSelf: 'flex-start' as const,
+    backgroundColor: colors.surfaceLight,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs / 2,
+    borderRadius: 4,
+    marginTop: SPACING.sm - 2,
+  },
+  projectBadgeText: {
+    ...TYPOGRAPHY.meta,
+    color: colors.textMuted,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: SPACING.xxl + SPACING.sm,
+  },
+  emptyIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginBottom: SPACING.xl - SPACING.xs,
+  },
+  emptyTitle: {
+    ...TYPOGRAPHY.h2,
+    color: colors.text,
+    marginBottom: SPACING.sm,
+  },
+  emptyText: {
+    ...TYPOGRAPHY.bodySmall,
+    color: colors.textSecondary,
+    textAlign: 'center' as const,
+    lineHeight: 20,
+    marginBottom: SPACING.xl,
+  },
+  emptyButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: colors.primary,
+    paddingHorizontal: SPACING.xl - SPACING.xs,
+    paddingVertical: SPACING.md,
+    borderRadius: 8,
+    gap: SPACING.sm,
+  },
+  emptyButtonText: {
+    ...TYPOGRAPHY.body,
+    color: colors.primary,
+  },
+  rightActions: {
+    flexDirection: 'row' as const,
+  },
+  exportAction: {
+    backgroundColor: colors.surfaceLight,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    width: 44,
+    borderRadius: 10,
+    marginBottom: SPACING.md,
+    marginLeft: SPACING.sm,
+  },
+  deleteAction: {
+    backgroundColor: colors.errorBackground,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    width: 44,
+    borderRadius: 10,
+    marginBottom: SPACING.md,
+    marginLeft: SPACING.sm,
+  },
+});

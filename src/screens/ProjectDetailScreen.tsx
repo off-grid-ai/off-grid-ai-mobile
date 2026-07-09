@@ -18,6 +18,9 @@ import { useChatStore, useProjectStore, useAppStore } from '../stores';
 import { Conversation } from '../types';
 import { RootStackParamList } from '../navigation/types';
 import { KnowledgeBaseSection } from './ProjectDetailKnowledgeBaseSection';
+import { backupService } from '../services/backup';
+import { formatDeliveryMessage } from './BackupRestoreScreen/messages';
+import logger from '../utils/logger';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type RouteProps = RouteProp<RootStackParamList, 'ProjectDetail'>;
@@ -75,6 +78,24 @@ export const ProjectDetailScreen: React.FC = () => {
         },
       ]
     ));
+  };
+
+  const [exporting, setExporting] = useState(false);
+  const handleExportProject = async () => {
+    setExporting(true);
+    try {
+      const result = await backupService.exportProject(projectId);
+      setAlertState(
+        result
+          ? showAlert('Backup created', formatDeliveryMessage(result))
+          : showAlert('Nothing to export', 'This project could not be found.'),
+      );
+    } catch (e) {
+      logger.error('[Backup] project export failed', e);
+      setAlertState(showAlert('Export failed', e instanceof Error ? e.message : String(e)));
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handleDeleteChat = (conversation: Conversation) => {
@@ -254,8 +275,17 @@ export const ProjectDetailScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* Delete Project Button */}
+      {/* Export + Delete Project Buttons */}
       <View style={styles.footer}>
+        <Button
+          title="Export Project"
+          variant="ghost"
+          size="medium"
+          onPress={handleExportProject}
+          loading={exporting}
+          disabled={exporting}
+          icon={<Icon name="upload" size={16} color={colors.primary} />}
+        />
         <Button
           title="Delete Project"
           variant="ghost"

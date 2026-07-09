@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Message, Conversation, GenerationMeta } from '../types';
 import { stripControlTokens, stripStreamingControlTokens } from '../utils/messageContent';
 import { generateId } from '../utils/generateId';
+import { mergeById } from '@offgrid/sync/portable';
 import { callHook, HOOKS } from '../bootstrap/hookRegistry';
 
 function nextUpdatedAt(previousUpdatedAt?: string): string {
@@ -155,6 +156,12 @@ interface ChatState {
   updateCompactionState: (conversationId: string, summary?: string, cutoffMessageId?: string) => void;
   clearAllConversations: () => void;
   getConversationMessages: (conversationId: string) => Message[];
+  /**
+   * Additively merge imported conversations (restore). Conversations whose id
+   * already exists are left untouched; only new ids are added. Returns the ids
+   * added. This is what adds a project's missing chats to an existing project.
+   */
+  importConversations: (incoming: Conversation[]) => string[];
 }
 
 export const useChatStore = create<ChatState>()(
@@ -396,6 +403,12 @@ export const useChatStore = create<ChatState>()(
       getConversationMessages: (conversationId) => {
         const conversation = get().conversations.find((c) => c.id === conversationId);
         return conversation?.messages || [];
+      },
+
+      importConversations: (incoming) => {
+        const { merged, addedIds } = mergeById(get().conversations, incoming);
+        if (addedIds.length > 0) set({ conversations: merged });
+        return addedIds;
       },
     }),
     {

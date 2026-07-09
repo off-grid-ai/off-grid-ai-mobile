@@ -1,27 +1,45 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
+import {
+  useNavigation,
+  CompositeNavigationProp,
+} from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import Icon from 'react-native-vector-icons/Feather';
 import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
-import { IMAGE_NEW_CHAT_STEP_INDEX, IMAGE_DRAW_STEP_INDEX } from '../components/onboarding/spotlightConfig';
+import {
+  IMAGE_NEW_CHAT_STEP_INDEX,
+  IMAGE_DRAW_STEP_INDEX,
+} from '../components/onboarding/spotlightConfig';
 import { setPendingSpotlight } from '../components/onboarding/spotlightState';
 import { Button } from '../components/Button';
 import { ModelSelectorModal } from '../components';
-import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
+import {
+  CustomAlert,
+  showAlert,
+  hideAlert,
+  AlertState,
+  initialAlertState,
+} from '../components/CustomAlert';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import { useTheme, useThemedStyles } from '../theme';
-import type { ThemeColors, ThemeShadows } from '../theme';
-import { TYPOGRAPHY, SPACING } from '../constants';
+import { createStyles } from './ChatsListScreen.styles';
 import { useChatStore, useProjectStore, useAppStore } from '../stores';
 import { useActiveTextModel } from '../hooks/useActiveTextModel';
-import { onnxImageGeneratorService, activeModelService, llmService, remoteServerManager } from '../services';
+import {
+  onnxImageGeneratorService,
+  activeModelService,
+  llmService,
+  remoteServerManager,
+} from '../services';
 import { loadModelWithOverride } from '../services/loadModelWithOverride';
+import { backupService } from '../services/backup';
+import { formatDeliveryMessage } from './BackupRestoreScreen/messages';
 import { Conversation } from '../types';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
 type NavigationProp = CompositeNavigationProp<
@@ -40,7 +58,8 @@ export const ChatsListScreen: React.FC = () => {
   const activeImageModelId = useAppStore(s => s.activeImageModelId);
   const onboardingChecklist = useAppStore(s => s.onboardingChecklist);
   const shownSpotlights = useAppStore(s => s.shownSpotlights);
-  const { removeImagesByConversationId, markSpotlightShown } = useAppStore.getState();
+  const { removeImagesByConversationId, markSpotlightShown } =
+    useAppStore.getState();
   const { modelId: activeTextModelId } = useActiveTextModel();
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const [showModelSelector, setShowModelSelector] = useState(false);
@@ -59,7 +78,13 @@ export const ChatsListScreen: React.FC = () => {
       setPendingSpotlight(IMAGE_DRAW_STEP_INDEX);
       setTimeout(() => goTo(IMAGE_NEW_CHAT_STEP_INDEX), 800);
     }
-  }, [activeImageModelId, shownSpotlights, onboardingChecklist.triedImageGen, markSpotlightShown, goTo]);
+  }, [
+    activeImageModelId,
+    shownSpotlights,
+    onboardingChecklist.triedImageGen,
+    markSpotlightShown,
+    goTo,
+  ]);
 
   const hasModels = !!activeTextModelId || !!activeImageModelId;
 
@@ -80,24 +105,30 @@ export const ChatsListScreen: React.FC = () => {
     // Shared inline Load-Anyway flow: a memory-blocked load offers "Load Anyway"
     // here just like the chat screen (was a dead-end "Failed to load model").
     await loadModelWithOverride(
-      (opts) => activeModelService.loadTextModel(model.id, undefined, opts),
+      opts => activeModelService.loadTextModel(model.id, undefined, opts),
       {
         setAlertState,
         onAttemptStart: () => setIsModelLoading(true),
         onAttemptEnd: () => setIsModelLoading(false),
-        onSuccess: () => { setShowModelSelector(false); navigation.navigate('Chat', {}); },
+        onSuccess: () => {
+          setShowModelSelector(false);
+          navigation.navigate('Chat', {});
+        },
       },
     );
   };
 
   const handleSelectImageModel = async (model: any) => {
     await loadModelWithOverride(
-      (opts) => activeModelService.loadImageModel(model.id, undefined, opts),
+      opts => activeModelService.loadImageModel(model.id, undefined, opts),
       {
         setAlertState,
         onAttemptStart: () => setIsModelLoading(true),
         onAttemptEnd: () => setIsModelLoading(false),
-        onSuccess: () => { setShowModelSelector(false); navigation.navigate('Chat', {}); },
+        onSuccess: () => {
+          setShowModelSelector(false);
+          navigation.navigate('Chat', {});
+        },
       },
     );
   };
@@ -124,53 +155,92 @@ export const ChatsListScreen: React.FC = () => {
   };
 
   const handleDeleteChat = (conversation: Conversation) => {
-    setAlertState(showAlert(
-      'Delete Chat',
-      `Delete "${conversation.title}"? This will also delete all images generated in this chat.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            setAlertState(hideAlert());
-            const imageIds = removeImagesByConversationId(conversation.id);
-            for (const imageId of imageIds) {
-              onnxImageGeneratorService.deleteGeneratedImage(imageId).catch(() => {});
-            }
-            deleteConversation(conversation.id);
+    setAlertState(
+      showAlert(
+        'Delete Chat',
+        `Delete "${conversation.title}"? This will also delete all images generated in this chat.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: () => {
+              setAlertState(hideAlert());
+              const imageIds = removeImagesByConversationId(conversation.id);
+              for (const imageId of imageIds) {
+                onnxImageGeneratorService
+                  .deleteGeneratedImage(imageId)
+                  .catch(() => {});
+              }
+              deleteConversation(conversation.id);
+            },
           },
-        },
-      ]
-    ));
+        ],
+      ),
+    );
+  };
+
+  const handleExportChat = async (conversation: Conversation) => {
+    try {
+      const result = await backupService.exportConversation(conversation.id);
+      setAlertState(
+        result
+          ? showAlert('Chat exported', formatDeliveryMessage(result))
+          : showAlert('Nothing to export', 'This chat could not be found.'),
+      );
+    } catch (e) {
+      setAlertState(
+        showAlert('Export failed', e instanceof Error ? e.message : String(e)),
+      );
+    }
   };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
-    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+    const diffDays = Math.floor(
+      (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24),
+    );
 
     if (diffDays === 0) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return date.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
     } else if (diffDays === 1) {
       return 'Yesterday';
     } else if (diffDays < 7) {
       return date.toLocaleDateString([], { weekday: 'short' });
-    } 
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    
+    }
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
   const renderRightActions = (conversation: Conversation) => (
-    <TouchableOpacity
-      style={styles.deleteAction}
-      onPress={() => handleDeleteChat(conversation)}
-    >
-      <Icon name="trash-2" size={16} color={colors.error} />
-    </TouchableOpacity>
+    <View style={styles.rightActions}>
+      <TouchableOpacity
+        style={styles.exportAction}
+        onPress={() => handleExportChat(conversation)}
+        accessibilityLabel="Export chat"
+        testID={`export-chat-${conversation.id}`}
+      >
+        <Icon name="upload" size={16} color={colors.primary} />
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.deleteAction}
+        onPress={() => handleDeleteChat(conversation)}
+      >
+        <Icon name="trash-2" size={16} color={colors.error} />
+      </TouchableOpacity>
+    </View>
   );
 
-  const renderChat = ({ item, index }: { item: Conversation; index: number }) => {
+  const renderChat = ({
+    item,
+    index,
+  }: {
+    item: Conversation;
+    index: number;
+  }) => {
     const project = item.projectId ? getProject(item.projectId) : null;
     const lastMessage = item.messages[item.messages.length - 1];
 
@@ -196,7 +266,8 @@ export const ChatsListScreen: React.FC = () => {
             </View>
             {lastMessage && (
               <Text style={styles.chatPreview} numberOfLines={1}>
-                {lastMessage.role === 'user' ? 'You: ' : ''}{lastMessage.content}
+                {lastMessage.role === 'user' ? 'You: ' : ''}
+                {lastMessage.content}
               </Text>
             )}
             {project && (
@@ -213,7 +284,7 @@ export const ChatsListScreen: React.FC = () => {
 
   // Sort conversations by updatedAt (most recent first)
   const sortedConversations = [...conversations].sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
   );
 
   return (
@@ -249,7 +320,14 @@ export const ChatsListScreen: React.FC = () => {
             </Text>
           </AnimatedEntry>
           {hasModels && (
-            <AnimatedListItem index={3} staggerMs={60} trigger={focusTrigger} hapticType="impactLight" style={styles.emptyButton} onPress={handleNewChat}>
+            <AnimatedListItem
+              index={3}
+              staggerMs={60}
+              trigger={focusTrigger}
+              hapticType="impactLight"
+              style={styles.emptyButton}
+              onPress={handleNewChat}
+            >
               <Icon name="plus" size={18} color={colors.primary} />
               <Text style={styles.emptyButtonText}>New Chat</Text>
             </AnimatedListItem>
@@ -259,7 +337,7 @@ export const ChatsListScreen: React.FC = () => {
         <FlatList
           data={sortedConversations}
           renderItem={renderChat}
-          keyExtractor={(item) => item.id}
+          keyExtractor={item => item.id}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           removeClippedSubviews={Platform.OS !== 'android'}
@@ -286,7 +364,7 @@ export const ChatsListScreen: React.FC = () => {
           setShowModelSelector(false);
           navigation.navigate('RemoteServers');
         }}
-        onBrowseModels={(tab) => {
+        onBrowseModels={tab => {
           setShowModelSelector(false);
           navigation.navigate('ModelsTab', { initialTab: tab });
         }}
@@ -298,129 +376,3 @@ export const ChatsListScreen: React.FC = () => {
     </SafeAreaView>
   );
 };
-
-const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  swipeableContainer: {
-    overflow: 'visible' as const,
-  },
-  header: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
-    ...shadows.small,
-    zIndex: 1,
-  },
-  title: {
-    ...TYPOGRAPHY.h2,
-    color: colors.text,
-  },
-  list: {
-    padding: SPACING.lg,
-  },
-  chatItem: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    backgroundColor: colors.surface,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm + 2,
-    borderRadius: 10,
-    marginBottom: SPACING.md,
-    ...shadows.small,
-  },
-  chatContent: {
-    flex: 1,
-  },
-  chatHeader: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
-  },
-  chatTitle: {
-    ...TYPOGRAPHY.bodySmall,
-    color: colors.text,
-    flex: 1,
-    marginRight: SPACING.sm,
-  },
-  chatDate: {
-    ...TYPOGRAPHY.metaSmall,
-    color: colors.textMuted,
-  },
-  chatPreview: {
-    ...TYPOGRAPHY.meta,
-    color: colors.textSecondary,
-    marginTop: 1,
-  },
-  projectBadge: {
-    alignSelf: 'flex-start' as const,
-    backgroundColor: colors.surfaceLight,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs / 2,
-    borderRadius: 4,
-    marginTop: SPACING.sm - 2,
-  },
-  projectBadgeText: {
-    ...TYPOGRAPHY.meta,
-    color: colors.textMuted,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-    paddingHorizontal: SPACING.xxl + SPACING.sm,
-  },
-  emptyIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    marginBottom: SPACING.xl - SPACING.xs,
-  },
-  emptyTitle: {
-    ...TYPOGRAPHY.h2,
-    color: colors.text,
-    marginBottom: SPACING.sm,
-  },
-  emptyText: {
-    ...TYPOGRAPHY.bodySmall,
-    color: colors.textSecondary,
-    textAlign: 'center' as const,
-    lineHeight: 20,
-    marginBottom: SPACING.xl,
-  },
-  emptyButton: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.primary,
-    paddingHorizontal: SPACING.xl - SPACING.xs,
-    paddingVertical: SPACING.md,
-    borderRadius: 8,
-    gap: SPACING.sm,
-  },
-  emptyButtonText: {
-    ...TYPOGRAPHY.body,
-    color: colors.primary,
-  },
-  deleteAction: {
-    backgroundColor: colors.errorBackground,
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-    width: 44,
-    borderRadius: 10,
-    marginBottom: SPACING.md,
-    marginLeft: SPACING.sm,
-  },
-});

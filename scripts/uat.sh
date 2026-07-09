@@ -8,14 +8,17 @@ set -euo pipefail
 #   * Beta version = <NEXT patch>-beta.<N> (e.g. current live 0.0.102 → 0.0.103-beta.1). A
 #     beta is a PRE-RELEASE OF THE NEXT version, never the current one: the current version
 #     is already LIVE on the stores, so its TestFlight train is CLOSED to new builds
-#     ("Invalid Pre-Release Train") and Play rejects a versionName <= the live one. N
-#     auto-increments from the last matching prerelease tag. release.sh bumps package.json
-#     to the real next version once a beta is approved.
+#     ("Invalid Pre-Release Train"). N auto-increments from the last matching prerelease tag.
 #   * Store build number (Android versionCode / iOS CURRENT_PROJECT_VERSION) = unix
-#     timestamp, so every TestFlight / Play upload is unique + increasing.
-#   * iOS MARKETING_VERSION is set to the NEXT plain numeric version (App Store rejects a
-#     "-beta" suffix, and this opens a fresh TestFlight train); the "-beta.N" label lives in
-#     the git tag, the Android versionName, and the store release notes.
+#     timestamp, so every TestFlight / Play upload is unique + increasing. Stores order
+#     builds by this number, NOT by the version string.
+#   * The store BINARY carries the plain PRODUCTION version on BOTH platforms (Android
+#     versionName + iOS MARKETING_VERSION = the NEXT numeric version, no "-beta" suffix). A
+#     suffix is user-visible and frozen into the binary, so it would block promote-as-is
+#     (a tested beta build being promoted internal→production unchanged) and get carried to
+#     production forever. The "-beta.N" label lives only in the git tag, the GitHub
+#     prerelease, and the store release notes — never in the shipped binary. Approve a beta,
+#     then run scripts/promote.sh <tag> to bless that exact tested build to production.
 #   * Release notes are generated FROM THE COMMITS by `claude -p` (falls back to a grouped
 #     commit list), and pushed to TestFlight (What to Test) + Play internal + the GH release.
 #
@@ -63,7 +66,13 @@ info "Beta build: ${BOLD}${BETA_VERSION}${NC} (build ${BUILD_NUMBER}) — pre-re
 # ── apply the build-number / beta-versionName bump (working tree; committed only on success) ──
 if [ "$DO_ANDROID" = 1 ]; then
   sed -i '' "s/versionCode .*/versionCode $BUILD_NUMBER/" android/app/build.gradle
-  sed -i '' "s/versionName .*/versionName \"$BETA_VERSION\"/" android/app/build.gradle
+  # versionName = the PRODUCTION version (no -beta suffix), matching iOS's MARKETING_VERSION
+  # below. versionName is frozen into the AAB and is user-visible, so a "-beta" suffix here
+  # would ride the exact tested bytes to production forever and block Play's promote-as-is
+  # (internal -> production, same AAB). Play orders builds by versionCode (the timestamp
+  # above), NOT versionName, so a non-incrementing versionName across betas is fine. The
+  # "-beta.N" label lives in the git tag, the GitHub prerelease, and the store release notes.
+  sed -i '' "s/versionName .*/versionName \"$TARGET_VERSION\"/" android/app/build.gradle
 fi
 if [ "$DO_IOS" = 1 ]; then
   # iOS marketing version = NEXT plain numeric version (App Store rejects "-beta", and this

@@ -224,6 +224,27 @@ platform :android do
     )
     UI.success("Pushed Android store metadata")
   end
+
+  desc "Promote the tested internal build to production (no rebuild, no re-upload)"
+  lane :promote do
+    require_env("PLAY_STORE_JSON_KEY_PATH")
+    # True promote-as-is: move the exact AAB already on the internal track up to
+    # production. No gradle build, no new upload — the bytes users get are the bytes
+    # tested. Lands as a draft so a human confirms the rollout percentage in the console.
+    upload_to_play_store(
+      track: "internal",
+      track_promote_to: "production",
+      json_key: ENV["PLAY_STORE_JSON_KEY_PATH"],
+      skip_upload_aab: true,
+      skip_upload_apk: true,
+      skip_upload_metadata: true,
+      skip_upload_changelogs: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      release_status: "draft" # human confirms rollout in Play Console
+    )
+    UI.success("Promoted internal build to Play production (draft — confirm rollout in console)")
+  end
 end
 
 # ── iOS ──────────────────────────────────────────────────────────────────
@@ -334,6 +355,26 @@ platform :ios do
       force: true
     )
     UI.success("Pushed App Store metadata")
+  end
+
+  desc "Promote the tested TestFlight build to an App Store version (no rebuild)"
+  lane :promote do |options|
+    auth = asc_auth_kwargs
+    # True promote-as-is: attach the EXISTING processed TestFlight build (already the
+    # plain numeric MARKETING_VERSION — uat.sh never suffixes iOS) to a new App Store
+    # version. No build, no binary upload. A human hits Submit for Review in ASC.
+    upload_to_app_store(
+      **auth,
+      build_number: options[:build_number], # the tested TestFlight build; omit → latest processed
+      app_version: options[:app_version],
+      skip_binary_upload: true,
+      submit_for_review: false, # human submits in App Store Connect
+      precheck_include_in_app_purchases: false,
+      skip_screenshots: true,
+      skip_metadata: false,
+      force: true
+    )
+    UI.success("Attached TestFlight build to App Store version (not submitted — submit in App Store Connect)")
   end
 
   # Reuses the existing signing secrets the repo already uses for AltStore/GitHub

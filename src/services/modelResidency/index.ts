@@ -300,29 +300,19 @@ class ModelResidencyManager {
     const availMB = Math.round(hardwareService.getAvailableMemoryGB() * 1024);
     const totalMB = Math.round(hardwareService.getTotalMemoryGB() * 1024);
     logger.log(`[MEM-SM] makeRoomFor ${spec.key} sizeMB=${spec.sizeMB} dirty=${!!spec.dirtyMemory} budgetMB=${budgetMB} os_procAvailMB=${availMB} totalMB=${totalMB} residents=[${residents.map(r => `${r.key}:${r.sizeMB}${r.pinned ? '(pinned)' : ''}`).join(',')}] fits=${plan.fits} evict=[${plan.evict.map(e => e.key).join(',')}]`);
-    // Survival floor: even an override can't cross physics. If, after crediting the RAM
-    // the planned evictions free, live free RAM (minus this model's own dirty footprint)
-    // would drop below the absolute floor, refuse — the OS would jetsam-kill mid-load
-    // (uncatchable SIGKILL) anyway. Catches the "background apps ate the baseline" case.
-    if (override) {
-      const freedByEvictMB = plan.evict.reduce((s, e) => s + (e.dirtyMemory ? e.sizeMB : 0), 0);
-      const incomingDirtyMB = spec.dirtyMemory ? spec.sizeMB : 0;
-      const postLoadFreeMB = availMB + freedByEvictMB - incomingDirtyMB;
-      if (postLoadFreeMB < OVERRIDE_SURVIVAL_FLOOR_MB) {
-        logger.log(`[MEM-SM] makeRoomFor ${spec.key} REFUSED even under override — post-load free ~${postLoadFreeMB}MB < survival floor ${OVERRIDE_SURVIVAL_FLOOR_MB}MB`);
-        return { evicted: [], fits: false };
-      }
-    }
     if (!plan.fits && !override) {
       // Won't fit even after the planned evictions — DON'T evict (otherwise we'd
-      // strand the device with nothing). The caller blocks the load.
+      // strand the device with nothing). The caller blocks the load (overridable).
       return { evicted: [], fits: false };
     }
     // Override ("Load Anyway"): the user explicitly accepted the risk (this call or
-    // earlier this session). planEviction already collected every evictable resident when
-    // !fits, so evicting plan.evict frees the MAXIMUM room, then we force fits=true. The
-    // lenient safeguards remain: we still evicted everything we could, and the native
-    // loader keeps its GPU→CPU→smaller-ctx fallback + OOM recovery if it truly can't fit.
+    // earlier this session). planEviction already collected every evictable resident
+    // when !fits, so evicting plan.evict frees the MAXIMUM room. We evict FIRST, then
+    // measure — the old predictive floor refused on a PRE-eviction snapshot that credited
+    // 0 for evicting a clean/mmap model (dirtyMemory=false), so it under-counted the RAM
+    // iOS actually reclaims on unload and refused loads the device could do. That stale
+    // estimate is what users defeated with "load a small model, wait, then load the big
+    // one" — and why tapping "Load Anyway" still failed.
     if (!plan.fits && override) {
       logger.log(`[MEM-SM] makeRoomFor ${spec.key} OVERRIDE — forcing load after evicting [${plan.evict.map(e => e.key).join(',')}]`);
     }
@@ -331,6 +321,22 @@ class ModelResidencyManager {
       if (!reg) continue;
       await reg.unload().catch(err => logger.log(`[ModelResidency] unload ${victim.key} failed:`, err));
       this.residents.delete(victim.key);
+    }
+    // Survival floor: even an override can't cross physics. Now that the evictions have
+    // ACTUALLY happened (iOS has reclaimed the unloaded pages), re-read real free RAM and
+    // refuse only if the true post-eviction free RAM, minus this model's own dirty
+    // footprint, is still below the absolute floor — a load past that point takes a jetsam
+    // SIGKILL (uncatchable) mid-load. This is the real physics guard; measuring after the
+    // real unload (not predicting) is what stops the false refusals.
+    if (override) {
+      await hardwareService.refreshMemoryInfo().catch(() => {});
+      const realAvailMB = Math.round(hardwareService.getAvailableMemoryGB() * 1024);
+      const incomingDirtyMB = spec.dirtyMemory ? spec.sizeMB : 0;
+      const postLoadFreeMB = realAvailMB - incomingDirtyMB;
+      if (postLoadFreeMB < OVERRIDE_SURVIVAL_FLOOR_MB) {
+        logger.log(`[MEM-SM] makeRoomFor ${spec.key} REFUSED even under override — real post-evict free ~${postLoadFreeMB}MB < survival floor ${OVERRIDE_SURVIVAL_FLOOR_MB}MB`);
+        return { evicted: plan.evict.map(e => e.key), fits: false };
+      }
     }
     return { evicted: plan.evict.map(e => e.key), fits: true };
   }

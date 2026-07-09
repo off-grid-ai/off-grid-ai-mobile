@@ -464,6 +464,53 @@ describe('ModelResidencyManager', () => {
         { key: 'text', type: 'text', sizeMB: 8000 }, { override: true });
       expect(fits).toBe(true);  // clean GGUF, plenty of live headroom → override proceeds
     });
+
+    // The real user bug: a big DIRTY model (Gemma 4 E2B on the GPU/LiteRT path) is
+    // refused under "Load Anyway" while a smaller model is resident — even though the
+    // device can hold it once that model is unloaded. The OLD predictive floor read
+    // free RAM BEFORE eviction and credited 0 for evicting a clean/mmap resident, so it
+    // never saw the RAM the unload reclaims → false refusal. The fix evicts FIRST, then
+    // re-measures. Modeled here: free RAM is low while the resident is loaded and rises
+    // after its unload (iOS reclaim).
+    it('override load SUCCEEDS after evicting a resident whose unload reclaims RAM (fails on the pre-eviction prediction)', async () => {
+      modelResidencyManager.setBudgetOverrideMB(null);
+      jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(8);
+      let residentLoaded = true; // reclaim model: free RAM depends on what's resident
+      jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockImplementation(() =>
+        residentLoaded ? 1.0 : 5.0, // ~1GB while loaded → ~5GB after the unload reclaims
+      );
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      const unloadSmall = jest.fn().mockImplementation(async () => { residentLoaded = false; });
+      // A smaller CLEAN model is resident (the "load a small model first" the user did).
+      modelResidencyManager.register({ key: 'text', type: 'text', sizeMB: 1500 }, unloadSmall, 1);
+
+      // Load the big ~2.41GB dirty model (×1.5 ≈ 3600MB) with Load Anyway.
+      const { fits, evicted } = await modelResidencyManager.makeRoomFor(
+        { key: 'text-big', type: 'text', sizeMB: 3600, dirtyMemory: true }, { override: true });
+
+      expect(unloadSmall).toHaveBeenCalledTimes(1);        // it actually freed the resident
+      expect(evicted).toEqual(['text']);                    // reported what it evicted
+      expect(fits).toBe(true);                              // real post-evict RAM (5120-3600) clears the 1200 floor
+    });
+
+    it('override STILL refuses when the model is too big even after the unload reclaims RAM (physics floor preserved)', async () => {
+      modelResidencyManager.setBudgetOverrideMB(null);
+      jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(8);
+      let residentLoaded = true;
+      jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockImplementation(() =>
+        residentLoaded ? 1.0 : 4.0, // rises to ~4GB after unload
+      );
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      const unloadSmall = jest.fn().mockImplementation(async () => { residentLoaded = false; });
+      modelResidencyManager.register({ key: 'text', type: 'text', sizeMB: 1500 }, unloadSmall, 1);
+
+      // A 6GB dirty model: even 4096 - 6000 is below the 1200 floor → refuse (would jetsam).
+      const { fits } = await modelResidencyManager.makeRoomFor(
+        { key: 'text-huge', type: 'text', sizeMB: 6000, dirtyMemory: true }, { override: true });
+
+      expect(unloadSmall).toHaveBeenCalledTimes(1); // we tried (freed everything first)
+      expect(fits).toBe(false);                     // but real physics still refuses
+    });
   });
 
   describe('session override memory (approve Load Anyway once per model)', () => {

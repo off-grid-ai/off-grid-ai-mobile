@@ -57,6 +57,27 @@ export const AGGRESSIVE_RESERVE_MB = 800;
  * (e.g. many background apps have eaten the baseline).
  */
 export const OVERRIDE_SURVIVAL_FLOOR_MB = 1200;
+/**
+ * Android's override floor is LOWER than iOS's because the physics differ:
+ *  - iOS: no user swap; exceeding os_proc_available_memory is an uncatchable jetsam SIGKILL, so
+ *    we hold the full 1200MB physical reserve.
+ *  - Android: zram/swap + the low-memory killer back the OS and OTHER apps (their pages compress
+ *    to zram / background is killed) — the foreground app is killed LAST. The model's own dirty
+ *    (GPU) pages still need PHYSICAL RAM (this check subtracts the full dirty footprint from real
+ *    physical availMem, so an oversized dirty model — e.g. a 5.2GB LiteRT on ~4.5GB physical —
+ *    still goes negative and is refused), but the SYSTEM survives on swap, so we only reserve a
+ *    physical margin for the model's KV-cache growth, not a full jetsam buffer. This is what lets
+ *    a ~3.7GB model load on a 12GB phone (physical availMem ~4.5GB) instead of being refused by
+ *    the iOS-calibrated 1200 floor, WITHOUT the swap-credit mistake that let an oversized dirty
+ *    model load and OOM. NEEDS on-device tuning/verification ([MEM-SM] logs the real numbers).
+ */
+export const ANDROID_OVERRIDE_SURVIVAL_FLOOR_MB = 700;
+/** The override survival floor for the current platform (data-driven, not a scattered branch). */
+export function overrideSurvivalFloorMB(platform: Plat = Platform.OS): number {
+  return platform === 'android'
+    ? ANDROID_OVERRIDE_SURVIVAL_FLOOR_MB
+    : OVERRIDE_SURVIVAL_FLOOR_MB;
+}
 
 type Plat = 'ios' | 'android' | string;
 

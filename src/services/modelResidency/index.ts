@@ -18,7 +18,7 @@ import {
   Resident,
   ResidentType,
 } from './policy';
-import { LoadPolicy, OVERRIDE_SURVIVAL_FLOOR_MB } from '../memoryBudget';
+import { LoadPolicy, overrideSurvivalFloorMB } from '../memoryBudget';
 
 type UnloadFn = () => Promise<void>;
 
@@ -395,9 +395,14 @@ class ModelResidencyManager {
       );
       const incomingDirtyMB = spec.dirtyMemory ? spec.sizeMB : 0;
       const postLoadFreeMB = realAvailMB - incomingDirtyMB;
-      if (postLoadFreeMB < OVERRIDE_SURVIVAL_FLOOR_MB) {
+      // Physical-based (NO swap credit): the dirty model's own footprint is subtracted from real
+      // physical availMem, so an oversized dirty model still goes negative and is refused (the
+      // OOM guard). The FLOOR is platform-aware: Android backs the OS/other apps with zram so it
+      // reserves only a KV-growth margin; iOS holds the full jetsam reserve.
+      const floorMB = overrideSurvivalFloorMB();
+      if (postLoadFreeMB < floorMB) {
         logger.log(
-          `[MEM-SM] makeRoomFor ${spec.key} REFUSED even under override - real post-evict free ~${postLoadFreeMB}MB < survival floor ${OVERRIDE_SURVIVAL_FLOOR_MB}MB`,
+          `[MEM-SM] makeRoomFor ${spec.key} REFUSED even under override - real post-evict free ~${postLoadFreeMB}MB < survival floor ${floorMB}MB`,
         );
         return { evicted: plan.evict.map(e => e.key), fits: false };
       }

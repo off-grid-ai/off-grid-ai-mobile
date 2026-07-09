@@ -203,3 +203,32 @@ is a Mac-side tooling wedge (iOS 26.5.1), independent of the app — reconnect t
 |---|---------|---------|------|
 | OD15 | **"Generation Error: Unable to generate parser for this template / Jinja: Conversation roles must alternate" on model switch after a tool call** | fix-the-guard | From llama.rn native minja compiling a chat_template whose Jinja asserts strict user/assistant alternation, when tools are enabled (tool-call parser generation) and/or history has assistant+tool+assistant sequences. NOT caused by 0.0.103 (OD14 added a field to an existing message, no new message; OD3 didn't touch templates). Pre-existing. Fix: graceful fallback — catch the local tool-parser-generation failure and retry WITHOUT tools (the app already does this for REMOTE via isToolGrammarError; add the LOCAL equivalent), instead of a hard "Generation Error". Also consider sanitizing/merging roles before formatting for strict-alternation templates. Separate PR. |
 | OD16 | **Remote model capabilities feel flaky across Ollama / LM Studio / OGA Desktop** | instrument-and-revisit | remoteModelCapabilities has 39 unit + 4 integration tests, per-provider — but all FIXTURE-based. Real-world flakiness is likely response-shape variance across provider versions the fixtures don't capture. Fix: capture real /props (OGA Desktop gateway), /api/show (Ollama), /v1/models (LM Studio) from LIVE instances as integration fixtures; harden derivation against missing/variant fields; add a provider-abstraction contract test so each provider's shape → derived caps is guarded. All three must work well (stated priority). Separate workstream. NOTE: 0.0.103's OD7 fix already made reasoning-detection single-source local+remote (small consistency win). |
+
+## Repo-wide /hygiene audit - 2026-07-09 (SOLID §A/§B + DRY §C, all spot-verified)
+
+Through-line: decision/capability logic derived ad-hoc at many call sites instead of owned once
+by a service. Two findings (DR1, DR3) are root-cause siblings of today's shipped bugs.
+
+### SOLID (§A/§B)
+| # | Location | Verdict | Fix |
+|---|----------|---------|-----|
+| SO1 | src/screens/ModelsScreen/TextModelsTab.tsx:143 handleRetryDownload | BLOCKING | Renderer re-implements download retry (Platform.OS branch, store mutation, mmproj, polling) — CLAUDE.md L100 says this moved to ModelDownloadService. Delete; delegate to modelDownloadService.retry() like useDownloadManager:278. |
+| SO2 | src/screens/ChatScreen/useChatGenerationActions.ts:460 | BLOCKING | Hook calls concrete liteRTService.invalidateConversation() off engine==='litert'. Move to activeModelService.invalidateActiveConversation(). |
+| SO3 | useChatModelActions.ts:71,111,248 + useChatModelStateSync:368-390 | DEBT | supportsVision re-derived from engine==='litert' in 6 UI sites. Add activeModelService.getActiveCapabilities(){vision,audio,tools,thinking}. |
+| SO4 | generationServiceHelpers:202,218 · generationToolLoop:386,747 · useChatGenerationActions:261 · useChatScreen:58,342 · modelReadiness:65 | DEBT | engine==='litert' + Platform.OS='ios' tool-routing scattered. Expose normalized capability/routing flags from service. |
+| SO5 | src/screens/ModelsScreen/ImageFilterBar.tsx:55,73,91,129,139,149 | DEBT | Platform.OS chooses which filter DIMENSIONS exist. Data-driven filter descriptor from service. |
+| SO6 | src/services/remoteServerManagerUtils.ts:122 | DEBT | provider instanceof OpenAICompatibleProvider to call updateCapabilities. Put on the provider interface (ISP). |
+| SO7 | pro/audio/ttsStore.ts:377,385 | DEBT | instanceof OuteTTSEngine for cache ops. Optional getAudioCacheSizeMB?/clearAudioCache? on TTS engine interface. |
+| SO8 | src/stores/remoteServerHelpers.ts:32,188 | DEBT-low | kind==='vision' capability branch; fold into shared deriveRemoteCapabilities. |
+
+### DRY (§C)
+| # | Location | Verdict | Fix |
+|---|----------|---------|-----|
+| DR1 | chatStore.extractChannelThinking + ChatMessage/utils.parseThinkingContent + providers/openAICompatibleStream.ThinkTagParser | DRIFTED (live) | 3 thinking parsers; the remote STREAM parser only knows <think>, omits channel formats → Gemma4/Qwen-channel model over remote endpoint leaks raw <\|channel>thought. Ties to OD16. One shared splitReasoning() in messageContent (already owns REASONING_TEMPLATE_MARKERS). |
+| DR2 | remoteServerManagerUtils:60 (20 patterns) vs ModelsScreen/utils:41 + huggingface:178 (3) | DRIFTED (live) | Vision keyword lists diverged → Pixtral/Moondream/InternVL vision remotely, text-only locally. One VISION_NAME_PATTERNS + looksLikeVisionModel(). |
+| DR3 | src/screens/HomeScreen/components/ModelPickerSheet.tsx:63,201 (*1.8/*1.5, -1.5) | DRIFTED (live) | Third memory-fit verdict bypassing memoryBudget.ts (self-declared single source). Can say "fits" when residency refuses — the Load-Anyway/selector bug family. Call modelMemoryBudgetMB. |
+| DR4 | CHARS_PER_TOKEN=4 bare literal in llmHelpers,liteRTCompaction,litert,llm,generationServiceHelpers,providers/*,documentService (const only in contextCompaction:34) | DEBT | Export CHARS_PER_TOKEN_ESTIMATE + estimateTokens(); all import. |
+| DR5 | STOP_TOKENS (llmHelpers:427) + CONTROL_TOKEN_PATTERNS (messageContent:1) + tests re-hardcode | DEBT | One token registry; derive stop-list + strip-patterns; tests import. |
+| DR6 | pro/audio outetts:363 + ttsService:207 '<\|im_end\|>' | DEBT-low | Shared IM_END_TOKEN. |
+| DR7 | llmToolGeneration:32 (filter) vs generationToolLoop:118 (parser) Gemma tool delimiters | DRIFTED-minor | Parser accepts <tool_call: opener the filter doesn't suppress → tokens flash. Shared GEMMA_TOOLCALL_DELIMITERS. |
+| DR8 | remoteModelCapabilities:202 deltaHasThinking vs openAICompatibleStream:155 | DEBT | Shared REASONING_DELTA_FIELDS + deltaHasReasoning(delta). |

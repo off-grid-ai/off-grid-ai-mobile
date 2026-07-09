@@ -156,10 +156,13 @@ describe('ChatMessage — Tool message rendering', () => {
         toolCalls: [{ id: 'tc-1', name: 'search_knowledge_base', arguments: '{"q":"achilles"}' }],
       });
 
-      const { getByTestId } = render(<ChatMessage message={message} />);
+      const { getByTestId, getByText } = render(<ChatMessage message={message} />);
 
       expect(getByTestId('tool-call-message')).toBeTruthy();
-      expect(getByTestId('thinking-block')).toBeTruthy();
+      // Assert the ACTUAL reasoning text is on screen (the collapsed block shows an 80-char
+      // preview of parsedContent.thinking), not merely that a block element mounted — the
+      // whole point is the user SEES the pre-tool-call thinking, not that a testID exists.
+      expect(getByText(/I should search the knowledge base first\./)).toBeTruthy();
     });
 
     it('renders the thinking block from inline <think> in a tool-call message content', () => {
@@ -171,9 +174,10 @@ describe('ChatMessage — Tool message rendering', () => {
         toolCalls: [{ id: 'tc-1', name: 'read_url', arguments: '{"url":"x"}' }],
       });
 
-      const { getByTestId } = render(<ChatMessage message={message} />);
+      const { getByText } = render(<ChatMessage message={message} />);
 
-      expect(getByTestId('thinking-block')).toBeTruthy();
+      // The inline <think> reasoning text must actually render, not just a container.
+      expect(getByText(/Let me check the docs\./)).toBeTruthy();
     });
 
     it('shows "Using web_search" text with arguments preview', () => {

@@ -12,7 +12,12 @@
 import { AppState } from 'react-native';
 import { hardwareService } from '../hardware';
 import logger from '../../utils/logger';
-import { planEviction, computeBudgetMB, Resident, ResidentType } from './policy';
+import {
+  planEviction,
+  computeBudgetMB,
+  Resident,
+  ResidentType,
+} from './policy';
 import { LoadPolicy, OVERRIDE_SURVIVAL_FLOOR_MB } from '../memoryBudget';
 
 type UnloadFn = () => Promise<void>;
@@ -64,7 +69,10 @@ export interface EnsureResult {
   evicted: string[];
 }
 
-const stripUnload = ({ unload: _unload, ...rest }: RegisteredResident): Resident => rest;
+const stripUnload = ({
+  unload: _unload,
+  ...rest
+}: RegisteredResident): Resident => rest;
 
 class ModelResidencyManager {
   private readonly residents = new Map<string, RegisteredResident>();
@@ -99,8 +107,12 @@ class ModelResidencyManager {
     // It used to be scattered — e.g. the Kokoro bridge had its own memoryWarning
     // listener freeing itself. Now one place reclaims idle models on a warning.
     try {
-      AppState.addEventListener('memoryWarning', () => { this.handleMemoryWarning().catch(() => {}); });
-    } catch { /* non-RN env (some tests) — no AppState */ }
+      AppState.addEventListener('memoryWarning', () => {
+        this.handleMemoryWarning().catch(() => {});
+      });
+    } catch {
+      /* non-RN env (some tests) — no AppState */
+    }
   }
 
   /** Residents as the pure policy sees them, with a live `canEvict()===false`
@@ -128,8 +140,17 @@ class ModelResidencyManager {
       for (const [key, r] of [...this.residents.entries()]) {
         if (r.pinned || !SIDECAR_TYPES.has(r.type)) continue;
         if (r.canEvict && !r.canEvict()) continue; // in use — owner vetoes
-        logger.log(`[ModelResidency] memory warning → reclaiming idle ${r.type} (${key})`);
-        await r.unload().catch(err => logger.log(`[ModelResidency] memory-warning unload ${key} failed:`, err));
+        logger.log(
+          `[ModelResidency] memory warning → reclaiming idle ${r.type} (${key})`,
+        );
+        await r
+          .unload()
+          .catch(err =>
+            logger.log(
+              `[ModelResidency] memory-warning unload ${key} failed:`,
+              err,
+            ),
+          );
         this.residents.delete(key);
       }
     });
@@ -193,7 +214,10 @@ class ModelResidencyManager {
     // real dirty cost is ~1-2GB of KV+compute) on a 12GB phone that runs it fine. A
     // GGUF's loadability is bounded by physical RAM (its weights fit as clean pages),
     // which is exactly computeBudgetMB. Floored so a small model always loads.
-    const physicalCapMB = computeBudgetMB(hardwareService.getTotalMemoryGB() * 1024, { policy: this.loadPolicy });
+    const physicalCapMB = computeBudgetMB(
+      hardwareService.getTotalMemoryGB() * 1024,
+      { policy: this.loadPolicy },
+    );
     return Math.round(Math.max(MIN_BUDGET_MB, physicalCapMB));
   }
 
@@ -205,13 +229,18 @@ class ModelResidencyManager {
    */
   private budgetForSpec(spec: ResidentSpec): number {
     if (this.budgetOverrideMB != null) return this.budgetOverrideMB;
-    const physicalCapMB = computeBudgetMB(hardwareService.getTotalMemoryGB() * 1024, { policy: this.loadPolicy });
+    const physicalCapMB = computeBudgetMB(
+      hardwareService.getTotalMemoryGB() * 1024,
+      { policy: this.loadPolicy },
+    );
     // Dirty-memory PRESSURE — the incoming model is dirty, OR a dirty model (CoreML/ONNX
     // image) is already resident. A dirty model's working set/compile spike can't be
     // paged out like clean mmap weights, so while one is present EVERY load (even an
     // mmap sidecar) must also respect real free RAM, or stacking onto the spike jetsams
     // the app. With no dirty pressure, mmap GGUF stays bounded by physical RAM only.
-    const dirtyPressure = !!spec.dirtyMemory || [...this.residents.values()].some(r => r.dirtyMemory);
+    const dirtyPressure =
+      !!spec.dirtyMemory ||
+      [...this.residents.values()].some(r => r.dirtyMemory);
     if (!dirtyPressure) {
       // mmap'd, no dirty pressure: physical RAM is the ceiling (clean, file-backed
       // weights page in even when instantaneous available is low).
@@ -220,15 +249,21 @@ class ModelResidencyManager {
     // Under dirty pressure: also gate on real free RAM (+ evictable residents − OS
     // headroom). This is the single owner of the live os_proc budget.
     const availableMB = hardwareService.getAvailableMemoryGB() * 1024;
-    const residentMB = [...this.residents.values()].reduce((sum, r) => sum + r.sizeMB, 0);
+    const residentMB = [...this.residents.values()].reduce(
+      (sum, r) => sum + r.sizeMB,
+      0,
+    );
     // Aggressive mode holds a smaller real-free-RAM headroom for dirty loads (the
     // lenient safeguard) so e.g. a 3GB LiteRT model the balanced guard rejects on a
     // 12GB phone is allowed through. Still non-zero — never a guaranteed jetsam.
-    const dirtyHeadroomMB = this.loadPolicy === 'aggressive'
-      ? AGGRESSIVE_DIRTY_HEADROOM_MB
-      : DIRTY_AVAILABILITY_HEADROOM_MB;
+    const dirtyHeadroomMB =
+      this.loadPolicy === 'aggressive'
+        ? AGGRESSIVE_DIRTY_HEADROOM_MB
+        : DIRTY_AVAILABILITY_HEADROOM_MB;
     const dynamicMB = availableMB + residentMB - dirtyHeadroomMB;
-    return Math.round(Math.max(MIN_BUDGET_MB, Math.min(physicalCapMB, dynamicMB)));
+    return Math.round(
+      Math.max(MIN_BUDGET_MB, Math.min(physicalCapMB, dynamicMB)),
+    );
   }
 
   getResidents(): Resident[] {
@@ -246,7 +281,10 @@ class ModelResidencyManager {
    */
   canLoadWithoutEviction(spec: { key: string; sizeMB: number }): boolean {
     if (this.residents.has(spec.key)) return true;
-    const usedMB = [...this.residents.values()].reduce((sum, r) => sum + r.sizeMB, 0);
+    const usedMB = [...this.residents.values()].reduce(
+      (sum, r) => sum + r.sizeMB,
+      0,
+    );
     return usedMB + spec.sizeMB <= this.getBudgetMB();
   }
 
@@ -259,7 +297,11 @@ class ModelResidencyManager {
    * Register a model that's already loaded elsewhere (e.g. a pinned classifier
    * or a model loaded before the manager existed) so it's accounted for.
    */
-  register(spec: ResidentSpec, unload: UnloadFn, now: number = Date.now()): void {
+  register(
+    spec: ResidentSpec,
+    unload: UnloadFn,
+    now: number = Date.now(),
+  ): void {
     this.residents.set(spec.key, { ...spec, lastUsedAt: now, unload });
   }
 
@@ -299,7 +341,15 @@ class ModelResidencyManager {
     // genuinely low, or is the app footprint bloated?
     const availMB = Math.round(hardwareService.getAvailableMemoryGB() * 1024);
     const totalMB = Math.round(hardwareService.getTotalMemoryGB() * 1024);
-    logger.log(`[MEM-SM] makeRoomFor ${spec.key} sizeMB=${spec.sizeMB} dirty=${!!spec.dirtyMemory} budgetMB=${budgetMB} os_procAvailMB=${availMB} totalMB=${totalMB} residents=[${residents.map(r => `${r.key}:${r.sizeMB}${r.pinned ? '(pinned)' : ''}`).join(',')}] fits=${plan.fits} evict=[${plan.evict.map(e => e.key).join(',')}]`);
+    logger.log(
+      `[MEM-SM] makeRoomFor ${spec.key} sizeMB=${
+        spec.sizeMB
+      } dirty=${!!spec.dirtyMemory} budgetMB=${budgetMB} os_procAvailMB=${availMB} totalMB=${totalMB} residents=[${residents
+        .map(r => `${r.key}:${r.sizeMB}${r.pinned ? '(pinned)' : ''}`)
+        .join(',')}] fits=${plan.fits} evict=[${plan.evict
+        .map(e => e.key)
+        .join(',')}]`,
+    );
     if (!plan.fits && !override) {
       // Won't fit even after the planned evictions — DON'T evict (otherwise we'd
       // strand the device with nothing). The caller blocks the load (overridable).
@@ -314,12 +364,22 @@ class ModelResidencyManager {
     // estimate is what users defeated with "load a small model, wait, then load the big
     // one" — and why tapping "Load Anyway" still failed.
     if (!plan.fits && override) {
-      logger.log(`[MEM-SM] makeRoomFor ${spec.key} OVERRIDE — forcing load after evicting [${plan.evict.map(e => e.key).join(',')}]`);
+      logger.log(
+        `[MEM-SM] makeRoomFor ${
+          spec.key
+        } OVERRIDE — forcing load after evicting [${plan.evict
+          .map(e => e.key)
+          .join(',')}]`,
+      );
     }
     for (const victim of plan.evict) {
       const reg = this.residents.get(victim.key);
       if (!reg) continue;
-      await reg.unload().catch(err => logger.log(`[ModelResidency] unload ${victim.key} failed:`, err));
+      await reg
+        .unload()
+        .catch(err =>
+          logger.log(`[ModelResidency] unload ${victim.key} failed:`, err),
+        );
       this.residents.delete(victim.key);
     }
     // Survival floor: even an override can't cross physics. Now that the evictions have
@@ -330,11 +390,15 @@ class ModelResidencyManager {
     // real unload (not predicting) is what stops the false refusals.
     if (override) {
       await hardwareService.refreshMemoryInfo().catch(() => {});
-      const realAvailMB = Math.round(hardwareService.getAvailableMemoryGB() * 1024);
+      const realAvailMB = Math.round(
+        hardwareService.getAvailableMemoryGB() * 1024,
+      );
       const incomingDirtyMB = spec.dirtyMemory ? spec.sizeMB : 0;
       const postLoadFreeMB = realAvailMB - incomingDirtyMB;
       if (postLoadFreeMB < OVERRIDE_SURVIVAL_FLOOR_MB) {
-        logger.log(`[MEM-SM] makeRoomFor ${spec.key} REFUSED even under override — real post-evict free ~${postLoadFreeMB}MB < survival floor ${OVERRIDE_SURVIVAL_FLOOR_MB}MB`);
+        logger.log(
+          `[MEM-SM] makeRoomFor ${spec.key} REFUSED even under override — real post-evict free ~${postLoadFreeMB}MB < survival floor ${OVERRIDE_SURVIVAL_FLOOR_MB}MB`,
+        );
         return { evicted: plan.evict.map(e => e.key), fits: false };
       }
     }
@@ -354,7 +418,11 @@ class ModelResidencyManager {
     }
 
     await handlers.load();
-    this.residents.set(spec.key, { ...spec, lastUsedAt: now, unload: handlers.unload });
+    this.residents.set(spec.key, {
+      ...spec,
+      lastUsedAt: now,
+      unload: handlers.unload,
+    });
     return { loaded: true, evicted };
   }
 
@@ -375,7 +443,11 @@ class ModelResidencyManager {
     // Best-effort memory optimization in the generation hot path — must NEVER throw
     // into it (e.g. if the hardware service isn't available). Bail quietly instead.
     let totalGB: number;
-    try { totalGB = hardwareService.getTotalMemoryGB(); } catch { return; }
+    try {
+      totalGB = hardwareService.getTotalMemoryGB();
+    } catch {
+      return;
+    }
     if (totalGB > 6) return; // roomy: keep STT warm
     if (!this.residents.has('whisper')) return;
     // Serialize with load/unload: this fires on the generation hot path (every send /
@@ -385,8 +457,12 @@ class ModelResidencyManager {
       const w = this.residents.get('whisper');
       if (!w) return; // reclaimed by another op while we waited for the lock
       if (w.canEvict && !w.canEvict()) return; // in use (e.g. finalizing a transcription) — owner vetoes
-      logger.log('[ModelResidency] reclaiming idle STT for generation turn (memory-tight)');
-      await w.unload().catch(err => logger.log('[ModelResidency] STT reclaim failed:', err));
+      logger.log(
+        '[ModelResidency] reclaiming idle STT for generation turn (memory-tight)',
+      );
+      await w
+        .unload()
+        .catch(err => logger.log('[ModelResidency] STT reclaim failed:', err));
       this.residents.delete('whisper');
     });
   }

@@ -127,40 +127,6 @@ class HardwareService {
     }
     return null;
   }
-  /** Free ZRAM/swap (bytes) from /proc/meminfo on Android; null on iOS or if unreadable. */
-  private async readSwapFreeBytes(): Promise<number | null> {
-    if (Platform.OS !== 'android') return null;
-    try {
-      const meminfo = await RNFS.readFile('/proc/meminfo', 'utf8');
-      const match = /SwapFree:\s+(\d+)\s*kB/.exec(meminfo);
-      if (match) return Number.parseInt(match[1], 10) * 1024;
-    } catch {
-      /* /proc unreadable — treat as no swap headroom */
-    }
-    return null;
-  }
-  /**
-   * Memory ceiling for the "Load Anyway" OVERRIDE path only — deliberately more generous than
-   * the conservative auto-load budget (getAvailableMemoryGB).
-   *
-   * On Android it credits free ZRAM/swap on top of physical MemAvailable. A DIRTY model
-   * (LiteRT/GPU, non-mmap) subtracts its FULL size from the ceiling; on a 12GB device
-   * MemAvailable alone (~4GB — availMem excludes swappable/killable memory) minus a ~3.7GB
-   * dirty model fell below the survival floor and falsely refused, even though the model fits
-   * physically and Android relocates cold background pages to zram to keep it resident. The
-   * true pre-OOM headroom is MemAvailable + SwapFree. (mmap GGUF models are dirty=false, credited
-   * 0, so they already loaded — which is why llama.cpp 9B loaded but a LiteRT model didn't.)
-   *
-   * iOS has no user swap and its jetsam ceiling IS os_proc_available_memory, so the override
-   * ceiling equals the normal available there — the strict floor stays meaningful.
-   */
-  async getOverrideAvailableMemoryGB(): Promise<number> {
-    const baseGB = this.getAvailableMemoryGB();
-    if (Platform.OS !== 'android') return baseGB;
-    const swapBytes = await this.readSwapFreeBytes();
-    const swapGB = swapBytes ? swapBytes / (1024 * 1024 * 1024) : 0;
-    return baseGB + swapGB;
-  }
   async refreshMemoryInfo(): Promise<DeviceInfoType> {
     // Force fresh fetch of all memory info
     const [totalMemory, usedMemory] = await Promise.all([

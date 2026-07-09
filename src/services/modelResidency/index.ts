@@ -388,15 +388,10 @@ class ModelResidencyManager {
     // footprint, is still below the absolute floor - a load past that point takes a jetsam
     // SIGKILL (uncatchable) mid-load. This is the real physics guard; measuring after the
     // real unload (not predicting) is what stops the false refusals.
-    //
-    // Ceiling = getOverrideAvailableMemoryGB: on Android this credits free ZRAM swap on top of
-    // physical MemAvailable, because a DIRTY (LiteRT) model subtracts its full size and availMem
-    // alone falsely refused loads a 12GB device can host by relocating cold pages to zram. On iOS
-    // it equals getAvailableMemoryGB (no user swap) so the jetsam floor is unchanged.
     if (override) {
       await hardwareService.refreshMemoryInfo().catch(() => {});
       const realAvailMB = Math.round(
-        (await hardwareService.getOverrideAvailableMemoryGB()) * 1024,
+        hardwareService.getAvailableMemoryGB() * 1024,
       );
       const incomingDirtyMB = spec.dirtyMemory ? spec.sizeMB : 0;
       const postLoadFreeMB = realAvailMB - incomingDirtyMB;

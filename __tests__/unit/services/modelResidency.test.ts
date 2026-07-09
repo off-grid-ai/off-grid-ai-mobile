@@ -783,47 +783,6 @@ describe('ModelResidencyManager', () => {
       expect(unloadSmall).toHaveBeenCalledTimes(1); // we tried (freed everything first)
       expect(fits).toBe(false); // but real physics still refuses
     });
-
-    // The LiteRT-only bug (real device: 12GB phone, nothing else running). A ~3.7GB DIRTY
-    // model was refused under Load Anyway because the override subtracts the full dirty size
-    // from physical MemAvailable (~4.18GB) → ~478MB left < 1200 floor. But the device has
-    // ~5GB free ZRAM swap; Android relocates cold pages to zram to keep the model resident, so
-    // the true pre-OOM ceiling is MemAvailable + SwapFree (~9.26GB). The override must use that
-    // (getOverrideAvailableMemoryGB), not availMem alone. mmap GGUF (dirty=false) already loaded
-    // because it subtracts 0 — which is why a 9B llama.cpp model loaded but LiteRT didn't.
-    it('override LOADS a big DIRTY (LiteRT) model on Android by crediting free ZRAM swap', async () => {
-      modelResidencyManager.setBudgetOverrideMB(null);
-      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
-      jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(12);
-      jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockReturnValue(4.18); // physical MemAvailable — the OLD ceiling that falsely refused
-      jest
-        .spyOn(hardwareService, 'getOverrideAvailableMemoryGB')
-        .mockResolvedValue(4.18 + 5.08); // + free ZRAM swap = the true override ceiling
-
-      const { fits } = await modelResidencyManager.makeRoomFor(
-        { key: 'text', type: 'text', sizeMB: 3702, dirtyMemory: true },
-        { override: true },
-      );
-
-      expect(fits).toBe(true); // 9.26GB − 3.7GB dirty = 5.5GB > 1200 floor → loads (was false on availMem alone)
-    });
-
-    it('override STILL refuses a DIRTY model too big even for physical + swap (crash guard preserved)', async () => {
-      modelResidencyManager.setBudgetOverrideMB(null);
-      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
-      jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(12);
-      jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockReturnValue(4.18);
-      jest
-        .spyOn(hardwareService, 'getOverrideAvailableMemoryGB')
-        .mockResolvedValue(4.18 + 5.08); // ~9.26GB ceiling
-
-      const { fits } = await modelResidencyManager.makeRoomFor(
-        { key: 'text', type: 'text', sizeMB: 10000, dirtyMemory: true }, // 9.26 − 10 < floor
-        { override: true },
-      );
-
-      expect(fits).toBe(false); // no crash: refuse when it genuinely can't fit even with swap
-    });
   });
 
   describe('session override memory (approve Load Anyway once per model)', () => {

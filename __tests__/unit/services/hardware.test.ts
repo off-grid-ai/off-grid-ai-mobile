@@ -8,7 +8,6 @@
 import { Platform, NativeModules } from 'react-native';
 import { hardwareService } from '../../../src/services/hardware';
 import DeviceInfo from 'react-native-device-info';
-import RNFS from 'react-native-fs';
 
 const mockedDeviceInfo = DeviceInfo as jest.Mocked<typeof DeviceInfo>;
 
@@ -200,45 +199,6 @@ describe('HardwareService', () => {
       await hardwareService.getDeviceInfo();
 
       expect(hardwareService.getAvailableMemoryGB()).toBe(6);
-    });
-  });
-
-  // ========================================================================
-  // getOverrideAvailableMemoryGB — the "Load Anyway" ceiling
-  // ========================================================================
-  describe('getOverrideAvailableMemoryGB', () => {
-    const G = 1024 * 1024 * 1024;
-    const originalOS = Platform.OS;
-    const meminfo = (swapFreeKB: number) =>
-      `MemTotal:       11568212 kB\nMemAvailable:    4283000 kB\nSwapFree:       ${swapFreeKB} kB\n`;
-    afterEach(() => {
-      Platform.OS = originalOS;
-      jest.restoreAllMocks();
-    });
-
-    it('Android: credits free ZRAM swap on top of physical available memory', async () => {
-      Platform.OS = 'android' as typeof Platform.OS;
-      (hardwareService as any).cachedDeviceInfo = { totalMemory: 12 * G, availableMemory: 4 * G };
-      jest.spyOn(RNFS, 'readFile').mockResolvedValue(meminfo(5 * 1024 * 1024)); // 5GB SwapFree
-      const gb = await hardwareService.getOverrideAvailableMemoryGB();
-      expect(gb).toBeCloseTo(4 + 5, 2); // physical available (4) + free swap (5) = the true override ceiling
-    });
-
-    it('Android: falls back to physical available when /proc/meminfo is unreadable', async () => {
-      Platform.OS = 'android' as typeof Platform.OS;
-      (hardwareService as any).cachedDeviceInfo = { totalMemory: 12 * G, availableMemory: 4 * G };
-      jest.spyOn(RNFS, 'readFile').mockRejectedValue(new Error('EACCES'));
-      const gb = await hardwareService.getOverrideAvailableMemoryGB();
-      expect(gb).toBeCloseTo(4, 5); // no swap credit → equals physical available, never throws
-    });
-
-    it('iOS: equals physical available with NO swap credit (jetsam floor stays meaningful)', async () => {
-      Platform.OS = 'ios' as typeof Platform.OS;
-      (hardwareService as any).cachedDeviceInfo = { totalMemory: 12 * G, availableMemory: 4 * G };
-      const readSpy = jest.spyOn(RNFS, 'readFile');
-      const gb = await hardwareService.getOverrideAvailableMemoryGB();
-      expect(gb).toBeCloseTo(4, 5);
-      expect(readSpy).not.toHaveBeenCalled(); // no /proc read on iOS — behaviour byte-identical to today
     });
   });
 

@@ -67,8 +67,20 @@ jest.mock('../../../src/stores', () => ({
 jest.mock('../../../src/constants', () => ({
   ...jest.requireActual('../../../src/constants'),
   ONBOARDING_SLIDES: [
-    { id: 'slide1', keyword: 'Welcome', title: 'Off Grid', description: 'Your AI companion', accentColor: '#0066FF' },
-    { id: 'slide2', keyword: 'Private', title: 'On-Device', description: 'Everything stays local', accentColor: '#00CC66' },
+    {
+      id: 'slide1',
+      keyword: 'Welcome',
+      title: 'Off Grid',
+      description: 'Your AI companion',
+      accentColor: '#0066FF',
+    },
+    {
+      id: 'slide2',
+      keyword: 'Private',
+      title: 'On-Device',
+      description: 'Everything stays local',
+      accentColor: '#00CC66',
+    },
   ],
 }));
 
@@ -97,6 +109,7 @@ jest.mock('../../../src/stores/remoteServerStore', () => ({
 }));
 
 import { OnboardingScreen } from '../../../src/screens/OnboardingScreen';
+import { WEDNESDAY_URL } from '../../../src/constants';
 
 const mockNavigate = jest.fn();
 const mockReset = jest.fn();
@@ -127,7 +140,9 @@ describe('OnboardingScreen', () => {
   });
 
   it('shows navigation dots', () => {
-    const { getByTestId } = render(<OnboardingScreen navigation={navigation} />);
+    const { getByTestId } = render(
+      <OnboardingScreen navigation={navigation} />,
+    );
     expect(getByTestId('onboarding-screen')).toBeTruthy();
   });
 
@@ -152,7 +167,9 @@ describe('OnboardingScreen', () => {
   it('does not complete onboarding when Next is pressed on non-last slide', () => {
     // Note: scrollToIndex throws in test env, but the branch is covered
     try {
-      const { getByText } = render(<OnboardingScreen navigation={navigation} />);
+      const { getByText } = render(
+        <OnboardingScreen navigation={navigation} />,
+      );
       fireEvent.press(getByText('Next'));
     } catch {
       // scrollToIndex invariant error is expected in test env
@@ -164,7 +181,9 @@ describe('OnboardingScreen', () => {
   });
 
   it('updates currentIndex on scroll end', () => {
-    const { getByTestId } = render(<OnboardingScreen navigation={navigation} />);
+    const { getByTestId } = render(
+      <OnboardingScreen navigation={navigation} />,
+    );
 
     // Simulate scrolling to the last slide
     const _flatList = getByTestId('onboarding-screen').children[0];
@@ -172,19 +191,27 @@ describe('OnboardingScreen', () => {
   });
 
   it('shows onboarding-skip testID', () => {
-    const { getByTestId } = render(<OnboardingScreen navigation={navigation} />);
+    const { getByTestId } = render(
+      <OnboardingScreen navigation={navigation} />,
+    );
     expect(getByTestId('onboarding-skip')).toBeTruthy();
   });
 
   it('shows onboarding-next testID', () => {
-    const { getByTestId } = render(<OnboardingScreen navigation={navigation} />);
+    const { getByTestId } = render(
+      <OnboardingScreen navigation={navigation} />,
+    );
     expect(getByTestId('onboarding-next')).toBeTruthy();
   });
 
   it('kicks off LAN discovery on mount', async () => {
     const { act: reactAct } = require('@testing-library/react-native');
     mockDiscoverLANServers.mockResolvedValue([
-      { endpoint: 'http://192.168.1.10:11434', type: 'ollama', name: 'Ollama (192.168.1.10)' },
+      {
+        endpoint: 'http://192.168.1.10:11434',
+        type: 'ollama',
+        name: 'Ollama (192.168.1.10)',
+      },
     ]);
 
     render(<OnboardingScreen navigation={navigation} />);
@@ -204,7 +231,9 @@ describe('OnboardingScreen', () => {
 
   it('does not add duplicate servers during LAN discovery', async () => {
     const { act: reactAct } = require('@testing-library/react-native');
-    const { useRemoteServerStore } = require('../../../src/stores/remoteServerStore');
+    const {
+      useRemoteServerStore,
+    } = require('../../../src/stores/remoteServerStore');
     useRemoteServerStore.getState.mockReturnValue({
       servers: [{ endpoint: 'http://192.168.1.10:11434' }],
     });
@@ -239,12 +268,13 @@ describe('OnboardingScreen', () => {
 
   it('opens correct Wednesday URL when tapping Made with love', () => {
     const { Linking } = require('react-native');
-    const spy = jest.spyOn(Linking, 'openURL').mockImplementation(() => Promise.resolve());
+    const spy = jest
+      .spyOn(Linking, 'openURL')
+      .mockImplementation(() => Promise.resolve());
     const { getByText } = render(<OnboardingScreen navigation={navigation} />);
     fireEvent.press(getByText('Wednesday'));
-    expect(spy).toHaveBeenCalledWith(
-      expect.stringContaining('wednesday.is/hire-ai-native-mobile-squad'),
-    );
+    expect(spy).toHaveBeenCalledWith(WEDNESDAY_URL);
+    expect(WEDNESDAY_URL).toBe('https://wednesday.is');
     spy.mockRestore();
   });
 

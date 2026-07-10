@@ -277,7 +277,7 @@ by a service. Two findings (DR1, DR3) are root-cause siblings of today's shipped
 ### DRY (§C)
 | # | Location | Verdict | Fix |
 |---|----------|---------|-----|
-| DR2 | remoteServerManagerUtils:60 (20 patterns) vs ModelsScreen/utils:41 + huggingface:178 (3) | DRIFTED (live) | Vision keyword lists diverged → Pixtral/Moondream/InternVL vision remotely, text-only locally. One VISION_NAME_PATTERNS + looksLikeVisionModel(). |
+| DR2 | ~~remoteServerManagerUtils vs ModelsScreen/utils + huggingface~~ | RESOLVED | Unified onto `utils/visionModel.ts` (VISION_NAME_PATTERNS + VISION_TAG_PATTERNS + looksLikeVisionModel). All 3 consumers import it; cross-consumer test asserts remote (detectVisionCapability) + local (getModelType) agree for Pixtral/Moondream/InternVL/qwen-vl/minicpm-v/yi-vl (the previously-divergent set) + a contract test over every pattern. |
 | DR3 | src/screens/HomeScreen/components/ModelPickerSheet.tsx:63,201 (*1.8/*1.5, -1.5) | DRIFTED (live) | Third memory-fit verdict bypassing memoryBudget.ts (self-declared single source). Can say "fits" when residency refuses — the Load-Anyway/selector bug family. Call modelMemoryBudgetMB. |
 | DR4 | CHARS_PER_TOKEN=4 bare literal in llmHelpers,liteRTCompaction,litert,llm,generationServiceHelpers,providers/*,documentService (const only in contextCompaction:34) | DEBT | Export CHARS_PER_TOKEN_ESTIMATE + estimateTokens(); all import. |
 | DR5 | STOP_TOKENS (llmHelpers:427) + CONTROL_TOKEN_PATTERNS (messageContent:1) + tests re-hardcode | DEBT | One token registry; derive stop-list + strip-patterns; tests import. |

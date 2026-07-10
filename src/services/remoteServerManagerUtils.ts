@@ -8,6 +8,7 @@ import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { createOpenAIProvider, OpenAICompatibleProvider } from './providers/openAICompatibleProvider';
 import { providerRegistry } from './providers/registry';
 import logger from '../utils/logger';
+import { looksLikeVisionModel } from '../utils/visionModel';
 
 const KEYCHAIN_SERVICE = 'ai.offgridmobile.servers';
 
@@ -58,14 +59,8 @@ export async function removeApiKeyImpl(serverId: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export function detectVisionCapability(modelId: string): boolean {
-  const patterns = [
-    '-vl', 'vl-', ':vl',   // common VL naming (qwen3-vl, llava, etc.)
-    'vision', 'llava', 'bakllava', 'moondream', 'cogvlm',
-    'cogagent', 'fuyu', 'idefics', 'qwen-vl', 'gpt-4-vision',
-    'gpt-4o', 'claude-3', 'gemini', 'pixtral', 'phi-3.5-vision',
-    'minicpm-v', 'internvl', 'yi-vl',
-  ];
-  return patterns.some(p => modelId.toLowerCase().includes(p));
+  // Single source of truth (utils/visionModel) so remote + local detection can't diverge (DR2).
+  return looksLikeVisionModel({ id: modelId, name: modelId });
 }
 
 export function detectToolCallingCapability(modelId: string): boolean {

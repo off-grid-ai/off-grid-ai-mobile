@@ -129,6 +129,12 @@ correct-behavior assertion is red on HEAD.
 |---|---|---|---|
 | Q6 | litert streaming reasoning → assert header reads "Thinking…" while streaming | — (render) | isReasoningComplete hardcoded true |
 
+### Voice narration / speak seam (MOUNT MessageRenderer + real turnSpeech; stubEngines record spoken text)
+| Bug | Flow → assertion | Boundary | Fails today because |
+|---|---|---|---|
+| Q19 | assistant reply w/ markdown → tap speak in chat → assert TTS got markdown-stripped text | stubEngines(record) | MessageRenderer strips control tokens only |
+| Q20 | direct-audio model, chat mode, standalone note → assert transcript (not empty) sent | stubEngines | Voice.ts bypasses resolveTranscription |
+
 ### Infra (safe, no device needed)
 | Bug | Assertion | Fails today because |
 |---|---|---|

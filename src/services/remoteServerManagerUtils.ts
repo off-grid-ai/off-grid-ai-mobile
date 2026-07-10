@@ -8,7 +8,6 @@ import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { createOpenAIProvider, OpenAICompatibleProvider } from './providers/openAICompatibleProvider';
 import { providerRegistry } from './providers/registry';
 import logger from '../utils/logger';
-import { looksLikeVisionModel } from '../utils/visionModel';
 
 const KEYCHAIN_SERVICE = 'ai.offgridmobile.servers';
 
@@ -58,21 +57,9 @@ export async function removeApiKeyImpl(serverId: string): Promise<void> {
 // Capability detectors (pure)
 // ---------------------------------------------------------------------------
 
-export function detectVisionCapability(modelId: string): boolean {
-  // Single source of truth (utils/visionModel) so remote + local detection can't diverge (DR2).
-  return looksLikeVisionModel({ id: modelId, name: modelId });
-}
-
-export function detectToolCallingCapability(modelId: string): boolean {
-  const patterns = [
-    'gpt-4', 'gpt-3.5-turbo', 'claude', 'gemini', 'mistral',
-    'qwen', 'llama-3', 'command-r', 'dbrx', 'firefunction',
-  ];
-  const lower = modelId.toLowerCase();
-  if (patterns.some(p => lower.includes(p))) return true;
-  if (lower.includes('tool') || lower.includes('function')) return true;
-  return false;
-}
+// The pure capability detectors live in utils/remoteCapabilityDetect so the store layer can import
+// them without depending on this (store-touching) service — that was a cycle. Re-exported here.
+export { detectVisionCapability, detectToolCallingCapability } from '../utils/remoteCapabilityDetect';
 
 // ---------------------------------------------------------------------------
 // Provider creation

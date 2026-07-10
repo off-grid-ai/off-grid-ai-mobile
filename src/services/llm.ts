@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 import { Message, INFERENCE_BACKENDS } from '../types';
 import { APP_CONFIG } from '../constants';
-import { useAppStore } from '../stores';
+import { useAppStore } from '../stores/appStore';
 import {
   initContextWithFallback, captureGpuInfo, logContextMetadata, getModelMaxContext,
   initMultimodal, checkContextMultimodal, recordGenerationStats, getStreamingDelta,
@@ -19,7 +19,8 @@ import type { ToolCall } from './tools/types';
 import type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
 import logger from '../utils/logger';
 export type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
-export type StreamToken = { content?: string; reasoningContent?: string };
+import type { StreamToken } from './llmStreamTypes';
+export type { StreamToken };
 type StreamCallback = (data: StreamToken) => void;
 type CompleteCallback = (result: { content: string; reasoningContent: string }) => void;
 function resolveGpuBackend(enabled: boolean, devices: string[]): string {

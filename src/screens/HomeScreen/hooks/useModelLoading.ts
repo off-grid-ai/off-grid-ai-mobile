@@ -4,7 +4,7 @@ import { showAlert, AlertState } from '../../../components';
 import { activeModelService } from '../../../services';
 import { useAppStore } from '../../../stores';
 import { DownloadedModel, ONNXImageModel } from '../../../types';
-import { LoadingState, ModelPickerType } from './useHomeScreen';
+import { LoadingState, ModelPickerType } from './types';
 
 type Setters = {
   setLoadingState: (s: LoadingState) => void;

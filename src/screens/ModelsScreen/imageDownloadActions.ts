@@ -10,19 +10,14 @@ import { getUserFacingDownloadMessage } from '../../utils/downloadErrors';
 import { ONNXImageModel } from '../../types';
 import { useDownloadStore, isActiveStatus } from '../../stores/downloadStore';
 import { makeImageModelKey } from '../../utils/modelKey';
-import { ImageModelDescriptor } from './types';
+import { ImageModelDescriptor, ImageDownloadDeps } from './types';
 import { getQnnWarningMessage, showQnnWarningAlert } from './imageDownloadQnn';
 import { ensureImageExtractionComplete } from '../../utils/imageModelIntegrity';
 import logger from '../../utils/logger';
 
-export interface ImageDownloadDeps {
-  addDownloadedImageModel: (m: ONNXImageModel) => void;
-  activeImageModelId: string | null;
-  setActiveImageModelId: (id: string) => void;
-  setAlertState: (s: AlertState) => void;
-  /** When false, skip auto-load so the onboarding spotlight can guide the user to load manually. */
-  triedImageGen: boolean;
-}
+// ImageDownloadDeps now lives in ./types (so imageDownloadQnn can import it without cycling back
+// here). Re-exported for existing importers.
+export type { ImageDownloadDeps };
 
 interface ImageMetadata {
   imageDownloadType: 'zip' | 'multifile';

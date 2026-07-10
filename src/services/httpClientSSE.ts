@@ -3,7 +3,7 @@
  */
 
 import logger from '../utils/logger';
-import type { SSEEvent, OpenAIStreamMessage, AnthropicStreamMessage } from './httpClient';
+import type { SSEEvent, OpenAIStreamMessage, AnthropicStreamMessage } from './httpClientTypes';
 
 /**
  * Process parsed event and yield it

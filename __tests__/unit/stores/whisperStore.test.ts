@@ -7,7 +7,7 @@
 
 // Mock the services barrel export used by the whisper store.
 // The mock object is created inside the factory to avoid jest.mock hoisting issues.
-jest.mock('../../../src/services', () => ({
+jest.mock('../../../src/services/whisperService', () => ({
   whisperService: {
     downloadModel: jest.fn(),
     getModelPath: jest.fn((id: string) => `/models/ggml-${id}.bin`),
@@ -29,7 +29,7 @@ jest.mock('../../../src/services/modelResidency', () => ({
 }));
 
 import { useWhisperStore } from '../../../src/stores/whisperStore';
-import { whisperService } from '../../../src/services';
+import { whisperService } from '../../../src/services/whisperService';
 import { modelResidencyManager } from '../../../src/services/modelResidency';
 import { resetWhisperStore } from '../../utils/testHelpers';
 

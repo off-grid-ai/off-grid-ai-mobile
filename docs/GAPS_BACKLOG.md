@@ -20,7 +20,27 @@ job + pre-push). AGGRESSIVE ruleset, all at `error`; existing debt captured in
 debt but FAILS on anything NEW. This is the honest register of that baselined debt - burn it
 down, never regenerate the baseline to hide a new violation.
 
-Baseline is now **61** (was 66). The 5 non-cycle violations were FIXED (not baselined):
+**RESOLVED — baseline is now ZERO.** All 61 import cycles were eliminated too (in this release,
+per the "break it once, rebuild properly" call). The `.dependency-cruiser-known-violations.json`
+baseline file was DELETED — every architecture rule is now fully enforced with no exceptions.
+How the 61 collapsed:
+- The amplifier: `whisperStore` imported the whole `services` BARREL (which re-exports everything,
+  each importing the stores barrel back). Pointing it at the concrete `services/whisperService`
+  dropped 61 → 10 in one edit.
+- `llm` + `documentService` imported the `stores` barrel → concrete `stores/appStore`.
+- Barrel-defines-a-symbol cycles: `theme/index` defined `useTheme` that `useThemedStyles` imported
+  back → moved to `theme/useTheme`; barrel only re-exports.
+- Type-only back-edges (extracted the shared type to a neutral module both sides import):
+  `StreamToken` → `llmStreamTypes`; SSE stream types → `httpClientTypes`; `ImageDownloadDeps` →
+  ModelsScreen `types`; the 3 HomeScreen hook cycles → `HomeScreen/hooks/types`.
+- The remoteServer value trio: the PURE detectors (detectVision/detectToolCalling) moved out of the
+  store-touching `remoteServerManagerUtils` into `utils/remoteCapabilityDetect`, so `remoteServerHelpers`
+  imports them from the pure util instead of the service.
+Test fixes from the whisperStore import change: 3 suites mocked the `services` barrel; retargeted to
+the concrete `services/whisperService` the store now reads (mock the direct module). Full suite 7741 green.
+
+--- historical (the 66→61 step) ---
+Baseline was 61 (was 66). The 5 non-cycle violations were FIXED (not baselined):
 - utils-stay-pure (3): RESOLVED. `utils/downloadAggregate` → `utils/downloadStatus` (extracted the pure
   status classification + DownloadEntry out of the store; store re-exports for back-compat).
   `utils/imageModelIntegrity` → `utils/modelLoadErrors` (moved the pure Error classes to utils; service

@@ -3,11 +3,11 @@
  * Extracted to keep llm.ts under the max-lines limit.
  */
 
-import { useAppStore } from '../stores';
+import { useAppStore } from '../stores/appStore';
 import type { Message } from '../types';
 import type { ToolCall } from './tools/types';
 import { recordGenerationStats, buildCompletionParams, buildThinkingCompletionParams, safeCompletion } from './llmHelpers';
-import type { StreamToken } from './llm';
+import type { StreamToken } from './llmStreamTypes';
 import logger from '../utils/logger';
 import { TOOL_CALL_OPENERS, TOOL_CALL_CLOSERS, maxPartialTagSuffix } from '../utils/messageContent';
 

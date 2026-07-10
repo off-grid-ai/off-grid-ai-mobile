@@ -106,6 +106,46 @@ SonarCloud: CORE uses Automatic Analysis (public project, free) + Codecov for co
 scan job (it would only duplicate Codecov's coverage). PRO is covered by the SonarJS ESLint rules
 above, locally - never sent to any cloud project.
 
+## REMAINING tooling to make gates fully BLOCK (fresh session — exact recipe) - 2026-07-10
+
+Decision from the owner: FIX everything, make the gates ERROR/blocking, "once and for all" (no
+baseline shortcuts). Two items remain. Both are LOW runtime risk but MESS-PRONE via naive tooling —
+this recipe is the clean path (each mistake below was hit and reverted this session):
+
+### 1. knip: remove the 126 unused exported TYPES, then make `npm run knip` a hard CI + pre-push gate
+knip config is already correct + committed (single workspace, pro/** entry, jest plugin covers
+jest.setup, infra deps ignored, @offgrid/pro haste ignored). Current state: knip is CLEAN except the
+126 unused exported types (report-only).
+DO:
+- Do NOT run `knip --fix --fix-type types` and then `prettier --write` on the touched files — prettier
+  EXPANDS pre-existing-unformatted big files past `max-lines`/`max-lines-per-function` (llm.ts,
+  TextModelsTab.tsx, useChatScreen.ts, etc. tripped). That's the hygiene anti-pattern. NO prettier.
+- knip --fix removes only the `export` keyword, leaving a dead LOCAL type → eslint no-unused-vars.
+  So after removing the export, DELETE the whole dead type declaration when eslint flags it unused.
+- 2 types break tsc because they're used via `import('...').T` NAMESPACE imports (knip can't see
+  those): `ModelEngine` (used in services/modelManager/scan.ts) + `RagSearchResult` (used in
+  services/tools/handlers.ts). Fix = re-export them + convert those namespace imports to normal
+  `import type { X } from '...'`. (7 namespace-import sites total across the repo — grep
+  `import\(['\"][^'\"]+['\"]\)\.[A-Z]` — convert all so knip stays accurate.)
+- getDebugLogPath (debugLogFile.ts) is test-only → mark `@public` JSDoc (knip honors it), do NOT delete.
+- Gate after: tsc + full `jest --coverage` (7741) + eslint 0 + `npm run depcruise`. Then add
+  `npm run knip` to .github/workflows/ci.yml (its own job) + the pre-push hook.
+
+### 2. ESLint typed `@typescript-eslint/no-unnecessary-condition` (the AI dead-branch killer)
+Needs typed linting: add `parserOptions.project: ['./tsconfig.json']` (SLOWS eslint a lot) + the
+`@typescript-eslint` typed config. The rule floods on AI code (always-truthy/falsy per types).
+CAUTION: many "unnecessary" conditions are DEFENSIVE against untyped runtime data (native bridge,
+JSON) — blindly deleting them can crash at runtime (hurts customer experience). So: enable, MEASURE
+the count, then fix each by hand verifying it's not a real runtime guard (keep + `// eslint-disable`
+with a reason where the type lies about runtime). Owner wants it at ERROR eventually; the honest
+path to "blocking" without a reckless mass-delete is fix-in-waves. Companion tsconfig flags:
+`allowUnreachableCode:false`, `noUnusedLocals/Parameters:true` (measure impact first).
+
+Everything else in the tooling spine is DONE + committed on PR #510: depcruise (0 violations, hard
+gate), sonarjs (wired, burn-down), knip (config correct + dead deps/files/value-exports removed,
+verified on android assembleDebug + ios pod install), the untyped dead-branch ESLint rules
+(no-unreachable/no-constant-condition/no-constant-binary-expression, 0 hits).
+
 ---
 
 ## Dead-code recon - 2026-07-06

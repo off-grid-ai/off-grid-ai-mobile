@@ -14,6 +14,7 @@ import { useAppStore } from '../../../src/stores/appStore';
 import { activeModelService } from '../../../src/services/activeModelService';
 import { modelResidencyManager } from '../../../src/services/modelResidency';
 import { llmService } from '../../../src/services/llm';
+import { liteRTService } from '../../../src/services/litert';
 import { localDreamGeneratorService } from '../../../src/services/localDreamGenerator';
 import { hardwareService } from '../../../src/services/hardware';
 import {
@@ -196,6 +197,22 @@ describe('ActiveModelService Integration', () => {
       await activeModelService.loadTextModel('gguf-1').catch(() => {});
       expect(spy).toHaveBeenCalledWith(expect.objectContaining({ key: 'text', dirtyMemory: false }), expect.anything());
       spy.mockRestore();
+    });
+
+    it('unloads a resident LiteRT model (latent bug: unload was llama-only, so LiteRT never freed)', async () => {
+      const litert = createDownloadedModel({ id: 'litert-1', engine: 'litert' as any, fileName: 'm.litertlm', filePath: '/m.litertlm' });
+      useAppStore.setState({ downloadedModels: [litert], activeModelId: 'litert-1' });
+      // The active engine (LiteRT) reports a resident model; llama has nothing.
+      jest.spyOn(liteRTService, 'isModelLoaded').mockReturnValue(true);
+      const liteUnload = jest.spyOn(liteRTService, 'unloadModel').mockResolvedValue(undefined);
+      mockLlmService.isModelLoaded.mockReturnValue(false);
+
+      await activeModelService.unloadTextModel();
+
+      // The active engine's model is actually freed — not left resident (the OOM-relevant bug).
+      expect(liteUnload).toHaveBeenCalled();
+      liteUnload.mockRestore();
+      (liteRTService.isModelLoaded as jest.Mock).mockRestore?.();
     });
 
     it('should save loadedSettings when model is loaded', async () => {

@@ -10,7 +10,6 @@ import {
   ImageGenerationState, hardwareService, QueuedMessage,
   contextCompactionService,
 } from '../../services';
-import { liteRTService } from '../../services/litert';
 import { effectiveCacheType } from '../../services/llmHelpers';
 import { generationSession } from '../../services/generationSession';
 import { useGeneratingConversationId } from '../../hooks/useGenerationSession';
@@ -339,13 +338,9 @@ export const useChatScreen = () => {
     // won't fast-path-skip. The memory gate — including the "Load Anyway" override
     // — is owned by initiateModelLoad, so reload matches normal load exactly (no
     // duplicated/stricter check in the view).
-    if (activeModel?.engine === 'litert') {
-      if (liteRTService.isModelLoaded()) {
-        await liteRTService.unloadModel().catch(() => { });
-      }
-    } else if (llmService.isModelLoaded()) {
-      await activeModelService.unloadTextModel(true);
-    }
+    // activeModelService.unloadTextModel now unloads whichever engine is active (LiteRT or llama)
+    // and no-ops when nothing is loaded — so no engine branch here.
+    await activeModelService.unloadTextModel(true);
     await initiateModelLoad(modelDeps, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeModelInfo.modelId, activeModelInfo.isRemote, settings, activeModel?.engine]);

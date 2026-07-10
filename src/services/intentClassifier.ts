@@ -3,7 +3,7 @@ import { activeModelService } from './activeModelService';
 import { DownloadedModel } from '../types';
 import logger from '../utils/logger';
 
-export type Intent = 'image' | 'text';
+type Intent = 'image' | 'text';
 
 interface ClassifyOptions {
   useLLM: boolean;

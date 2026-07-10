@@ -1,6 +1,6 @@
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
-import { DownloadedModel, LlamaDownloadedModel, LiteRTDownloadedModel, ModelFile, ONNXImageModel } from '../../types';
+import { DownloadedModel, LlamaDownloadedModel, LiteRTDownloadedModel, ModelFile, ONNXImageModel, ModelEngine } from '../../types';
 import { buildDownloadedModel, persistDownloadedModel, loadDownloadedModels, saveModelsList } from './storage';
 import { copyFileWithProgress } from './copyFile';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
@@ -381,7 +381,7 @@ export interface ImportLocalModelOpts {
   fileName: string;
   modelsDir: string;
   sourceSize?: number | null;
-  engine?: import('../../types').ModelEngine;
+  engine?: ModelEngine;
   liteRTVision?: boolean;
   onProgress?: (progress: { fraction: number; fileName: string }) => void;
   mmProjSourceUri?: string;

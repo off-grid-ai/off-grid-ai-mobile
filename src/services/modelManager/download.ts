@@ -118,7 +118,7 @@ export {
   getOrphanedImageDirs,
   syncCompletedBackgroundDownloads,
 } from './downloadHelpers';
-export type { SyncDownloadsOpts } from './downloadHelpers';
+;
 
 export interface PerformBackgroundDownloadOpts {
   modelId: string;

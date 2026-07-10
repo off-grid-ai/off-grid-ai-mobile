@@ -104,7 +104,7 @@ export function recommendedAccelerator(
  * use it, it's a "we're on CPU" warning. `backend` is the recommended accelerator so the
  * copy names the right one (never NPU on a GPU device).
  */
-export type AccelerationAction = 'enable' | 'switch' | 'download' | 'hidden';
+type AccelerationAction = 'enable' | 'switch' | 'download' | 'hidden';
 
 export interface AccelerationPlan {
   action: AccelerationAction;

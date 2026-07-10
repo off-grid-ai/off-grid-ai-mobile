@@ -5,19 +5,19 @@ import { embeddingService } from './embedding';
 import { documentService } from '../documentService';
 import logger from '../../utils/logger';
 
-export type { Chunk, ChunkOptions } from './chunking';
+;
 export type { RagDocument, RagSearchResult } from './database';
-export type { SearchResult } from './retrieval';
+;
 export { chunkDocument } from './chunking';
 export { retrievalService } from './retrieval';
 ;
 
-export interface IndexProgress {
+interface IndexProgress {
   stage: 'extracting' | 'chunking' | 'indexing' | 'embedding' | 'done';
   message: string;
 }
 
-export interface IndexDocumentParams {
+interface IndexDocumentParams {
   projectId: string;
   filePath: string;
   fileName: string;

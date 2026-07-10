@@ -233,4 +233,4 @@ class ModelDownloadService {
 }
 
 export const modelDownloadService = new ModelDownloadService();
-export type { DownloadProvider, ModelDownload, ModelDownloadStatus, ModelDownloadType } from './types';
+;

@@ -106,6 +106,24 @@ SonarCloud: CORE uses Automatic Analysis (public project, free) + Codecov for co
 scan job (it would only duplicate Codecov's coverage). PRO is covered by the SonarJS ESLint rules
 above, locally - never sent to any cloud project.
 
+## RESOLVED - knip is now a hard gate, ZERO issues - 2026-07-10
+
+All 126 unused exported types removed (knip --fix --fix-type types), the 2 namespace-import breaks
+fixed (ModelEngine re-exported + scan.ts converted to a normal import; RagSearchResult re-exported
+from rag/index + handlers.ts converted), 11 dead local type declarations deleted (KeygenLicenseKind,
+ModelLoadState, ProviderFactory, ProviderConfig, ThemeMode, ModelCategory, OnboardingStep,
+ImageGenerationModel, AppScreen, RemoteGenerationSettings, SelectableModel) + the cascade
+(ProviderConfig went dead once ProviderFactory was removed), knip-mangled re-export whitespace tidied
+in the barrels. getDebugLogPath tagged `@public` (test-only diagnostic; knip honors the tag).
+NO repo-wide prettier (avoided the max-lines trap). knip now exits 0 and is a hard CI gate
+(the `architecture` job runs `npm run knip` alongside depcruise). Verified: tsc clean · eslint 0 ·
+full jest 7741 · depcruise 0 · knip 0 · android assembleDebug BUILD SUCCESSFUL · ios pod install
+clean · RN bundle (android + ios) both build. The dep removal (9 deps + lint-staged + dead mocks)
+also actually landed this session — 69c8dfd0 had only staged 2 file deletions; redone + fully committed.
+
+REMAINING: the typed `@typescript-eslint/no-unnecessary-condition` rule (see recipe below) — the one
+tooling item still open.
+
 ## REMAINING tooling to make gates fully BLOCK (fresh session — exact recipe) - 2026-07-10
 
 Decision from the owner: FIX everything, make the gates ERROR/blocking, "once and for all" (no

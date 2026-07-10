@@ -18,14 +18,14 @@ import { RootStackParamList } from '../../navigation/types';
 import { ensureModelLoadedFn, ensureTextModelForChatFn, handleModelSelectFn, handleUnloadModelFn, initiateModelLoad, useChatImageModelEffects, useChatModelStateSync } from './useChatModelActions';
 import { startGenerationFn, handleSendFn, handleStopFn, handleSelectProjectFn, dispatchGenerationFn } from './useChatGenerationActions';
 import { handleRetryMessageFn, handleEditMessageFn, handleDeleteConversationFn, handleGenerateImageFromMsgFn } from './useChatMessageHandlers';
-import { getDisplayMessages, getPlaceholderText, ChatMessageItem, StreamingState } from './types';
+import { getDisplayMessages, getPlaceholderText, ChatMessageItem } from './types';
 import { saveImageToGallery } from './useSaveImage';
 import {
   isSuspiciousRecoveredImageModel,
   isSuspiciousRecoveredTextModel,
 } from '../../utils/modelSelectorFilters';
 
-export type { AlertState, ChatMessageItem, StreamingState };
+export type { AlertState, ChatMessageItem };
 export {  getPlaceholderText };
 
 type ChatScreenRouteProp = RouteProp<RootStackParamList, 'Chat'>;

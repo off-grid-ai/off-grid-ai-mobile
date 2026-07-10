@@ -204,7 +204,7 @@ export function parseToolCallsFromText(text: string): { cleanText: string; toolC
   for (const [start, end] of matchedRanges) { cleanText = cleanText.slice(0, start) + cleanText.slice(end); }
   return { cleanText: cleanText.trim(), toolCalls };
 }
-export interface ToolLoopCallbacks {
+interface ToolLoopCallbacks {
   onToolCallStart?: (name: string, args: Record<string, any>) => void;
   onToolCallComplete?: (name: string, result: ToolResult) => void;
   onFirstToken?: () => void;

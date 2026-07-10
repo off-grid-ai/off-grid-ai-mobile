@@ -13,8 +13,8 @@ export { imageToBase64DataUrl, isPrivateNetworkEndpoint, testEndpoint, detectSer
 // The stream-message types live in httpClientTypes so httpClientSSE can import them without
 // importing this file (which imports SSE) — that would be a cycle. Imported for internal use here
 // and re-exported for back-compat.
-import type { SSEEvent, OpenAIStreamMessage, AnthropicStreamMessage } from './httpClientTypes';
-export type { SSEEvent, OpenAIStreamMessage, AnthropicStreamMessage };
+import type { SSEEvent } from './httpClientTypes';
+export type { SSEEvent };
 
 /** Options for fetch with timeout */
 export interface FetchOptions extends RequestInit {
@@ -27,7 +27,7 @@ export interface FetchOptions extends RequestInit {
 }
 
 /** Optional config for streaming requests */
-export interface StreamRequestOptions {
+interface StreamRequestOptions {
   headers?: Record<string, string>;
   timeout?: number;
   signal?: AbortSignal;

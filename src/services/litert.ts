@@ -25,15 +25,15 @@ const EVENT_COMPLETE  = 'litert_complete';
 const EVENT_ERROR     = 'litert_error';
 const EVENT_TOOL_CALL = 'litert_tool_call';
 
-export type LiteRTBackend = 'cpu' | 'gpu' | 'npu';
+type LiteRTBackend = 'cpu' | 'gpu' | 'npu';
 
-export interface GenerateRawHandlers {
+interface GenerateRawHandlers {
   onToken?: (token: string) => void;
   onToolCall?: (name: string, args: Record<string, unknown>) => Promise<string>;
   onReasoning?: (token: string) => void;
 }
 
-export interface LiteRTBenchmarkStats {
+interface LiteRTBenchmarkStats {
   ttft: number;
   decodeTokensPerSecond: number;
   prefillTokensPerSecond: number;
@@ -43,7 +43,7 @@ export interface LiteRTBenchmarkStats {
   initTimeSeconds: number;
 }
 
-export interface LiteRTMemoryInfo {
+interface LiteRTMemoryInfo {
   totalRamMb: number;
   usedRamMb: number;
   availRamMb: number;
@@ -51,7 +51,7 @@ export interface LiteRTMemoryInfo {
   lowMemory: boolean;
 }
 
-export interface LiteRTGenerationCallbacks {
+interface LiteRTGenerationCallbacks {
   onToken: (token: string) => void;
   onReasoning: (token: string) => void;
   onComplete: (fullContent: string, fullReasoning: string, stats?: LiteRTBenchmarkStats) => void;

@@ -40,7 +40,7 @@ export type ModelDownloadStatus =
  *  - the STT RNFS path → `resumable: false` (dies with the app) → a 'paused' such
  *    download surfaces as needing a manual retry, not a phantom "resuming".
  */
-export interface DownloadCapabilities {
+interface DownloadCapabilities {
   cancel: boolean;     // can an in-progress transfer be aborted + cleaned up?
   retry: boolean;      // can a failed/stuck download be restarted?
   remove: boolean;     // can the on-disk model be deleted?

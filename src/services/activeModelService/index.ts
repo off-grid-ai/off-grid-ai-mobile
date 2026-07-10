@@ -28,13 +28,7 @@ import {
   getResourceUsage as _getResourceUsage,
   syncWithNativeState as _syncWithNativeState,
 } from './utils';
-export type {
-  ModelType,
-  MemoryCheckSeverity,
-  MemoryCheckResult,
-  ActiveModelInfo,
-  ResourceUsage,
-} from './types';
+;
 class ActiveModelService {
   private readonly listeners: Set<ModelChangeListener> = new Set();
   private readonly loadingState = { text: false, image: false };

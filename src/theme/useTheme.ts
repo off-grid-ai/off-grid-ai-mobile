@@ -16,7 +16,6 @@ import {
 } from './palettes';
 import type { ThemeShadows } from './palettes';
 
-export type ThemeMode = 'system' | 'light' | 'dark';
 
 export interface Theme {
   colors: typeof COLORS_LIGHT;

@@ -3,7 +3,7 @@ import { PermissionsAndroid, Platform } from 'react-native';
 import { audioSessionManager } from './audioSessionManager';
 
 /** Supported formats for llama.rn audio input */
-export type AudioInputFormat = 'wav' | 'mp3';
+type AudioInputFormat = 'wav' | 'mp3';
 
 class AudioRecorderService {
   private recorder: AudioRecorder | null = null;

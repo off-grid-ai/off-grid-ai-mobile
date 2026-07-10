@@ -29,7 +29,10 @@ let buffer: string[] = [];
 let timer: ReturnType<typeof setTimeout> | null = null;
 let enabled = false;
 
-/** The on-device path of the log file (also the `Documents/…` relative for pulls). */
+/**
+ * The on-device path of the log file (also the `Documents/…` relative for pulls).
+ * @public — intentional diagnostic accessor, exercised by the hardening tests.
+ */
 export function getDebugLogPath(): string { return LOG_PATH; }
 
 async function flush(): Promise<void> {

@@ -5,24 +5,13 @@
  */
 
 // Types
-export type {
-  LLMProvider,
-  ProviderType,
-  ProviderCapabilities,
-  GenerationOptions,
-  StreamCallbacks,
-  CompletionResult,
-  ToolCallResult,
-  ToolDefinition,
-  ProviderConfig,
-  ModelLoadState,
-} from './types';
+;
 
 // Local provider
-export {  localProvider } from './localProvider';
+export { localProvider } from './localProvider';
 
 // OpenAI-compatible provider
 ;
 
 // Registry
-export { providerRegistry,  } from './registry';
+export { providerRegistry } from './registry';

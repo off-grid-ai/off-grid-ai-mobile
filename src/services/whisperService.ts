@@ -7,13 +7,13 @@ import { backgroundDownloadService } from './backgroundDownloadService';
 import { useDownloadStore } from '../stores/downloadStore';
 import { makeModelKey } from '../utils/modelKey';
 
-export interface TranscriptionResult {
+interface TranscriptionResult {
   text: string;
   isCapturing: boolean;
   processTime: number;
   recordingTime: number;
 }
-export type TranscriptionCallback = (result: TranscriptionResult) => void;
+type TranscriptionCallback = (result: TranscriptionResult) => void;
 
 const GGML_BASE = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main';
 

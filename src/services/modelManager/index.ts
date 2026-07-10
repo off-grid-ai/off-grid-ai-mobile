@@ -43,7 +43,7 @@ import {
 } from './scan';
 import { resolveStoredPath, determineCredibility } from './storage';
 
-export type { BackgroundDownloadMetadataCallback } from './types';
+;
 ;
 
 class ModelManager {
@@ -435,4 +435,4 @@ class ModelManager {
 }
 
 export const modelManager = new ModelManager();
-export type { ModelManager };
+;

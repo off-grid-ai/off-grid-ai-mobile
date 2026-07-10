@@ -40,7 +40,7 @@ interface RegisteredResident extends Resident {
   canEvict?: () => boolean;
 }
 
-export interface ResidentSpec {
+interface ResidentSpec {
   key: string;
   type: ResidentType;
   /** The specific downloaded-model id - keys the per-model session override memory.
@@ -64,7 +64,7 @@ export interface ResidentSpec {
   dirtyMemory?: boolean;
 }
 
-export interface EnsureResult {
+interface EnsureResult {
   loaded: boolean;
   evicted: string[];
 }
@@ -482,4 +482,4 @@ class ModelResidencyManager {
 }
 
 export const modelResidencyManager = new ModelResidencyManager();
-export type { Resident, ResidentType } from './policy';
+;

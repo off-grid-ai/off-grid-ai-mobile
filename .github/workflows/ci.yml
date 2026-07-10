@@ -57,8 +57,8 @@ jobs:
         run: npx tsc --noEmit
 
   architecture:
-    # Dependency-cruiser standing gate: fails on any NEW architectural violation beyond the
-    # baselined debt (layering, engine DIP, import cycles, orphans). See .dependency-cruiser.js.
+    # Standing gates: dependency-cruiser (layering, engine DIP, import cycles, orphans — 0 violations,
+    # no baseline) + knip (dead files/exports/types/deps — 0 issues). Both fail on anything NEW.
     runs-on: ubuntu-latest
 
     steps:
@@ -76,6 +76,9 @@ jobs:
 
       - name: Dependency-cruiser (architecture gate)
         run: npm run depcruise
+
+      - name: knip (dead-code gate)
+        run: npm run knip
 
   test:
     runs-on: macos-latest

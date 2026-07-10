@@ -28,7 +28,7 @@ import {
 } from '../../services/modelFailureReasons';
 
 export { reasonFromLoadError, modelNotReadyAlert };
-export type { ModelNotReadyReason };
+;
 
 export type ModelReadyOutcome =
   | { ok: true }

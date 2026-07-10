@@ -1,5 +1,3 @@
-// Model category types
-export type ModelCategory = 'text-generation' | 'image-generation' | 'vision' | 'code';
 // Model source and credibility types
 export type ModelSource = 'lmstudio' | 'official' | 'verified-quantizer' | 'community';
 
@@ -247,13 +245,6 @@ export interface Conversation {
   compactionCutoffMessageId?: string;
 }
 
-// Onboarding-related types
-export interface OnboardingStep {
-  id: string;
-  title: string;
-  description: string;
-  image?: string;
-}
 
 // Hugging Face API types
 export interface HFModelSearchResult {
@@ -277,7 +268,7 @@ export interface HFModelSearchResult {
   siblings?: HFModelFile[];
 }
 
-export interface HFModelFile {
+interface HFModelFile {
   rfilename: string;
   size?: number;
   blobId?: string;
@@ -288,19 +279,6 @@ export interface HFModelFile {
   };
 }
 
-// Image generation types
-export interface ImageGenerationModel {
-  id: string;
-  name: string;
-  author: string;
-  description: string;
-  downloads: number;
-  likes: number;
-  modelPath: string;
-  downloadedAt: string;
-  size: number;
-  variant?: string; // e.g., 'gpu', 'npu', 'cpu'
-}
 
 export interface ONNXImageModel {
   id: string;
@@ -418,7 +396,6 @@ export interface DebugInfo {
   formattedPrompt: string; estimatedTokens: number;
   maxContextLength: number; contextUsagePercent: number;
 }
-export type AppScreen = 'onboarding' | 'home' | 'models' | 'chat' | 'settings' | 'generate' | 'model-download';
 // Remote server types
-export type { RemoteProviderType, RemoteServer, RemoteModel, RemoteModelCapabilities, ServerTestResult, ServerInfo, RemoteGenerationSettings, SelectableModel } from './remoteServer';
+export type { RemoteServer, RemoteModel, ServerTestResult } from './remoteServer';
 ;

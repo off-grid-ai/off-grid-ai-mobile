@@ -8,6 +8,12 @@
  * We render the REAL MessageRenderer and capture the exact text handed to the Speak slot (the slot is the
  * real extension seam; a recording slot stands in for the TTS button). No source change; asserts the text
  * that would reach the TTS engine.
+ *
+ * UI-driven note: Q19's symptom is AUDIO (what TTS voices), not a rendered pixel — you cannot assert on
+ * sound in jest. The faithful surface is therefore the text-fed-to-TTS seam: the real MessageRenderer
+ * computes and hands that text to the speak slot on render (the same value the Speak tap would voice). So
+ * the render seam IS the correct altitude for this audio symptom (per the standard's audio-boundary rule);
+ * the actual voicing is a Provit/on-device check.
  */
 import React from 'react';
 import { render } from '@testing-library/react-native';

@@ -42,7 +42,7 @@ both resend entry points (user-msg + assistant-msg) unified through it.
 Evidence (iOS log 09:41): `retry user msg ... recordedKind=text` on a "Draw a dog" turn. (Note the
 09:40 assistant-msg resend correctly got `recordedKind=image` — the hole was the user-msg path.)
 
-### B5 — Voice note in text mode has no transcript → "Generation Error: Failed to load media" (iOS)
+### B5 — Voice note in text mode → "Failed to load media" [FIX #1 DONE]
 **ROOT-CAUSED (fix pending).** Two compounding issues:
 1. **The turn-breaker:** the DESIGN (voiceNoteSend.ts) is "whisper transcript → message.content (text);
    the audio attachment is display-only." But `formatLlamaMessages` (llmMessages.ts:15-18) ALSO injects

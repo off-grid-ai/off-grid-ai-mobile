@@ -289,3 +289,49 @@ describe('extractImageUris', () => {
     expect(uris).toEqual(['file:///sys.jpg']);
   });
 });
+
+// ==========================================================================
+// B5 regression: a TRANSCRIBED voice note is display-only — its audio must NOT be sent to the model
+// as media (the transcript is already in message.content). Sending it made a non-audio mmproj throw
+// "Failed to load media" and hard-fail the turn. A transcript-LESS audio IS still a model input.
+// ==========================================================================
+
+describe('voice-note audio is not re-sent as model media when transcribed (B5)', () => {
+  const transcribedVoiceNote = (uri: string, transcript: string) =>
+    ({ id: `a-${uri}`, type: 'audio' as const, uri, audioFormat: 'wav' as const, textContent: transcript });
+  const rawAudio = (uri: string) =>
+    ({ id: `a-${uri}`, type: 'audio' as const, uri, audioFormat: 'wav' as const });
+
+  it('formatLlamaMessages: a transcribed voice note adds NO audio media marker (even with supportsAudio)', () => {
+    const messages: Message[] = [
+      createUserMessage('spoken text', { attachments: [transcribedVoiceNote('file:///vn.wav', 'spoken text')] }),
+    ];
+    const result = formatLlamaMessages(messages, false, true);
+    expect(result).not.toContain('<__media__>');
+    expect(result).toContain('spoken text');
+  });
+
+  it('formatLlamaMessages: a transcript-less audio IS sent as media', () => {
+    const messages: Message[] = [
+      createUserMessage('', { attachments: [rawAudio('file:///raw.wav')] }),
+    ];
+    expect(formatLlamaMessages(messages, false, true)).toContain('<__media__>');
+  });
+
+  it('buildOAIMessages: a transcribed voice note stays a plain text message (no input_audio part)', () => {
+    const messages: Message[] = [
+      createUserMessage('spoken text', { attachments: [transcribedVoiceNote('file:///vn.wav', 'spoken text')] }),
+    ];
+    const [msg] = buildOAIMessages(messages, true);
+    expect(msg).toEqual({ role: 'user', content: 'spoken text' }); // text, not a media-parts array
+  });
+
+  it('buildOAIMessages: a transcript-less audio produces an input_audio media part', () => {
+    const messages: Message[] = [
+      createUserMessage('', { attachments: [rawAudio('file:///raw.wav')] }),
+    ];
+    const [msg] = buildOAIMessages(messages, true);
+    expect(Array.isArray(msg.content)).toBe(true);
+    expect((msg.content as any[]).some(p => p.type === 'input_audio')).toBe(true);
+  });
+});

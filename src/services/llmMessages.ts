@@ -1,5 +1,15 @@
 import { RNLlamaOAICompatibleMessage, RNLlamaMessagePart } from 'llama.rn';
-import { Message } from '../types';
+import { Message, MediaAttachment } from '../types';
+
+/**
+ * Audio attachments that are genuine MODEL input (sent to the LLM as media), vs a transcribed voice
+ * note — which carries its whisper transcript in `message.content` (voiceNoteSend design) and is
+ * DISPLAY-ONLY. Sending a transcribed voice note's audio as media is redundant with the transcript
+ * AND makes a non-audio mmproj throw "Failed to load media", hard-failing the turn. So only a
+ * transcript-less audio attachment counts as model audio input. */
+function modelAudioAttachments(attachments: MediaAttachment[] | undefined): MediaAttachment[] {
+  return (attachments ?? []).filter(a => a.type === 'audio' && !a.textContent?.trim());
+}
 
 export function formatLlamaMessages(messages: Message[], supportsVision: boolean, supportsAudio = false): string {
   let prompt = '';
@@ -13,7 +23,7 @@ export function formatLlamaMessages(messages: Message[], supportsVision: boolean
           ? message.attachments.filter(a => a.type === 'image').map(() => '<__media__>').join('')
           : '';
         const audioMarkers = supportsAudio
-          ? message.attachments.filter(a => a.type === 'audio').map(() => '<__media__>').join('')
+          ? modelAudioAttachments(message.attachments).map(() => '<__media__>').join('')
           : '';
         content = imageMarkers + audioMarkers + content;
       }
@@ -61,7 +71,7 @@ function buildMediaParts(message: Message, supportsAudio: boolean): RNLlamaMessa
     parts.push({ type: 'image_url', image_url: { url: toFileUrl(a.uri) } });
   }
   if (supportsAudio) {
-    for (const a of message.attachments?.filter(att => att.type === 'audio') ?? []) {
+    for (const a of modelAudioAttachments(message.attachments)) {
       parts.push({ type: 'input_audio', input_audio: { format: a.audioFormat ?? 'wav', url: toFileUrl(a.uri, true) } });
     }
   }
@@ -80,7 +90,7 @@ export function buildOAIMessages(messages: Message[], supportsAudio = false): RN
       return { role: 'assistant' as const, content: message.content ? `${message.content}\n${toolCallText}` : toolCallText };
     }
     const hasImage = message.role === 'user' && message.attachments?.some(a => a.type === 'image');
-    const hasAudio = supportsAudio && message.role === 'user' && message.attachments?.some(a => a.type === 'audio');
+    const hasAudio = supportsAudio && message.role === 'user' && modelAudioAttachments(message.attachments).length > 0;
     if (!hasImage && !hasAudio) return { role: message.role, content: message.content };
     return { role: message.role, content: buildMediaParts(message, supportsAudio) };
   });

@@ -274,3 +274,22 @@ REMAINING - Step 5 = ON-DEVICE PROOF (GATE before any beta/release, §H):
 
 ## Reverted: Android ZRAM-swap Load-Anyway credit caused an OOM - 2026-07-10
 **resolved (reverted)** | Fix A (getOverrideAvailableMemoryGB crediting free ZRAM swap to the override survival floor) was WRONG for DIRTY models: GPU/LiteRT memory cannot be swapped, so a 5.2GB dirty Gemma-4-E4B loaded into ~4.5GB physical (swap-inclusive ceiling said "fits") and the device OOM-killed the app during generation (device log 19:03Z: `OVERRIDE - forcing load` with no REFUSE, then SIGKILL, no tombstone). Reverted both commits - restores the conservative physical survival floor (the shipped-safe behavior that was correctly refusing these). The original "LiteRT Load-Anyway refused on tight memory" is the SAFE behavior; making large LiteRT loads work needs real on-device memory profiling (physical-fit for dirty + killable-background accounting), verified on the dev build - not a swap-credit heuristic.
+
+## Engine DIP refactor - progress 2026-07-10 (PR #510)
+DONE (behavior-neutral, tested): deriveEngineCapabilities (engines.ts) is the single source for
+active-model vision/audio/tools/thinking; migrated useChatModelStateSync (was UNTESTED - added
+characterization tests first), the 3 post-load supportsVision sites (SO3), and SO2
+(invalidateActiveConversation via the engine registry). DR1/DR7 already resolved earlier in this PR
+(single reasoning + tool-call grammars). unloadAllTextEngines centralizes the engine set.
+
+REMAINING (needs an engine-INTERFACE extension, higher risk, device-verifiable - NOT a blind cram):
+- SO4 tool-routing (useChatGenerationActions:261-263 isLiteRT/useTextHint/canUseTools): partly
+  expressible via caps.tools, but isLiteRT also gates the LiteRT-specific gemma-think token - needs
+  a `wantsThinkToken` capability on the engine, not just a flag.
+- Lifecycle branches (modelReadiness:65, useChatModelActions ensureModelLoadedFn:198, useChatScreen:342):
+  per-engine isModelReady (llama matches loadedPath===filePath, LiteRT uses isModelLoaded) and per-engine
+  unload. Blocked on a LATENT BUG: activeModelService.doUnloadTextModelLocked (index.ts:~223) only
+  unloads llmService - a residency eviction of a LiteRT text model never frees its native memory. Fix:
+  route doUnloadTextModelLocked through getActiveEngineService()/unloadAllTextEngines so eviction unloads
+  the ACTIVE engine; then the caller unload/readiness branches collapse. This is a memory-path behavior
+  change - verify on the Android dev build ([MEM-SM]) before shipping.

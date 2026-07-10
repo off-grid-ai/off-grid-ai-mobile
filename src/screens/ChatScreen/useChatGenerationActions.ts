@@ -10,6 +10,7 @@ import {
 } from '../../services';
 import { getToolExtensions } from '../../services/tools/extensions';
 import { liteRTService } from '../../services/litert';
+import { invalidateActiveConversation } from '../../services/engines';
 import { ensureDefaultClassifier } from '../../services/classifierProvisioning';
 import { abortPreload } from '../../services/modelPreloader';
 import { modelResidencyManager } from '../../services/modelResidency';
@@ -457,7 +458,8 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
   logger.log('[RESEND-SM] regenerate → reached LLM generate path');
   generationSession.begin(targetConversationId);
   // LiteRT: native history must be rewound to match the JS messages we're about to replay.
-  if (deps.activeModel?.engine === 'litert') liteRTService.invalidateConversation();
+  // Dispatched via the service (no engine branch here); a no-op for engines without a KV cache.
+  invalidateActiveConversation();
   const conversation = useChatStore.getState().conversations.find(c => c.id === targetConversationId);
   const messages = (conversation?.messages || []).filter((m: Message) => !m.isSystemInfo);
   const messagesUpToUser = messages.slice(0, messages.findIndex((m: Message) => m.id === userMessage.id) + 1)

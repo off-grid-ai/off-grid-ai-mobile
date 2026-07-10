@@ -78,6 +78,16 @@ export async function unloadAllTextEngines(): Promise<void> {
 }
 
 /**
+ * Invalidate the active engine's cached conversation state before a history rewind (regenerate/
+ * edit). LiteRT keeps a native per-conversation KV cache that must be reset; llama has none.
+ * Dispatched via the registry so callers don't branch on engine === 'litert'.
+ */
+export function invalidateActiveConversation(): void {
+  const engine = getActiveEngineService();
+  (engine as { invalidateConversation?: () => void } | null)?.invalidateConversation?.();
+}
+
+/**
  * Returns the service for the currently active text engine, or null if no
  * model is loaded. Use this for operations that both engines support
  * (stopGeneration, isModelLoaded, unloadModel). For engine-specific

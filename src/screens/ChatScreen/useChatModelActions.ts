@@ -8,13 +8,25 @@ import { llmService, activeModelService, modelManager } from '../../services';
 import { liteRTService } from '../../services/litert';
 import { deriveEngineCapabilities } from '../../services/engines';
 import { useAppStore } from '../../stores';
-import { DownloadedModel, RemoteModel, ONNXImageModel } from '../../types';
+import { DownloadedModel, RemoteModel, ONNXImageModel, isLiteRTModel } from '../../types';
 import logger from '../../utils/logger';
 import { ModelReadyOutcome, reasonFromLoadError } from './modelReadiness';
 import { isOverridableMemoryError } from '../../services/modelLoadErrors';
 import { loadModelWithOverride } from '../../services/loadModelWithOverride';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
+
+/** Vision support for a just-loaded local model, via the single capability rule (engines.ts) —
+ *  so these post-load sites don't branch on engine === 'litert' themselves. */
+function loadedModelVision(model: DownloadedModel): boolean {
+  return deriveEngineCapabilities({
+    isRemote: false,
+    engine: model.engine,
+    liteRTVision: isLiteRTModel(model) ? model.liteRTVision : undefined,
+    liteRTLoaded: liteRTService.isModelLoaded(),
+    llama: { loaded: llmService.isModelLoaded(), vision: llmService.getMultimodalSupport()?.vision ?? false, audio: false, tools: false, thinking: false },
+  }).vision;
+}
 
 type ActiveModelInfo = {
   isRemote: boolean;
@@ -68,8 +80,7 @@ async function doLoadTextModel(deps: ModelActionDeps, opts?: { override?: boolea
   if (!activeModel || !activeModelId) return;
   try {
     await activeModelService.loadTextModel(activeModelId, undefined, opts);
-    const multimodalSupport = llmService.getMultimodalSupport();
-    deps.setSupportsVision(activeModel.engine === 'litert' ? !!activeModel.liteRTVision : (multimodalSupport?.vision || false));
+    deps.setSupportsVision(loadedModelVision(activeModel));
     if (deps.modelLoadStartTimeRef.current && deps.settings.showGenerationDetails) {
       const loadTime = ((Date.now() - deps.modelLoadStartTimeRef.current) / 1000).toFixed(1);
       addSystemMsg(deps, `Model loaded: ${activeModel.name} (${loadTime}s)`);
@@ -108,8 +119,7 @@ export async function initiateModelLoad(
 
   try {
     await activeModelService.loadTextModel(activeModelId);
-    const multimodalSupport = llmService.getMultimodalSupport();
-    deps.setSupportsVision(activeModel.engine === 'litert' ? !!activeModel.liteRTVision : (multimodalSupport?.vision || false));
+    deps.setSupportsVision(loadedModelVision(activeModel));
     if (!alreadyLoading && deps.modelLoadStartTimeRef.current && deps.settings.showGenerationDetails) {
       const loadTime = ((Date.now() - deps.modelLoadStartTimeRef.current) / 1000).toFixed(1);
       addSystemMsg(deps, `Model loaded: ${activeModel.name} (${loadTime}s)`);
@@ -245,8 +255,7 @@ export async function proceedWithModelLoadFn(
         deps.modelLoadStartTimeRef.current = null;
       },
       onSuccess: () => {
-        const multimodalSupport = llmService.getMultimodalSupport();
-        deps.setSupportsVision(model.engine === 'litert' ? !!model.liteRTVision : (multimodalSupport?.vision || false));
+        deps.setSupportsVision(loadedModelVision(model));
         if (deps.modelLoadStartTimeRef.current && deps.settings.showGenerationDetails && deps.activeConversationId) {
           const loadTime = ((Date.now() - deps.modelLoadStartTimeRef.current) / 1000).toFixed(1);
           deps.addMessage(deps.activeConversationId, {

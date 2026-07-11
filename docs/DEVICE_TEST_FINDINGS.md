@@ -380,3 +380,11 @@ answer" → Tools sent in respect (6)). The GLITCH is specifically a small EMPTY
 stray "#" character, rendered mid-conversation where no bubble should be. So B32 = an empty/malformed bubble
 (likely an empty assistant/tool placeholder or a markdown "#" that rendered as an orphan bubble). Functionality
 100% correct; purely a stray-empty-bubble render bug. (voice mode)
+
+### B27 — refined: voice-mode thinking block is FULL-WIDTH; should match voice-note width + be LEFT-aligned
+User (with screenshots IMG_0138/0139): the thinking / "Thought process" bubble stretches nearly full screen
+width, while the voice-note (waveform) bubbles are narrower/contained. Two specific wrongs:
+1. The thinking block should be the SAME WIDTH as the voice-note bubble (not full-width).
+2. It should be LEFT-ALIGNED (like a normal assistant message), not edge-to-edge.
+Currently it renders as a different, wider shape than everything around it, breaking the conversation's visual
+alignment. Testable: thinking bubble width == voice-note bubble width, left-aligned. (voice mode; pairs with B32)

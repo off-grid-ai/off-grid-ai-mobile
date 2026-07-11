@@ -57,6 +57,7 @@ class HardwareService {
       systemVersion,
       isEmulator,
     };
+    logger.log(`[WIRE-DEVICE] ${JSON.stringify({ platform: Platform.OS, ...this.cachedDeviceInfo })}`); // [WIRE] real device caps (drives onboarding recs + memory budget)
     return this.cachedDeviceInfo;
   }
   /**
@@ -334,6 +335,7 @@ class HardwareService {
       hasNPU: vendor === 'qualcomm' && !!qnnVariant,
       qnnVariant,
     };
+    logger.log(`[WIRE-DEVICE-SOC] ${JSON.stringify({ hardware, model, ...this.cachedSoCInfo })}`); // [WIRE] real SoC/NPU detection (drives qnn image-backend gate)
     return this.cachedSoCInfo;
   }
   private async getQnnVariantFromSoC(): Promise<

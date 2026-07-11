@@ -109,6 +109,21 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
       tools.unmount();
     },
 
+    /**
+     * Arrive-via-UI: set a text-generation SliderSetting (e.g. liteRTTemperature, liteRTTopP) by tapping its
+     * value into the real numeric input on the real TextGenerationSection — NOT updateSettings seeding.
+     */
+    setTextSettingViaUI(key: string, value: number) {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { TextGenerationSection } = require('../../src/components/GenerationSettingsModal/TextGenerationSection');
+      const s = rtl.render(React.createElement(TextGenerationSection, {}));
+      rtl.fireEvent.press(s.getByTestId(`setting-${key}-value-button`));
+      const input = s.getByTestId(`setting-${key}-input`);
+      rtl.fireEvent.changeText(input, String(value));
+      rtl.fireEvent(input, 'submitEditing');
+      s.unmount();
+    },
+
     /** Let async work (tool loop → tool-result bubble render) settle before asserting. */
     async settle(ms = 300) {
       await new Promise((r) => setTimeout(r, ms));

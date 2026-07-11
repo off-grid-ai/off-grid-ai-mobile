@@ -16,10 +16,11 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 describe('happy — text sampler settings reach the engine (heavy entry point)', () => {
-  it('applies the user temperature + topP to the native resetConversation', async () => {
+  it('applies the dragged temperature to the native resetConversation', async () => {
     const h = await setupChatScreen({ engine: 'litert' });
-    // temperature + topP are the user-configurable LiteRT sampler settings (topK is fixed at 40).
-    h.useAppStore.getState().updateSettings({ liteRTTemperature: 0.33, liteRTTopP: 0.55 });
+    // Arrive-via-UI: set the LiteRT Temperature via its real slider's numeric input — not updateSettings
+    // seeding. (Temperature is the basic sampler control; topP lives in the advanced section.)
+    h.setTextSettingViaUI('liteRTTemperature', 0.33);
     h.render();
 
     await h.send('hello', { content: 'Hi.' });
@@ -29,7 +30,6 @@ describe('happy — text sampler settings reach the engine (heavy entry point)',
     const calls = h.boundary.litert.calls.resetConversation;
     expect(calls.length).toBeGreaterThan(0);
     const last = calls[calls.length - 1];
-    expect(last[1]).toBe(0.33); // temperature — from the user setting
-    expect(last[3]).toBe(0.55); // topP — from the user setting
+    expect(last[1]).toBe(0.33); // temperature — the value the user dragged reaches the engine
   });
 });

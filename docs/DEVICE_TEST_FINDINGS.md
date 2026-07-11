@@ -397,3 +397,10 @@ alignment. Testable: thinking bubble width == voice-note bubble width, left-alig
 - **5MB max file size.** A 2nd (larger) PDF was rejected: "Maximum file size is 5MB." Size gate confirmed.
 - To actually exercise RAG (WIRE-EMBED + retrieval), need a TEXT-BASED PDF < 5MB. Iliad-1.pdf was
   scanned/image → 0 text → couldn't index. RAG embed/retrieval still UNCAPTURED (needs a suitable PDF).
+
+### RAG INDEXING WORKS (text-based PDF) — ground truth captured
+ET Focus - Bengaluru.pdf (text-based, <5MB): [WIRE-PDF] textLength:14873 (real text extracted) → 38 chunks →
+[WIRE-EMBED] {dim:384} ×38 (all 384-dim vectors) → "[RAG] Generated 38 embeddings / Indexed 38 chunks".
+GROUND TRUTH: embedding dimensionality = **384** (grounds KB fixtures + the toolEmbeddingStaleDim adversarial
+case — stored vs query dim must match at 384). PDF extraction is fine for text PDFs (the Iliad 0-text was
+purely the scanned/image issue). Retrieval-at-query still to capture (ask a doc question next). (part35)

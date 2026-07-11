@@ -378,9 +378,20 @@ jest.mock('@react-native-documents/viewer', () => ({
   },
 }));
 
+// A Swipeable whose swipe-revealed right actions (delete buttons etc.) are RENDERED, so those gestures are
+// reachable in tests (jest can't simulate the drag, but the actions a swipe reveals become tappable). Used
+// for both the barrel export and the direct import below.
+const makeMockSwipeable = () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return ({ children, renderRightActions, renderLeftActions }: { children?: unknown; renderRightActions?: () => unknown; renderLeftActions?: () => unknown }) =>
+    React.createElement(View, {}, children as never, renderRightActions ? (renderRightActions() as never) : null, renderLeftActions ? (renderLeftActions() as never) : null);
+};
+
 // react-native-gesture-handler mock
 jest.mock('react-native-gesture-handler', () => {
   const MockView = 'View';
+  const MockSwipeable = makeMockSwipeable();
   const mockGestureBuilder = () => {
     const gesture: any = {
       activeOffsetX: () => gesture,
@@ -393,7 +404,7 @@ jest.mock('react-native-gesture-handler', () => {
     return gesture;
   };
   return {
-    Swipeable: MockView,
+    Swipeable: MockSwipeable,
     GestureHandlerRootView: MockView,
     GestureDetector: MockView,
     ScrollView: MockView,
@@ -413,7 +424,7 @@ jest.mock('react-native-gesture-handler', () => {
 });
 
 // Mock the direct import of Swipeable
-jest.mock('react-native-gesture-handler/Swipeable', () => 'View');
+jest.mock('react-native-gesture-handler/Swipeable', () => makeMockSwipeable());
 
 // react-native-worklets mock — must come before reanimated
 jest.mock('react-native-worklets', () => ({}));

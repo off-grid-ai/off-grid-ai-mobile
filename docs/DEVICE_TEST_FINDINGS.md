@@ -388,3 +388,12 @@ width, while the voice-note (waveform) bubbles are narrower/contained. Two speci
 2. It should be LEFT-ALIGNED (like a normal assistant message), not edge-to-edge.
 Currently it renders as a different, wider shape than everything around it, breaking the conversation's visual
 alignment. Testable: thinking bubble width == voice-note bubble width, left-aligned. (voice mode; pairs with B32)
+
+### RAG / PDF (session 3) — extraction constraints grounded
+- **Scanned/image PDF → 0 text extracted.** [WIRE-PDF] {filePath: Iliad-1.pdf, maxChars:500000, textLength:0,
+  sample:""} — native PDFium extractor ran but returned EMPTY (the PDF is image-based, no text layer). App
+  showed "could not extract text from document" (correct, but unclear — could say "scanned PDF / no text
+  layer, no OCR"). Candidate: OCR fallback or a clearer message. NOT a hard bug — PDFium can't OCR images.
+- **5MB max file size.** A 2nd (larger) PDF was rejected: "Maximum file size is 5MB." Size gate confirmed.
+- To actually exercise RAG (WIRE-EMBED + retrieval), need a TEXT-BASED PDF < 5MB. Iliad-1.pdf was
+  scanned/image → 0 text → couldn't index. RAG embed/retrieval still UNCAPTURED (needs a suitable PDF).

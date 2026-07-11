@@ -294,6 +294,7 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
       )}
       {isRecording && <ReanimatedAnimated.View style={[styles.rippleRing, rippleStyle]} />}
       <Animated.View
+        testID="voice-record-button"
         style={[styles.buttonWrapper, { transform: [{ scale: isRecording ? pulseAnim : 1 }, { translateX: cancelOffsetX }] }]}
         {...(disabled ? {} : panResponder.panHandlers)}
       >

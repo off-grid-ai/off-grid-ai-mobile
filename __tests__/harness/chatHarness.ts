@@ -33,6 +33,8 @@ export interface ChatHarnessOptions {
   ram?: RamProfile;
   /** Make the (LiteRT) model vision-capable so the attach-photo gesture is allowed. */
   vision?: boolean;
+  /** Install the driveable whisper.rn STT fake (for chat-mode voice input flows). */
+  whisper?: boolean;
 }
 
 const LLAMA_PATH = '/models/small.gguf';
@@ -41,7 +43,7 @@ const LITERT_PATH = '/models/gemma.litertlm';
 export async function setupChatScreen(opts: ChatHarnessOptions) {
   const platform = opts.platform ?? 'android';
   const ram = opts.ram ?? { platform, totalBytes: 12 * GB, availBytes: 8 * GB };
-  const boundary = installNativeBoundary({ llama: opts.engine === 'llama', fs: true, ram });
+  const boundary = installNativeBoundary({ llama: opts.engine === 'llama', fs: true, ram, whisper: opts.whisper });
 
   // Global boundary polyfill: React 19's error reporter calls window.dispatchEvent; in the node test
   // env there is no window, so an unrelated crash would mask real errors. This is a jsdom/global shim,
@@ -211,6 +213,41 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
       const s = rtl.render(React.createElement(ShowGenerationDetailsToggle, {}));
       rtl.fireEvent.press(s.getByTestId('show-gen-details-on-button'));
       s.unmount();
+    },
+
+    /**
+     * Arrive-via-UI at "the user has a downloaded + selected STT model" (chat-mode voice precondition).
+     * Boundary leaf: the whisper file on disk (a download's artifact). Then run the REAL disk scan
+     * (refreshPresentModels) so the model shows as present, and TAP the present card on the real
+     * TranscriptionModelsTab → the real selectModel sets it active + loads it resident. Requires whisper:true.
+     */
+    async setupWhisperModel(modelId = 'tiny.en') {
+      /* eslint-disable @typescript-eslint/no-var-requires */
+      const { TranscriptionModelsTab } = require('../../src/screens/ModelsScreen/TranscriptionModelsTab');
+      const { useWhisperStore } = require('../../src/stores/whisperStore');
+      /* eslint-enable @typescript-eslint/no-var-requires */
+      boundary.fs!.seedFile(`${docs}/whisper-models/ggml-${modelId}.bin`, 75 * 1024 * 1024);
+      await useWhisperStore.getState().refreshPresentModels(); // real disk scan → present
+      const t = rtl.render(React.createElement(TranscriptionModelsTab, {}));
+      await rtl.waitFor(() => { expect(useWhisperStore.getState().presentModelIds).toContain(modelId); }, { timeout: 4000 });
+      rtl.fireEvent.press(await rtl.waitFor(() => t.getByTestId('transcription-model-card-0')));
+      await rtl.waitFor(() => { expect(useWhisperStore.getState().downloadedModelId).toBe(modelId); }, { timeout: 4000 });
+      t.unmount();
+    },
+
+    /** REAL chat-mode mic gesture: fire the PanResponder grant on the hold-to-talk button (empty input →
+     *  the send button IS the mic in asSendButton mode). onPanResponderGrant → onStartRecording. */
+    async tapMic() {
+      const view = this.view!;
+      const btn = await rtl.waitFor(() => view.getByTestId('voice-record-button'));
+      // PanResponder wires onResponderGrant → onPanResponderGrant(evt, gestureState); RNTL fireEvent invokes
+      // the prop directly, so pass a synthetic event carrying a valid touchHistory (PanResponder reads it to
+      // build gestureState). indexOfSingleActiveTouch:-1 = no active bank entry (a fresh grant).
+      const evt = {
+        nativeEvent: { touches: [], changedTouches: [], identifier: 1, pageX: 0, pageY: 0, timestamp: 0 },
+        touchHistory: { touchBank: [], numberActiveTouches: 0, indexOfSingleActiveTouch: -1, mostRecentTimeStamp: 0 },
+      };
+      rtl.fireEvent(btn, 'responderGrant', evt);
     },
 
     /** Mount the real ChatScreen. */

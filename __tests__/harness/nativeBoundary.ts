@@ -187,9 +187,19 @@ function makeLlamaFake(): LlamaFake {
   let pending: { text: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string } = { text: '' };
 
   const context: Record<string, jest.Mock> = {
-    completion: jest.fn(async (params: unknown) => {
+    // Faithful to llama.rn: completion(params, onToken) STREAMS token-by-token through the callback
+    // (each call carries the delta `token` + the cumulative `content`, as the native lib does) BEFORE
+    // resolving with the final result. This drives the REAL streaming render path (getStreamingDelta →
+    // streamingMessage), not a single-shot final text. onToken stops being fed once isGenerating flips
+    // false (a real stop), because the service's own callback guards on `data.token` + isGenerating.
+    completion: jest.fn(async (params: unknown, onToken?: (data: { token: string; content: string }) => void) => {
       calls.completion.push([params]);
       if (pending.throwMessage) throw new Error(pending.throwMessage);
+      if (pending.text && typeof onToken === 'function') {
+        const tokens = pending.text.match(/\S+\s*|\s+/g) ?? [pending.text];
+        let acc = '';
+        for (const t of tokens) { acc += t; onToken({ token: t, content: acc }); }
+      }
       return {
         text: pending.text,
         content: pending.text,

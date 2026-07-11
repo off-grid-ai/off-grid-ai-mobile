@@ -54,24 +54,35 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   const { useAppStore, useChatStore } = require('../../src/stores');
   /* eslint-enable @typescript-eslint/no-var-requires */
 
-  const modelPath = opts.engine === 'llama' ? LLAMA_PATH : LITERT_PATH;
+  // BOUNDARY (not a gesture): a downloaded model = a persisted record (@local_llm/downloaded_models) + the
+  // file on disk — exactly what a real download leaves. Downloading is native and can't be gestured in jest,
+  // so we pre-place ONLY this. Everything above it (hydration, the picker, selection, load) runs for real.
+  /* eslint-disable @typescript-eslint/no-var-requires */
+  const AsyncStorage = require('@react-native-async-storage/async-storage').default ?? require('@react-native-async-storage/async-storage');
+  const { activeModelService } = require('../../src/services/activeModelService');
+  const { HomeScreen } = require('../../src/screens/HomeScreen');
+  /* eslint-enable @typescript-eslint/no-var-requires */
+  const docs = boundary.fs!.DocumentDirectoryPath;
+  const fileName = opts.engine === 'llama' ? 'ggml-small.gguf' : 'gemma.litertlm';
+  const modelPath = `${docs}/models/${fileName}`;
+  boundary.fs!.seedFile(modelPath, 500 * 1024 * 1024);
+  const model = createDownloadedModel({ id: 'm', name: 'Test Model', engine: opts.engine, filePath: modelPath, fileName });
+  await AsyncStorage.setItem('@local_llm/downloaded_models', JSON.stringify([model]));
+  await hardwareService.refreshMemoryInfo();
 
-  // Load the REAL engine over the faked native leaf so the readiness gate (engines.isModelReady) passes.
-  if (opts.engine === 'llama') {
-    boundary.fs!.seedFile(modelPath, 500 * 1024 * 1024);
-    await hardwareService.refreshMemoryInfo();
-    const { llmService } = require('../../src/services/llm');
-    await llmService.loadModel(modelPath);
-  } else {
-    const { liteRTService } = require('../../src/services/litert');
-    await liteRTService.loadModel(modelPath, 'gpu', { maxNumTokens: 4096 });
-  }
+  // GESTURE: mount the real Home screen — its REAL hydration loads the record — then open the picker and TAP
+  // the model row. The real handleSelectTextModel sets it active (no setState activeModelId shortcut).
+  const home = rtl.render(React.createElement(HomeScreen, { navigation: { navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} } }));
+  await rtl.waitFor(() => { expect(useAppStore.getState().downloadedModels.length).toBeGreaterThan(0); }, { timeout: 4000 });
+  rtl.fireEvent.press(await rtl.waitFor(() => home.getByTestId('browse-models-button')));
+  const rows = await rtl.waitFor(() => { const r = home.queryAllByTestId('model-item'); expect(r.length).toBeGreaterThan(0); return r; }, { timeout: 4000 });
+  rtl.fireEvent.press(rows[0]);
+  await rtl.waitFor(() => { expect(useAppStore.getState().activeModelId).toBe('m'); }, { timeout: 4000 });
+  home.unmount();
 
-  // The active model's filePath MUST equal the loaded path — llama readiness compares them.
-  useAppStore.setState({
-    downloadedModels: [createDownloadedModel({ id: 'm', engine: opts.engine, filePath: modelPath })],
-    activeModelId: 'm',
-  });
+  // Load via the REAL load path (the app loads lazily on the first send; we trigger the same path so the
+  // readiness gate passes deterministically). This is the real native-faked load, not a state shortcut.
+  await activeModelService.loadTextModel('m');
 
   const conversationId = useChatStore.getState().createConversation('m');
   useChatStore.getState().setActiveConversation(conversationId);

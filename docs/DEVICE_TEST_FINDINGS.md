@@ -468,3 +468,17 @@ with NO streaming/progress feedback, so the (B30-slow) reasoning chain reads as 
 working. Entangled with B30: if enhancement is fixed to a fast plain completion (few tokens), this is moot.
 But note: whenever enhancement runs long, the absence of streaming/progress makes it look hung. Candidate:
 either fix B30 (fast) or show a progress/streaming indicator for the enhancement step.
+
+### B33 — Resend of an IMAGE request routes to the TEXT model (bypasses image-intent routing)
+Trace: original "draw a dog" → [ROUTE-SM] classify PATTERN intent=image → dispatch → IMAGE pipeline (correct).
+RESEND of the same message → [RESEND-SM] regenerate → reached LLM generate path — with NO ROUTE-SM classify
+step at all. The resend path skips image-intent classification and goes straight to the TEXT LLM. Result:
+resending an image request produces a text answer, not an image. User confirmed: "i resent draw a dog and it
+used the text model." Fix: the resend/regenerate path must re-run image-intent routing (dispatchGenerationFn),
+not jump straight to the text generate path. (part38) [Ties to the resend-path routing gap.]
+
+### B30b — Enhancement step has NO streaming/progress (elevated from secondary — real problem)
+User: "it also isn't streaming — so that's a problem" (re enhancement). A generation step that runs long
+(enhancement, esp. with B30) shows NO streaming/progress → looks completely frozen ("looked like it wasn't
+doing anything but it was doing a million characters"). Independent of B30's thinking bug: ANY long generation
+with no stream is a UX failure. Enhancement must stream or show real progress. (part37)

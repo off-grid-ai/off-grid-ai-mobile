@@ -1,10 +1,11 @@
 # Device wire-capture — progress & resume checklist
 
-Android run, 2026-07-11. Full analysis: `DEVICE_TEST_FINDINGS.md`.
-Raw commentary: `DEVICE_SESSION_COMMENTARY.md` (gitignored). Logs: `docs/wire-captures/` (17 snapshot sets).
+Android run, 2026-07-11. Full analysis: `DEVICE_TEST_FINDINGS.md` (B1–B26 + corrections).
+Raw commentary: `DEVICE_SESSION_COMMENTARY.md` (gitignored). Logs: `docs/wire-captures/` (25 snapshot sets).
 
-**Latest snapshot:** `wire-android-20260711-part15-lastpull.log` (4079 lines, 0 malformed). Append-only,
+**Latest snapshot:** `wire-android-20260711-part23-pre-STT-restart.log` (4193 lines, 0 malformed). Append-only,
 lossless — the on-device file also still holds the whole run since 06:39.
+(Note: app was rebuilt via `npm run android` after part23 → fresh process, models preserved.)
 
 **Pull commands:**
 ```sh
@@ -28,17 +29,13 @@ adb exec-out run-as ai.offgridmobile.dev cat files/offgrid-debug.log > /tmp/debu
    **(b)** thinking ON + tools ON → same + "reason step by step".
 
 ## TO DO (Android — remaining)
-- [ ] **Compute backends — llama × {CPU, GPU/OpenCL, NPU/HTP}** and **litert × {GPU, CPU}**. DO THIS FIRST.
-      Model Settings → Text Generation → Advanced → **Backend** selector (`BackendSelector` for llama,
-      `LiteRTBackendSelector` for litert; "Requires model reload"). For each backend: select it, reload the
-      model, send one prompt. Captures `[WIRE-LLAMA-LOAD]`/`[WIRE-LITERT-LOAD]` (requested vs actual backend,
-      nGpuLayers, offloaded X/Y) + confirms which backends REALLY work on-device vs fall back.
-      Watch: does **NPU/HTP** actually load (device is qnn `min`), or fall back? Does **GPU** offload real
-      layers (we saw gemma gguf fall to CPU: offloaded 0/36)? Response tokens are backend-independent — the
-      value is the LOAD config + does-it-work, not the wire format.
-      testIDs: `litert-backend-{gpu|cpu}-button`. (Metal is iOS-only — skip on Android.)
-- [ ] **STT working case** — record a voice note in a mode that SHOULD transcribe → `[WIRE-STT]` with real
-      text (we only have the broken Q20/raw-audio case). Also watch: does STT stop cleanly? (B11 no-stop leak)
+- [x] **Compute backends — DONE.** llama {CPU ✅, GPU ✅ (8s-timeout→retry→24/36), NPU ❌ B22 loads-but-gibberish};
+      litert {GPU ✅, CPU ❌ B23 Status-13}. Matrix in findings. (parts 16–21)
+- [~] **STT — IN PROGRESS (clean-restart test).** Realtime hold-to-talk = BROKEN (B26: captures no data,
+      hasData:false, no transcript — spoke "Hello how are you", got blank screen). Voice-note attach = sends
+      AUDIO not transcript (Q20/B10). Just rebuilt via `npm run android` → **doing ONE clean recording** to
+      confirm B26 is fundamental vs state-pollution. Watch: does transcript appear in the input box?
+      Then still need a WORKING STT case → `[WIRE-STT]` with real text.
 - [ ] **TTS** — tap **Speak** on a reply (kokoro → `[WIRE-TTS]`)
 - [ ] **RAG** — new project → add a **PDF** to its knowledge base → ask a question from it
       (`[WIRE-EMBED]` + `[WIRE-PDF]`)

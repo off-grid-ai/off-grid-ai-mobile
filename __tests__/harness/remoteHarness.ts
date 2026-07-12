@@ -9,7 +9,12 @@
 /** Behavior-faithful fake of the streaming XMLHttpRequest transport. Replays `sseBody` incrementally via
  *  onprogress (as chunked SSE arrives on device), then completes 200 — exactly what createStreamingRequest
  *  consumes (reads xhr.responseText in onprogress, finalises on readyState 4). Install before a remote send. */
-export function installRemoteStream(sseBody: string): void {
+export function installRemoteStream(sseBody: string | string[]): void {
+  // Accept a QUEUE of per-request bodies so a multi-turn remote flow (a tool loop: request 1 returns
+  // tool_calls, request 2 — sent WITH the tool results — returns the final reply) replays the right body per
+  // XHR. A single string keeps the old behavior; with an array each send() shifts the next body, the last
+  // repeats for any extra requests.
+  const bodies = Array.isArray(sseBody) ? [...sseBody] : [sseBody];
   class FakeXHR {
     responseText = '';
     readyState = 0;
@@ -24,7 +29,9 @@ export function installRemoteStream(sseBody: string): void {
     send(): void {
       // Emit the captured body line-by-line, one per macrotask, so the REAL incremental parser runs like it
       // does on device — works for both OpenAI SSE (`data: {…}\n\n`) and Ollama NDJSON (`{…}\n`).
-      const chunks = sseBody.match(/[^\n]*\n/g) ?? [sseBody];
+      const body = bodies.length > 1 ? bodies.shift()! : bodies[0];
+      this.responseText = '';
+      const chunks = body.match(/[^\n]*\n/g) ?? [body];
       let i = 0;
       const pump = (): void => {
         if (i < chunks.length) {

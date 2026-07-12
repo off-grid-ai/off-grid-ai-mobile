@@ -19,7 +19,12 @@ jest.mock('@offgrid/core/services', () => ({
   NO_PREAMBLE_WITH_HEADINGS: '',
   transcriptSummarizer: {
     isBackendReady: () => mockIsBackendReady(),
+    isSummarizing: false,
     summarize: (...args: unknown[]) => mockSummarize(...args),
+  },
+  llmService: {
+    isCurrentlyGenerating: () => false,
+    getLoadedModelPath: () => null,
   },
 }));
 

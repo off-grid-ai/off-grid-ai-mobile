@@ -74,6 +74,11 @@ class LiteRTService {
   private activeConversationId: string | null = null;
   private activeSystemPrompt: string | null = null;
   private activeToolsJson: string | null = null;
+  // Last sampler config pushed to native. LiteRT applies the sampler only on a
+  // conversation reset, so a mid-conversation temperature/top-p change (same id/sys/
+  // tools) was ignored until an unrelated reset (Q18). Track it so prepareConversation
+  // resets when the sampler DIFFERS — converging with llama (re-applies every completion).
+  private activeSamplerJson: string | null = null;
   private _lastBenchmarkStats: LiteRTBenchmarkStats | undefined = undefined;
 
   // Context usage tracking — cumulative tokens across turns, reset on conversation reset
@@ -154,6 +159,7 @@ class LiteRTService {
     await LiteRTModule.resetConversation(systemPrompt, temperature, topK, topP, toolsJson, historyJson);
     this.activeSystemPrompt = systemPrompt;
     this.activeToolsJson = toolsJson;
+    this.activeSamplerJson = JSON.stringify({ temperature, topK, topP });
     // Seed the counter with estimated tokens already in the KV cache from history + system prompt.
     // The SDK loads these silently via ConversationConfig.initialMessages so they never appear
     // in lastPrefillTokenCount, causing cumulativeTokens to undercount and auto-compact to fire too late.
@@ -217,10 +223,19 @@ class LiteRTService {
       return;
     }
 
+    const sc = opts?.samplerConfig;
+    const incomingSamplerJson = JSON.stringify({
+      temperature: sc?.temperature ?? 0.8,
+      topK: sc?.topK ?? 40,
+      topP: sc?.topP ?? 0.95,
+    });
     const idChanged = this.activeConversationId !== conversationId;
     const sysChanged = this.activeSystemPrompt !== systemPrompt;
     const toolsChanged = this.activeToolsJson !== toolsJson;
-    const needsReset = idChanged || sysChanged || toolsChanged;
+    // Re-apply the sampler when it differs even if id/sys/tools are unchanged — a
+    // mid-conversation temperature/top-p change must take effect on the next send (Q18).
+    const samplerChanged = this.activeSamplerJson !== incomingSamplerJson;
+    const needsReset = idChanged || sysChanged || toolsChanged || samplerChanged;
     if (needsReset) {
       await this.resetConversation(systemPrompt, { samplerConfig: opts?.samplerConfig, tools: opts?.tools, history: opts?.history });
       this.activeConversationId = conversationId;
@@ -487,6 +502,7 @@ class LiteRTService {
     this.activeConversationId = null;
     this.activeSystemPrompt = null;
     this.activeToolsJson = null;
+    this.activeSamplerJson = null;
     this.cumulativeTokens = 0;
     this.configuredMaxTokens = 4096;
     try {

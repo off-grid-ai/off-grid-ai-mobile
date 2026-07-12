@@ -207,7 +207,7 @@ manual tester and the automated test). **UI validation** = what to assert on the
 | T085 | ✅ P1 | ❌ | Voice mode + calculator on → record "use the calculator: 500 × 321" | STT → routes to TEXT → calculator tool → correct answer → TTS speaks it | DEV · WORKS | |
 | T086 | 🔴 P2 | ❌ | Voice mode → a reply that thinks (render assertion) | thinking bubble width == voice-note bubble width AND left-aligned (RED: full-width, edge-to-edge) | DEV-B27 · BROKEN | |
 | T087 | 🔴 P2 | ❌ | Voice mode → after a tool turn (render assertion) | no empty / "#"-only message bubble renders (RED: stray empty `#` bubble) | DEV-B32 · BROKEN | |
-| T088 | 🔴 P1 | ❌ | Voice mode, generation in flight (render assertion) | the mic button shows STOP while generating (RED: still a mic → a tap starts a colliding recording → the STT race) | DEV-B29 · BROKEN | |
+| T088 | 🔴 P1 | ✅ `voiceModeGeneratingStopButton.rendered.redflow` (GREEN guard — B29 fixed) | Voice mode, generation in flight (render assertion) | the mic button shows STOP while generating (RED: still a mic → a tap starts a colliding recording → the STT race) | DEV-B29 · BROKEN | |
 
 ## Area 13 — Projects & RAG
 

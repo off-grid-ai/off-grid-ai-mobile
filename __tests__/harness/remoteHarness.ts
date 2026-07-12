@@ -9,12 +9,17 @@
 /** Behavior-faithful fake of the streaming XMLHttpRequest transport. Replays `sseBody` incrementally via
  *  onprogress (as chunked SSE arrives on device), then completes 200 — exactly what createStreamingRequest
  *  consumes (reads xhr.responseText in onprogress, finalises on readyState 4). Install before a remote send. */
-export function installRemoteStream(sseBody: string | string[]): void {
+export function installRemoteStream(sseBody: string | string[]): { release: () => void } {
   // Accept a QUEUE of per-request bodies so a multi-turn remote flow (a tool loop: request 1 returns
   // tool_calls, request 2 — sent WITH the tool results — returns the final reply) replays the right body per
   // XHR. A single string keeps the old behavior; with an array each send() shifts the next body, the last
   // repeats for any extra requests.
+  //
+  // A body line that is exactly `__PAUSE__` HALTS the pump there (the deltas before it are delivered, the
+  // stream is NOT completed) until the returned release() is called — so a test can observe the mid-stream
+  // rendered state (e.g. the thinking-box header WHILE reasoning is still streaming). No pause line = no-op.
   const bodies = Array.isArray(sseBody) ? [...sseBody] : [sseBody];
+  let releaseFn: (() => void) | null = null;
   class FakeXHR {
     responseText = '';
     readyState = 0;
@@ -35,7 +40,9 @@ export function installRemoteStream(sseBody: string | string[]): void {
       let i = 0;
       const pump = (): void => {
         if (i < chunks.length) {
-          this.responseText += chunks[i++];
+          const chunk = chunks[i++];
+          if (chunk.trim() === '__PAUSE__') { releaseFn = () => setTimeout(pump, 0); return; } // hold here
+          this.responseText += chunk;
           this.onprogress?.();
           setTimeout(pump, 0);
         } else {
@@ -48,6 +55,7 @@ export function installRemoteStream(sseBody: string | string[]): void {
     }
   }
   (global as unknown as { XMLHttpRequest: unknown }).XMLHttpRequest = FakeXHR;
+  return { release: () => releaseFn?.() };
 }
 
 /** Make a remote OpenAI-compatible model the ACTIVE model — the real connect flow's end state (server

@@ -236,8 +236,8 @@ black box, instead of reading `getResidents()`. Trace any failure with `DEBUG_LO
 
 | ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
 |---|---|---|---|---|---|---|
-| T084 | ✅ P1 | ❌ | Voice mode + image model active → record "draw a dog" (fake STT → "Draw a dog.") | STT transcript → ROUTE-SM → IMAGE pipeline → image renders → TTS confirmation. Full journey | DEV · WORKS | |
-| T085 | ✅ P1 | ❌ | Voice mode + calculator on → record "use the calculator: 500 × 321" | STT → routes to TEXT → calculator tool → correct answer → TTS speaks it | DEV · WORKS | |
+| T084 | ✅ P1 | ✅ `voiceModeImageJourney.rendered.happy` | Voice mode + image model active → record "draw a dog" (fake STT → "Draw a dog.") | STT transcript → ROUTE-SM → IMAGE pipeline → image renders → TTS confirmation. Full journey | DEV · WORKS | |
+| T085 | ✅ P1 | ✅ `voiceModeCalculatorJourney.rendered.happy` | Voice mode + calculator on → record "use the calculator: 500 × 321" | STT → routes to TEXT → calculator tool → correct answer → TTS speaks it | DEV · WORKS | |
 | T086 | 🔴 P2 | ❌ | Voice mode → a reply that thinks (render assertion) | thinking bubble width == voice-note bubble width AND left-aligned (RED: full-width, edge-to-edge) | DEV-B27 · BROKEN | |
 | T087 | 🔴 P2 | ❌ | Voice mode → after a tool turn (render assertion) | no empty / "#"-only message bubble renders (RED: stray empty `#` bubble) | DEV-B32 · BROKEN | |
 | T088 | 🔴 P1 | ✅ `voiceModeGeneratingStopButton.rendered.redflow` (GREEN guard — B29 fixed) | Voice mode, generation in flight (render assertion) | the mic button shows STOP while generating (RED: still a mic → a tap starts a colliding recording → the STT race) | DEV-B29 · BROKEN | |

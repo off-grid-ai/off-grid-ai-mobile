@@ -324,7 +324,10 @@ export function parseModelOutput(content: string, reasoningContent?: string | nu
   if (reasoningContent) {
     // Separate reasoning channel: content is the answer; strip any stray control/tool markup + think tags.
     const answer = stripControlTokens(content).replaceAll(/<\/?think>/gi, '').trim();
-    return { reasoning: reasoningContent, answer, isReasoningComplete: true };
+    // Reasoning is "complete" only once the ANSWER has begun — while reasoning is still
+    // streaming and no answer content has arrived, the header must read "Thinking..." not
+    // the DONE "Thought process" label (Q6). The arriving answer is the completion signal.
+    return { reasoning: reasoningContent, answer, isReasoningComplete: answer.length > 0 };
   }
   const p = parseThinkingContent(content);
   // Strip the RESPONSE SLICE only (an empty slice stays empty — never fall back to the whole

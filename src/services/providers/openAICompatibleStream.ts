@@ -165,7 +165,11 @@ export function processDelta(
   // - delta.reasoning         (Ollama /v1/chat/completions)
   // - delta.thinking          (kept as fallback)
   const reasoningDelta = delta.reasoning_content || delta.reasoning || delta.thinking;
-  if (reasoningDelta && ctx.thinkingEnabled) {
+  // A DEDICATED reasoning field means the remote model chose to emit reasoning — surface
+  // it regardless of the local thinkingEnabled toggle. Remote has no thinking toggle, so
+  // gating on it dropped reasoning LM Studio actually sent (B16); providers that CAN be
+  // told not to think (Ollama's `think` param) simply won't send this field when off.
+  if (reasoningDelta) {
     state.fullReasoningContent += reasoningDelta;
     ctx.callbacks.onReasoning?.(reasoningDelta);
   }

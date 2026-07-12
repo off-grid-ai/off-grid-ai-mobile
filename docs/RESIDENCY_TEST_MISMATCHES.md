@@ -26,3 +26,14 @@ Format:
   `downloadWhisperOnly()` helper (download gesture, no select) + a budget knob; the code path itself is real
   and unit-tested (`ensureWhisperForTranscription`). · Status: OPEN — needs a focused session + a small harness
   addition. Not a device-behavior mismatch; a test-infra gap.
+- **[T118] embedding sidecar lazy-load on first RAG query — DEFERRED (harness gap)** —
+  Expected (from `embedding.ts:85` + `searchKnowledgeBaseRoundtrip`): the embedding model loads on the first
+  real `embed()` (indexing a KB doc, or a doc-question → `search_knowledge_base` → embed), registers as
+  `type:'embedding'`, co-resides as a sidecar → In Memory should list `resident-item-embedding` with its RAM. ·
+  Observed (test): not built — reaching a REAL `embed()` via UI needs either a KB **doc-attach** gesture or a
+  full **project + KB + doc-question** chat round-trip; the existing project UI tests seed via
+  `useProjectStore.setState` (no doc-attach gesture) and every RAG test (`ragFlow`/`embeddingFlow`/
+  `searchKnowledgeBaseRoundtrip`) is service-level with NO mounted screen. · Trace: n/a. · Hypothesis: needs a
+  RAG UI harness (mount the project/KB screen + a real attach-document gesture, or a chat harness that files a
+  chat under a project with a seeded-but-embeddable doc). The embedding residency registration itself is real
+  and service-covered. · Status: OPEN — needs a RAG UI harness. Not a device mismatch; a test-infra gap.

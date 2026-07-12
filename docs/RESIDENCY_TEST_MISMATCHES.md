@@ -13,7 +13,16 @@ Format:
 
 ---
 
-- **[T119] whisper blocked→free→retry — DEFERRED (harness gap, not a device mismatch)** —
+- **[T119] whisper blocked→free→retry — RESOLVED (2026-07-12)** — Now automated as
+  `whisperBlockedFreeRetry.rendered.happy`: mount ChatScreen (pro voice), text model resident, whisper
+  downloaded-not-loaded (file on disk + `downloadedModelId` set, no load), budget pinned tight via
+  `modelResidencyManager.setBudgetOverrideMB(700)`. The real voice-note path hits the blocked verdict
+  (`[MEM-SM] makeRoomFor whisper residents=[text:6144] fits=false`), `ensureWhisperForTranscription` frees the
+  text model + retries (`residents=[] fits=true`), whisper loads, and the reply renders (audio bubble).
+  Falsified by neutralizing `freeGenerationModels` → blocked twice → no reply. The two "harness gaps" it
+  needed (download-whisper-without-loading + a budget knob) both already existed (`setBudgetOverrideMB` +
+  the post-B1 download-only state). Original note below, kept for history.
+- **[T119-original] whisper blocked→free→retry — (was DEFERRED, now resolved above)** —
   Expected (from `DEVICE_TEST_FINDINGS.md` B1 + `ensureWhisperForTranscription.ts`): on a tight device where a
   heavy text model owns RAM, recording a voice note makes `whisperStore.loadModel` return `'blocked'` (the
   sidecar rule won't evict the heavy), so `ensureWhisperForTranscription` calls `freeGenerationModels()` then

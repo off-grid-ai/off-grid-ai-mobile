@@ -32,6 +32,7 @@ describe('T023 (rendered) — Eject All frees the whisper sidecar (DEV-B1, fixed
     const { TranscriptionModelsTab } = require('../../../src/screens/ModelsScreen/TranscriptionModelsTab');
     const { ResidentsProbe } = require('../../harness/ResidentsProbe');
     const { activeModelService } = require('../../../src/services/activeModelService');
+    const { useWhisperStore } = require('../../../src/stores/whisperStore');
     /* eslint-enable @typescript-eslint/no-var-requires */
 
     const ui = render(
@@ -55,6 +56,13 @@ describe('T023 (rendered) — Eject All frees the whisper sidecar (DEV-B1, fixed
       await new Promise((r) => setTimeout(r, 0));
       await new Promise((r) => setTimeout(r, 0));
     });
+
+    // Post-T022 fix a download no longer AUTO-LOADS whisper (that phantom-on-download was the bug). Whisper
+    // now becomes resident on-demand — the transcribe path (ensureWhisperForTranscription) or the launch
+    // preload both call whisperStore.loadModel(). Drive that same REAL load to reach the resident precondition.
+    // (Arrival-heavy exception — this test's focus is ejectAll freeing the sidecar, not the load path, which
+    // is exactly why it also drives activeModelService.ejectAll directly below.)
+    await act(async () => { await useWhisperStore.getState().loadModel(); await new Promise((r) => setTimeout(r, 0)); });
 
     // Precondition: whisper is resident (so the post-eject check is meaningful).
     await waitFor(() => { expect(ui.getByTestId('probe-residents').props.children).toContain('whisper'); });

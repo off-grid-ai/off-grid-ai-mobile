@@ -411,11 +411,16 @@ export interface WhisperFake {
   setFileTranscript(text: string): void;
   /** True once whisperService has started a realtime session (subscribe wired). */
   hasRealtimeSubscriber(): boolean;
+  /** True while the native mic realtime session is CAPTURING — set on transcribeRealtime(), cleared on
+   *  its stop() or on release(). Models the device mic: capture continues until explicitly stopped, so a
+   *  leaked session (never stopped on navigate-away) reads true. The device-boundary residue for B11. */
+  realtimeActive(): boolean;
 }
 
 function makeWhisperFake(): WhisperFake {
   let realtimeCb: ((evt: unknown) => void) | null = null;
   let fileTranscript = 'Transcribed text';
+  let rtActive = false; // the native mic session is capturing until stop()/release()
   const context: Record<string, jest.Mock> = {
     // Faithful to whisper.rn: transcribe(path, opts) returns { stop, promise }, the promise resolving to
     // { result, segments } — this is the method whisperService.transcribeFile (the voice-mode file path) drives.
@@ -424,11 +429,14 @@ function makeWhisperFake(): WhisperFake {
       promise: Promise.resolve({ result: fileTranscript, segments: [{ text: fileTranscript, t0: 0, t1: 100 }] }),
     })),
     transcribeFile: jest.fn(async () => ({ result: fileTranscript, segments: [{ text: fileTranscript, t0: 0, t1: 100 }] })),
-    transcribeRealtime: jest.fn(async () => ({
-      stop: jest.fn(async () => { /* native stop; the test drives the final event explicitly */ }),
-      subscribe: (cb: (evt: unknown) => void) => { realtimeCb = cb; },
-    })),
-    release: jest.fn(async () => { realtimeCb = null; }),
+    transcribeRealtime: jest.fn(async () => {
+      rtActive = true; // native mic session starts capturing
+      return {
+        stop: jest.fn(async () => { rtActive = false; /* native stop; test drives the final event explicitly */ }),
+        subscribe: (cb: (evt: unknown) => void) => { realtimeCb = cb; },
+      };
+    }),
+    release: jest.fn(async () => { realtimeCb = null; rtActive = false; }),
     bench: jest.fn(async () => ''),
   };
   const module: Record<string, jest.Mock> = {
@@ -450,6 +458,7 @@ function makeWhisperFake(): WhisperFake {
     },
     setFileTranscript: (t) => { fileTranscript = t; },
     hasRealtimeSubscriber: () => realtimeCb != null,
+    realtimeActive: () => rtActive,
   };
 }
 

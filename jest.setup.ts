@@ -175,6 +175,33 @@ jest.mock('whisper.rn', () => ({
   },
 }), { virtual: true });
 
+// RN host-component native-measurement boundary. The RN jest preset stubs measure/measureInWindow as
+// no-op jest.fns that never invoke their callback, so any component that anchors UI off a measured node
+// (e.g. a dropdown whose open() runs INSIDE the measureInWindow callback) stalls in tests. Faithfully
+// invoke the layout callback (x, y, width, height[, pageX, pageY]) so that real UI proceeds — the only
+// non-faithful part of the preset's host mock for our flows.
+jest.mock('react-native/jest/mockNativeComponent', () => {
+  const ReactLocal = require('react');
+  let tag = 1;
+  return (viewName: string) => {
+    const Component = class extends ReactLocal.Component {
+      _nativeTag = tag++;
+      render() {
+        const self = this as unknown as { props: Record<string, unknown> & { children?: unknown } };
+        return ReactLocal.createElement(viewName, self.props, self.props.children);
+      }
+      blur = jest.fn();
+      focus = jest.fn();
+      measure = (cb?: (...a: number[]) => void) => cb?.(0, 0, 100, 40, 0, 0);
+      measureInWindow = (cb?: (...a: number[]) => void) => cb?.(0, 0, 100, 40);
+      measureLayout = jest.fn();
+      setNativeProps = jest.fn();
+    };
+    (Component as { displayName?: string }).displayName = viewName === 'RCTView' ? 'View' : viewName;
+    return Component;
+  };
+});
+
 // react-native-audio-api mock
 jest.mock('react-native-audio-api', () => ({
   AudioContext: jest.fn().mockImplementation(() => ({
@@ -232,6 +259,15 @@ const mockVoiceConfig = {
   },
 };
 jest.mock('react-native-executorch', () => ({
+  // Faithful init leaf for the executorch native runtime (a genuine external native boundary):
+  // initExecutorch registers the resource fetcher so the runtime is ready to load models through
+  // it. With models faked at the fetcher + useTextToSpeech boundary there is nothing further to
+  // emulate in-process, so it is a ready-signal (EngineBridge calls it at module import — without
+  // this the pro TTS bootstrap throws "initExecutorch is not a function").
+  initExecutorch: () => {},
+  // useTextToSpeech is the executorch boundary the TTS bridge drives. The streaming/playback is
+  // exercised end-to-end by the KokoroTTSBridge suite, which feeds chunks + drives onEnded through
+  // the AudioContext itself; here stream() just resolves (the bridge owns the audio pump).
   useTextToSpeech: jest.fn(() => ({
     isReady: true,
     downloadProgress: 1,

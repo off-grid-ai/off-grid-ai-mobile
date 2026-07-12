@@ -261,6 +261,7 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
           style={[styles.buttonWrapper, { transform: [{ scale: isRecording ? pulseAnim : 1 }] }]}
         >
           <TouchableOpacity
+            testID="voice-record-button-audio"
             onPress={handleToggle}
             disabled={disabled}
             activeOpacity={0.7}

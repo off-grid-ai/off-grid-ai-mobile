@@ -363,6 +363,12 @@ function makeWhisperFake(): WhisperFake {
   let realtimeCb: ((evt: unknown) => void) | null = null;
   let fileTranscript = 'Transcribed text';
   const context: Record<string, jest.Mock> = {
+    // Faithful to whisper.rn: transcribe(path, opts) returns { stop, promise }, the promise resolving to
+    // { result, segments } — this is the method whisperService.transcribeFile (the voice-mode file path) drives.
+    transcribe: jest.fn((_path: string) => ({
+      stop: jest.fn(async () => {}),
+      promise: Promise.resolve({ result: fileTranscript, segments: [{ text: fileTranscript, t0: 0, t1: 100 }] }),
+    })),
     transcribeFile: jest.fn(async () => ({ result: fileTranscript, segments: [{ text: fileTranscript, t0: 0, t1: 100 }] })),
     transcribeRealtime: jest.fn(async () => ({
       stop: jest.fn(async () => { /* native stop; the test drives the final event explicitly */ }),
@@ -565,6 +571,10 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
     }),
   };
   Object.defineProperty(RN.Platform, 'OS', { value: ram.platform, configurable: true });
+  // OS version leaf: a supported device (Android API 34 / iOS 17). Engines gate feature support on
+  // Platform.Version (e.g. Kokoro TTS requires Android >= 26 / iOS >= 17); default undefined reads as
+  // unsupported, so seed a real supported version.
+  Object.defineProperty(RN.Platform, 'Version', { value: ram.platform === 'android' ? 34 : '17.0', configurable: true });
 
   // NativeEventEmitter is constructed over the fake module; route its listeners through our registry
   // so the test can drive native events. Use defineProperty (a plain assignment can silently no-op —
@@ -592,6 +602,7 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
     });
     (DeviceInfo.getTotalMemory as jest.Mock).mockResolvedValue(profile.totalBytes);
     Object.defineProperty(RN.Platform, 'OS', { value: profile.platform, configurable: true });
+    Object.defineProperty(RN.Platform, 'Version', { value: profile.platform === 'android' ? 34 : '17.0', configurable: true });
   };
 
   return { litert, litertEvents: handle, diffusion, fs: fsFake, llama: llamaFake, download: downloadFake, whisper: whisperFake, setRam };

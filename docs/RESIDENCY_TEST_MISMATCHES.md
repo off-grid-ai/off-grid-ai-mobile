@@ -39,6 +39,19 @@ Format:
   by T014 (GenerationMeta shows the backend/layers). If the product later adds an app-side guard (detect
   gemma+HTP → fall back to CPU, or warn), THAT guard becomes a real UI test. · Status: OPEN — native-only;
   needs a device (Provit N/A) to verify, or an app-side guard to make it JS-testable. Not a false green.
+- **[T019] litert context-clamp drops tools — DEFERRED (native-only, no JS seam)** —
+  Expected (from `DEVICE_TEST_FINDINGS.md` B25): litert GPU clamps context 4096→880; a thinking+tools prompt
+  then doesn't fire the tool (880 too small for the tool-augmented system prompt). · Observed (analysis): the
+  clamp ADOPTION is JS-observable (`litert.ts:111-115` logs it + updates `configuredMaxTokens`), but grep of
+  `generationToolLoop.ts`/`generationService.ts`/`litertToolSelector.ts`/`litert.ts` shows NO code that gates
+  or drops tools on context size — `configuredMaxTokens` only feeds the compaction threshold + stats, and
+  compaction PRESERVES tools. The clamp→tool-drop happens inside the native LiteRT runtime (it simply doesn't
+  emit `litert_tool_call`). · Trace: n/a. · Hypothesis: to test it emergently the LiteRTFake would need (a) a
+  per-load `maxNumTokens` override AND (b) an onSend rule that suppresses a scripted tool call when the
+  tool-augmented prompt exceeds the clamp — but even then it only tests the fake's model of native behavior,
+  because no OGAM JS code produces or prevents it. The honest fix is an app-side guard ("tools don't fit the
+  clamped context → warn / disable tools"), which would then be UI-testable. · Status: OPEN — native-only;
+  needs the app-side guard to become JS-testable, or a device check. Not a false red.
 - **[T118] embedding sidecar lazy-load on first RAG query — DEFERRED (harness gap)** —
   Expected (from `embedding.ts:85` + `searchKnowledgeBaseRoundtrip`): the embedding model loads on the first
   real `embed()` (indexing a KB doc, or a doc-question → `search_knowledge_base` → embed), registers as

@@ -138,3 +138,33 @@ describe('mergeWithinGap (auto-prune: keep short pauses, drop long dead-air)', (
     expect(mergeWithinGap([], GAP)).toEqual([]);
   });
 });
+
+describe('continuous-smart trim policy (production AUTO_PRUNE_GAP_MS = 15s)', () => {
+  // Pins the behaviour decided for the continuous-smart recorder: inside a kept
+  // clip, a non-speech run (silence OR noise) SHORTER than 15s is a natural
+  // pause and stays; a run LONGER than 15s is dead air and is cut. This is the
+  // duration gate that also guards against a brief Silero false-negative (a miss
+  // would have to persist 15s+ continuously to lose real speech).
+  const GAP = 15_000;
+
+  it('keeps an 8s pause between two sentences (< 15s -> bridged, playback stays natural)', () => {
+    expect(mergeWithinGap([r(0, 5_000), r(13_000, 18_000)], GAP)).toEqual([r(0, 18_000)]);
+  });
+
+  it('cuts a 40s dead stretch between two sentences (> 15s -> split, the middle is removed)', () => {
+    expect(mergeWithinGap([r(0, 5_000), r(45_000, 50_000)], GAP)).toEqual([
+      r(0, 5_000),
+      r(45_000, 50_000),
+    ]);
+  });
+
+  it('a gap exactly 15s is kept (threshold is inclusive)', () => {
+    expect(mergeWithinGap([r(0, 5_000), r(20_000, 25_000)], GAP)).toEqual([r(0, 25_000)]);
+  });
+
+  it('one sentence with only trailing dead air -> a single kept range (compaction cuts the tail)', () => {
+    // The one-liner survives (it is a real utterance); the trailing silence is
+    // not a between-segment gap, so it is removed by compactToSpeechOnly, not here.
+    expect(mergeWithinGap([r(0, 3_000)], GAP)).toEqual([r(0, 3_000)]);
+  });
+});

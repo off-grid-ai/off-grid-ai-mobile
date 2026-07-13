@@ -62,7 +62,7 @@ describe.each(ENGINE_CASES)('voice note is transcript-only — engine=$label', (
       lastGenerationTime: 1, lastTokenCount: 5,
     } as any);
     mockLlm.stopGeneration.mockResolvedValue();
-    mockLlm.generateResponse.mockImplementation(async (_m, _s, onComplete) => {
+    mockLlm.generateResponse.mockImplementation(async (_m, { onComplete } = {}) => {
       onComplete?.({ content: 'ok', reasoningContent: '' });
       return 'ok';
     });

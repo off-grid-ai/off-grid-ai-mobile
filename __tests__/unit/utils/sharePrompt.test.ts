@@ -21,7 +21,7 @@ describe('maybeScheduleSharePrompt — at most once per session', () => {
   it('emits ONCE per session even when triggered many times (no 2/10/20 re-show)', () => {
     withListener(emits => {
       for (const count of [2, 3, 10, 20, 50]) {
-        maybeScheduleSharePrompt('text', count, false, 0);
+        maybeScheduleSharePrompt({ variant: 'text', count, hasEngaged: false, delayMs: 0 });
       }
       jest.runOnlyPendingTimers();
       expect(emits).toEqual(['text']); // exactly one, not one per milestone
@@ -30,7 +30,7 @@ describe('maybeScheduleSharePrompt — at most once per session', () => {
 
   it('does not emit on the very first generation (count < 2), avoids first-run stacking', () => {
     withListener(emits => {
-      maybeScheduleSharePrompt('text', 1, false, 0);
+      maybeScheduleSharePrompt({ variant: 'text', count: 1, hasEngaged: false, delayMs: 0 });
       jest.runOnlyPendingTimers();
       expect(emits).toEqual([]);
     });
@@ -38,7 +38,7 @@ describe('maybeScheduleSharePrompt — at most once per session', () => {
 
   it('never emits once the user has already engaged (persisted)', () => {
     withListener(emits => {
-      maybeScheduleSharePrompt('text', 2, true, 0);
+      maybeScheduleSharePrompt({ variant: 'text', count: 2, hasEngaged: true, delayMs: 0 });
       jest.runOnlyPendingTimers();
       expect(emits).toEqual([]);
     });
@@ -46,10 +46,10 @@ describe('maybeScheduleSharePrompt — at most once per session', () => {
 
   it('emits again in a NEW session (after resetSharePromptSession)', () => {
     withListener(emits => {
-      maybeScheduleSharePrompt('image', 2, false, 0);
+      maybeScheduleSharePrompt({ variant: 'image', count: 2, hasEngaged: false, delayMs: 0 });
       jest.runOnlyPendingTimers();
       resetSharePromptSession(); // relaunch = new session
-      maybeScheduleSharePrompt('image', 2, false, 0);
+      maybeScheduleSharePrompt({ variant: 'image', count: 2, hasEngaged: false, delayMs: 0 });
       jest.runOnlyPendingTimers();
       expect(emits).toEqual(['image', 'image']); // once each session
     });

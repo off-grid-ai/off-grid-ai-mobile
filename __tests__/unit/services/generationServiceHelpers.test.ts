@@ -506,7 +506,7 @@ describe('generateResponseImpl — llama.cpp path', () => {
       finalizeStreamingMessage: finalize,
     });
 
-    llm.generateResponse.mockImplementation((_msgs: any, onChunk: any, onComplete: any) => {
+    llm.generateResponse.mockImplementation((_msgs: any, { onStream: onChunk, onComplete }: any = {}) => {
       onChunk({ content: 'hello', reasoningContent: undefined });
       onChunk({ content: undefined, reasoningContent: 'thinking' });
       onComplete();

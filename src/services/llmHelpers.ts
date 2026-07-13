@@ -431,7 +431,7 @@ export function getGpuLayersForDevice(
   }
   return requestedLayers;
 }
-export { validateModelFile, checkMemoryForModel, safeCompletion } from './llmSafetyChecks';
+export { validateModelFile, checkMemoryForModel, safeCompletion, resolveSafeContext } from './llmSafetyChecks';
 const STOP_TOKENS = ['</s>', '<|end|>', '<|eot_id|>'];
 export function buildCompletionParams(settings: {
   maxTokens?: number; temperature?: number; topP?: number; repeatPenalty?: number;

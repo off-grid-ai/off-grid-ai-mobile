@@ -8,9 +8,10 @@
  * truth for what is actually in RAM) — the same approach as the test-only ResidentsProbe.
  */
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
-import { useTheme } from '../../theme';
+import { useTheme, useThemedStyles } from '../../theme';
+import type { ThemeColors } from '../../theme';
 import { SPACING, TYPOGRAPHY } from '../../constants';
 import { modelResidencyManager } from '../../services/modelResidency';
 import type { Resident } from '../../services/modelResidency/policy';
@@ -27,6 +28,7 @@ const TYPE_LABEL: Record<string, string> = {
 
 export const ResidentModelsSection: React.FC = () => {
   const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [residents, setResidents] = useState<Resident[]>(() => modelResidencyManager.getResidents());
 
   useEffect(() => {
@@ -50,7 +52,6 @@ export const ResidentModelsSection: React.FC = () => {
 
   if (residents.length === 0) return null;
 
-  const styles = createStyles(colors);
   return (
     <View testID="in-memory-section" style={styles.section}>
       <View style={styles.header}>
@@ -73,15 +74,14 @@ export const ResidentModelsSection: React.FC = () => {
   );
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const createStyles = (colors: any) => StyleSheet.create({
-  section: { backgroundColor: colors.surface, borderRadius: 8, marginBottom: SPACING.md, overflow: 'hidden' },
-  header: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, padding: SPACING.md, paddingBottom: SPACING.sm },
+const createStyles = (colors: ThemeColors) => ({
+  section: { backgroundColor: colors.surface, borderRadius: 8, marginBottom: SPACING.md, overflow: 'hidden' as const },
+  header: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: SPACING.xs, padding: SPACING.md, paddingBottom: SPACING.sm },
   headerLabel: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary },
-  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderTopWidth: 1, borderTopColor: colors.border },
+  row: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderTopWidth: 1, borderTopColor: colors.border },
   info: { flex: 1 },
-  name: { ...TYPOGRAPHY.body, fontWeight: '400', color: colors.text },
+  name: { ...TYPOGRAPHY.body, fontWeight: '400' as const, color: colors.text },
   meta: { ...TYPOGRAPHY.bodySmall, color: colors.textMuted, marginTop: 2 },
-  ejectBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs },
+  ejectBtn: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4, paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs },
   ejectText: { ...TYPOGRAPHY.bodySmall, color: colors.error },
 });

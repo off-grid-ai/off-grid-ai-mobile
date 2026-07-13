@@ -134,7 +134,7 @@ class GenerationService {
   private checkSharePrompt(delayMs = SHARE_PROMPT_DELAY_MS): void {
     const s = useAppStore.getState();
     const count = s.incrementTextGenerationCount();
-    maybeScheduleSharePrompt('text', count, s.hasEngagedSharePrompt, delayMs);
+    maybeScheduleSharePrompt({ variant: 'text', count, hasEngaged: s.hasEngagedSharePrompt, delayMs });
     checkProPromptForText(delayMs);
   }
 

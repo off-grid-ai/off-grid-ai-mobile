@@ -549,7 +549,7 @@ describe('LLMService', () => {
       const messages = [createUserMessage('Hello')];
       const tokens: Array<{ content?: string; reasoningContent?: string }> = [];
 
-      await llmService.generateResponse(messages, (token) => tokens.push(token));
+      await llmService.generateResponse(messages, { onStream: (token) => tokens.push(token) });
 
       expect(tokens).toEqual([
         { content: 'Hello', reasoningContent: undefined },
@@ -562,7 +562,7 @@ describe('LLMService', () => {
       const messages = [createUserMessage('Hello')];
       const onComplete = jest.fn();
 
-      const result = await llmService.generateResponse(messages, undefined, onComplete);
+      const result = await llmService.generateResponse(messages, { onComplete });
 
       expect(result).toBe('Hello World');
       expect(onComplete).toHaveBeenCalledWith({ content: 'Hello World', reasoningContent: '' });
@@ -583,7 +583,7 @@ describe('LLMService', () => {
           tokenize: jest.fn(() => Promise.resolve({ tokens: [1] })),
         });
         const onComplete = jest.fn();
-        const result = await llmService.generateResponse([createUserMessage('hi')], undefined, onComplete);
+        const result = await llmService.generateResponse([createUserMessage('hi')], { onComplete });
         expect(result).toBe('The clean answer.');
         expect(onComplete).toHaveBeenCalledWith({ content: 'The clean answer.', reasoningContent: 'the reasoning' });
       });
@@ -668,7 +668,7 @@ describe('LLMService', () => {
       });
 
       const messages = [createUserMessage('Hello')];
-      await llmService.generateResponse(messages, (t) => tokens.push(t));
+      await llmService.generateResponse(messages, { onStream: (t) => tokens.push(t) });
 
       expect(tokens).toEqual([{ content: 'Hello', reasoningContent: undefined }]);
     });
@@ -731,7 +731,7 @@ describe('LLMService', () => {
         },
       });
 
-      const result = await llmService.generateResponse([createUserMessage('Hello')], (data) => streamChunks.push(data));
+      const result = await llmService.generateResponse([createUserMessage('Hello')], { onStream: (data) => streamChunks.push(data) });
 
       expect(streamChunks).toEqual([
         { content: undefined, reasoningContent: 'I am' },

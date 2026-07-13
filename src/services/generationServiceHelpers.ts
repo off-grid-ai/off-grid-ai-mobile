@@ -323,9 +323,8 @@ export async function generateResponseImpl(
 
   // llama.cpp path — unchanged
   try {
-    await llmService.generateResponse(
-      messages,
-      (data) => {
+    await llmService.generateResponse(messages, {
+      onStream: (data) => {
         if (svc.abortRequested) return;
         const chunk = typeof data === 'string' ? { content: data, reasoningContent: undefined } : data;
         if (!firstTokenReceived) {
@@ -344,7 +343,7 @@ export async function generateResponseImpl(
           svc.flushTimer = setTimeout(() => svc.flushTokenBuffer(), FLUSH_INTERVAL_MS);
         }
       },
-      () => {
+      onComplete: () => {
         // If aborted, stopGeneration() already handled cleanup — don't clobber new generation state.
         if (svc.abortRequested) return;
         svc.forceFlushTokens();
@@ -353,7 +352,7 @@ export async function generateResponseImpl(
         svc.checkSharePrompt();
         svc.resetState();
       },
-    );
+    });
   } catch (error) {
     if (svc.abortRequested) return;
     logger.error('[GenerationService] Generation error:', error);

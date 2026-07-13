@@ -316,8 +316,10 @@ Answer:`;
             timestamp: Date.now(),
           },
         ],
-        (data) => {
-          if (data.content) response += data.content;
+        {
+          onStream: (data) => {
+            if (data.content) response += data.content;
+          },
         },
       );
     } finally {

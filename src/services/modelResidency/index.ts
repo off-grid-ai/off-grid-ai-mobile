@@ -217,8 +217,7 @@ class ModelResidencyManager {
     const availableMB = effectiveAvailableMB(
       hardwareService.getAvailableMemoryGB() * 1024,
       hardwareService.getTotalMemoryGB() * 1024,
-      Platform.OS,
-      this.loadPolicy,
+      { platform: Platform.OS, policy: this.loadPolicy },
     );
     const residentMB = [...this.residents.values()].reduce(
       (sum, r) => sum + r.sizeMB,

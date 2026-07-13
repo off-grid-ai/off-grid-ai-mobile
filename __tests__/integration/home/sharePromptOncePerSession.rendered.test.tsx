@@ -40,7 +40,7 @@ describe('share prompt — once per session (rendered)', () => {
     // Generation fires the trigger many times across the session (2nd, 3rd, 10th, 20th, 30th).
     act(() => {
       for (const count of [2, 3, 10, 20, 30]) {
-        maybeScheduleSharePrompt('text', count, false, 0);
+        maybeScheduleSharePrompt({ variant: 'text', count, hasEngaged: false, delayMs: 0 });
       }
       jest.runOnlyPendingTimers();
     });
@@ -52,11 +52,11 @@ describe('share prompt — once per session (rendered)', () => {
   it('pops again in a NEW session (once per session, not once ever)', () => {
     let shows = 0;
     render(<Host onShow={() => { shows += 1; }} />);
-    act(() => { maybeScheduleSharePrompt('text', 2, false, 0); jest.runOnlyPendingTimers(); });
+    act(() => { maybeScheduleSharePrompt({ variant: 'text', count: 2, hasEngaged: false, delayMs: 0 }); jest.runOnlyPendingTimers(); });
     expect(shows).toBe(1);
 
     resetSharePromptSession(); // relaunch = new session
-    act(() => { maybeScheduleSharePrompt('text', 2, false, 0); jest.runOnlyPendingTimers(); });
+    act(() => { maybeScheduleSharePrompt({ variant: 'text', count: 2, hasEngaged: false, delayMs: 0 }); jest.runOnlyPendingTimers(); });
     expect(shows).toBe(2); // once per session
   });
 });

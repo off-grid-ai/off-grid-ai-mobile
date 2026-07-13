@@ -84,7 +84,7 @@ describe('Share Prompt Flow Integration', () => {
       let completeCallback: any;
 
       mockLlmService.generateResponse.mockImplementation(
-        async (_messages, onStream, onComplete) => {
+        async (_messages, { onStream, onComplete } = {}) => {
           streamCallback = onStream!;
           completeCallback = onComplete!;
           return 'Response';
@@ -171,7 +171,7 @@ describe('Share Prompt Flow Integration', () => {
       let streamCallback: any;
 
       mockLlmService.generateResponse.mockImplementation(
-        async (_messages, onStream, _onComplete) => {
+        async (_messages, { onStream } = {}) => {
           streamCallback = onStream!;
           // Never call onComplete — simulates long-running gen
           await new Promise(() => {}); // hang forever

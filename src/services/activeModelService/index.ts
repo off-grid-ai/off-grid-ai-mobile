@@ -9,7 +9,6 @@ import { OverridableMemoryError, ImageModelIncompleteError } from '../modelLoadE
 import { validateImageModelDir } from '../../utils/imageModelIntegrity';
 import { remoteServerManager } from '../remoteServerManager';
 import { useAppStore, useRemoteServerStore } from '../../stores';
-import { ONNXImageModel } from '../../types';
 import logger from '../../utils/logger';
 import type {
   ActiveModelInfo,
@@ -23,7 +22,7 @@ import {
   checkMemoryForDualModel as _checkMemoryForDualModel,
   getCurrentlyLoadedMemoryGB as _getCurrentlyLoadedMemoryGB,
 } from './memory';
-import { doLoadTextModel, doLoadImageModel } from './loaders';
+import { doLoadTextModel, doLoadImageModel, checkImageModelCanLoad } from './loaders';
 import {
   getResourceUsage as _getResourceUsage,
   syncWithNativeState as _syncWithNativeState,
@@ -226,45 +225,6 @@ class ActiveModelService {
       this.notifyListeners();
     }
   }
-  private async checkImageModelCanLoad(
-    modelId: string,
-    model: ONNXImageModel,
-    opts?: { override?: boolean },
-  ): Promise<{ canLoad: boolean; error?: string; overridable?: boolean }> {
-    if (model.backend === 'qnn') {
-      const socInfo = await hardwareService.getSoCInfo();
-      if (!socInfo.hasNPU) {
-        return {
-          canLoad: false,
-          // A missing NPU is a hardware capability gap, not a memory budget — not overridable.
-          error:
-            'NPU models require a Qualcomm Snapdragon processor. Your device does not have a compatible NPU. Please use a GPU model instead.',
-        };
-      }
-    }
-    // Residency manager is authoritative for memory: evict others to fit the budget
-    // before loading. If it can't fit even after eviction, block — unless "Load Anyway".
-    const { fits } = await modelResidencyManager.makeRoomFor(
-      {
-        key: 'image',
-        type: 'image',
-        modelId: model.id,
-        sizeMB: Math.round((hardwareService.estimateImageModelRam(model) || 0) / (1024 * 1024)),
-        // CoreML/ONNX image weights are dirty (jetsam-counted) memory → gate on real free RAM.
-        dirtyMemory: true,
-      },
-      { override: opts?.override },
-    );
-    if (!fits) {
-      // Refusal UNDER override = survival floor (hard limit) → non-overridable, so the
-      // UI stops re-offering "Load Anyway" as a no-op that re-runs the same failing load.
-      const overridable = !opts?.override;
-      return { canLoad: false, overridable, error: overridable
-        ? `Not enough memory to load ${model.name}. Free up space or choose a smaller model.`
-        : `Not enough memory to load ${model.name}, even after freeing other models. Close other apps or choose a smaller model.` };
-    }
-    return { canLoad: true };
-  }
   async loadImageModel(
     modelId: string,
     timeoutMs: number = 180000,
@@ -308,7 +268,7 @@ class ActiveModelService {
       const integ = await validateImageModelDir(model.modelPath, model.backend);
       if (!integ.complete) throw new ImageModelIncompleteError(integ.missing);
     }
-    const check = await this.checkImageModelCanLoad(modelId, model, opts);
+    const check = await checkImageModelCanLoad(modelId, model, opts);
     if (!check.canLoad) {
       throw check.overridable
         ? new OverridableMemoryError(check.error ?? 'Not enough memory to load this model.')

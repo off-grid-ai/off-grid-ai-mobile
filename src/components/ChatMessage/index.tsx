@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Clipboard } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useUiModeStore, useAccordionExpanded } from '../../stores';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
@@ -12,7 +13,7 @@ import { MessageAttachments } from './components/MessageAttachments';
 import { MessageContent } from './components/MessageContent';
 import { GenerationMeta } from './components/GenerationMeta';
 import { ToolsSentCollapsible } from './components/ToolsSentCollapsible';
-import { ActionMenuSheet, EditSheet, SelectTextSheet } from './components/ActionMenuSheet';
+import { MessageOverlays } from './components/MessageOverlays';
 import { MarkdownText } from '../MarkdownText';
 import { formatTime, formatDuration, buildMessageData } from './utils';
 import { ThinkingBlock } from './components/ThinkingBlock';
@@ -211,6 +212,89 @@ const ToolCallWithThinking: React.FC<{
   );
 };
 
+// The rendered message bubble (attachments + content + tool row + meta). Split out of
+// ChatMessage so its per-section conditionals don't inflate ChatMessage's complexity.
+interface MessageBubbleProps {
+  message: Message;
+  styles: ReturnType<typeof createStyles>;
+  colors: ReturnType<typeof useTheme>['colors'];
+  isUser: boolean;
+  isStreaming?: boolean;
+  hasAttachments: boolean;
+  bubbleStyle: StyleProp<ViewStyle>;
+  parsedContent: ReturnType<typeof buildMessageData>['parsedContent'];
+  showThinking: boolean;
+  showActions: boolean;
+  showGenerationDetails: boolean;
+  metaExtra?: React.ReactNode;
+  onImagePress?: (uri: string) => void;
+  onToggleThinking: () => void;
+  onLongPress: () => void;
+  onMenuOpen: () => void;
+}
+
+const MessageBubble: React.FC<MessageBubbleProps> = ({
+  message, styles, colors, isUser, isStreaming, hasAttachments, bubbleStyle,
+  parsedContent, showThinking, showActions, showGenerationDetails, metaExtra,
+  onImagePress, onToggleThinking, onLongPress, onMenuOpen,
+}) => (
+  <TouchableOpacity
+    testID={isUser ? 'user-message' : 'assistant-message'}
+    style={[
+      styles.container,
+      isUser ? styles.userContainer : styles.assistantContainer,
+    ]}
+    activeOpacity={0.8}
+    onLongPress={onLongPress}
+    delayLongPress={300}
+  >
+    <View style={bubbleStyle}>
+      {hasAttachments && (
+        <MessageAttachments
+          attachments={message.attachments!}
+          isUser={isUser}
+          styles={styles}
+          colors={colors}
+          onImagePress={onImagePress}
+        />
+      )}
+
+      <MessageContent
+        isUser={isUser}
+        isThinking={message.isThinking}
+        content={message.content}
+        isStreaming={isStreaming}
+        parsedContent={parsedContent}
+        showThinking={showThinking}
+        onToggleThinking={onToggleThinking}
+        styles={styles}
+      />
+    </View>
+
+    <RoutedToolsRow message={message} isUser={isUser} isStreaming={isStreaming} styles={styles} colors={colors} />
+
+    {!isUser && !isStreaming && message.generationMeta?.truncated && (
+      <View testID="message-cutoff-indicator" style={styles.toolStatusRow}>
+        <Icon name="alert-triangle" size={12} color={colors.textMuted} />
+        <Text style={styles.toolStatusText}>Reply cut off at the token limit. Retry to continue.</Text>
+      </View>
+    )}
+
+    <MessageMetaRow
+      message={message}
+      styles={styles}
+      isStreaming={isStreaming}
+      showActions={showActions}
+      onMenuOpen={onMenuOpen}
+      metaExtra={metaExtra}
+    />
+
+    {showGenerationDetails && !isUser && message.generationMeta && (
+      <GenerationMeta generationMeta={message.generationMeta} styles={styles} />
+    )}
+  </TouchableOpacity>
+);
+
 export const ChatMessage: React.FC<ChatMessageProps> = ({
   message,
   isStreaming,
@@ -317,101 +401,58 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       onToggle={() => setShowThinking(!showThinking)} styles={styles} colors={colors} />;
   }
   const messageBody = (
-    <TouchableOpacity
-      testID={isUser ? 'user-message' : 'assistant-message'}
-      style={[
-        styles.container,
-        isUser ? styles.userContainer : styles.assistantContainer,
-      ]}
-      activeOpacity={0.8}
+    <MessageBubble
+      message={message}
+      styles={styles}
+      colors={colors}
+      isUser={isUser}
+      isStreaming={isStreaming}
+      hasAttachments={hasAttachments}
+      bubbleStyle={bubbleStyle}
+      parsedContent={parsedContent}
+      showThinking={showThinking}
+      showActions={showActions}
+      showGenerationDetails={showGenerationDetails}
+      metaExtra={metaExtra}
+      onImagePress={onImagePress}
+      onToggleThinking={() => setShowThinking(!showThinking)}
       onLongPress={handleLongPress}
-      delayLongPress={300}
-    >
-      <View style={bubbleStyle}>
-        {hasAttachments && (
-          <MessageAttachments
-            attachments={message.attachments!}
-            isUser={isUser}
-            styles={styles}
-            colors={colors}
-            onImagePress={onImagePress}
-          />
-        )}
-
-        <MessageContent
-          isUser={isUser}
-          isThinking={message.isThinking}
-          content={message.content}
-          isStreaming={isStreaming}
-          parsedContent={parsedContent}
-          showThinking={showThinking}
-          onToggleThinking={() => setShowThinking(!showThinking)}
-          styles={styles}
-        />
-      </View>
-
-      <RoutedToolsRow message={message} isUser={isUser} isStreaming={isStreaming} styles={styles} colors={colors} />
-
-      {!isUser && !isStreaming && message.generationMeta?.truncated && (
-        <View testID="message-cutoff-indicator" style={styles.toolStatusRow}>
-          <Icon name="alert-triangle" size={12} color={colors.textMuted} />
-          <Text style={styles.toolStatusText}>Reply cut off at the token limit. Retry to continue.</Text>
-        </View>
-      )}
-
-      <MessageMetaRow
-        message={message}
-        styles={styles}
-        isStreaming={isStreaming}
-        showActions={showActions}
-        onMenuOpen={() => setShowActionMenu(true)}
-        metaExtra={metaExtra}
-      />
-
-      {showGenerationDetails && !isUser && message.generationMeta && (
-        <GenerationMeta generationMeta={message.generationMeta} styles={styles} />
-      )}
-    </TouchableOpacity>
+      onMenuOpen={() => setShowActionMenu(true)}
+    />
   );
 
   return (
     <>
       {animateEntry ? <AnimatedEntry index={0}>{messageBody}</AnimatedEntry> : messageBody}
 
-      <ActionMenuSheet
-        visible={showActionMenu}
-        onClose={() => setShowActionMenu(false)}
+      <MessageOverlays
+        message={message}
+        styles={styles}
+        colors={colors}
+        showActionMenu={showActionMenu}
+        showSelectText={showSelectText}
+        isEditing={isEditing}
         isUser={isUser}
         canEdit={!!onEdit}
         canRetry={!!onRetry}
         canGenerateImage={canGenerateImage && !!onGenerateImage}
         canSpeak={canSpeak}
-        styles={styles}
+        showSelectTextAction={interfaceMode === 'chat'}
+        displayContent={displayContent}
+        alertState={alertState}
+        onCloseActionMenu={() => setShowActionMenu(false)}
+        onCloseSelectText={() => setShowSelectText(false)}
+        onChangeEditText={setEditedContent}
         onCopy={handleCopy}
         onEdit={handleEdit}
         onRetry={handleRetry}
         onGenerateImage={handleGenerateImage}
         onSpeak={handleSpeak}
-        onSelectText={interfaceMode === 'chat' ? handleSelectText : undefined}
+        onSelectText={handleSelectText}
+        onSaveEdit={handleSaveEdit}
+        onCancelEdit={handleCancelEdit}
+        onCloseAlert={() => setAlertState(hideAlert())}
       />
-      <SelectTextSheet
-        visible={showSelectText}
-        onClose={() => setShowSelectText(false)}
-        content={displayContent}
-        styles={styles}
-      />
-      <EditSheet
-        visible={isEditing}
-        onClose={handleCancelEdit}
-        defaultValue={message.content}
-        onChangeText={setEditedContent}
-        onSave={handleSaveEdit}
-        onCancel={handleCancelEdit}
-        styles={styles}
-        colors={colors}
-      />
-      <CustomAlert visible={alertState.visible} title={alertState.title}
-        message={alertState.message} buttons={alertState.buttons} onClose={() => setAlertState(hideAlert())} />
     </>
   );
 };

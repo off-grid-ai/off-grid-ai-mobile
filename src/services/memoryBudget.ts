@@ -113,9 +113,9 @@ type Plat = 'ios' | 'android' | string;
 export function effectiveAvailableMB(
   realAvailMB: number,
   totalRamMB: number,
-  platform: Plat = Platform.OS,
-  policy: LoadPolicy = 'balanced',
+  opts: { platform?: Plat; policy?: LoadPolicy } = {},
 ): number {
+  const { platform = Platform.OS, policy = 'balanced' } = opts;
   return platform === 'android'
     ? Math.max(realAvailMB, modelMemoryBudgetMB(totalRamMB, platform, policy))
     : realAvailMB;

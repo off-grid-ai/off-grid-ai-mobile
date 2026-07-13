@@ -256,10 +256,8 @@ export async function generateStandalone(
   }
   // llama (default engine). Stream tokens for live progress; force thinking OFF so the
   // enhanced prompt is a clean rewrite, never a leaked reasoning chain (B30/B30b).
-  return llmService.generateResponse(
-    messages,
-    onToken ? (data) => { if (typeof (data as { content?: string })?.content === 'string') onToken((data as { content: string }).content); } : () => {},
-    undefined,
-    { disableThinking: true },
-  );
+  return llmService.generateResponse(messages, {
+    onStream: onToken ? (data) => { if (typeof (data as { content?: string })?.content === 'string') onToken((data as { content: string }).content); } : () => {},
+    disableThinking: true,
+  });
 }

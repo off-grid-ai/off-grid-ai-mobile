@@ -12,7 +12,7 @@ const toStderr = (level: string, args: unknown[]): void => {
   if (!stderrDebug) return;
   try {
     process.stderr.write(
-      `[${level}] ` + args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ') + '\n',
+      `[${level}] ${args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ')}\n`,
     );
   } catch {
     /* stderr unavailable — ignore */

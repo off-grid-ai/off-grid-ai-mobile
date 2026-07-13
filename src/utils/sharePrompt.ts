@@ -49,12 +49,13 @@ export function resetSharePromptSession(): void {
  * very first generation (count < 2) so it doesn't stack with first-run sheets. The
  * SINGLE trigger for both the text and image generation paths (no per-path cadence).
  */
-export function maybeScheduleSharePrompt(
-  variant: ShareVariant,
-  count: number,
-  hasEngaged: boolean,
-  delayMs: number,
-): void {
+export function maybeScheduleSharePrompt(opts: {
+  variant: ShareVariant;
+  count: number;
+  hasEngaged: boolean;
+  delayMs: number;
+}): void {
+  const { variant, count, hasEngaged, delayMs } = opts;
   if (hasEngaged || shownThisSession || count < 2) return;
   shownThisSession = true;
   setTimeout(() => emitSharePrompt(variant), delayMs);

@@ -315,8 +315,7 @@ describe('generationService', () => {
 
       mockedLlmService.generateResponse.mockImplementation((async (
         _messages: any,
-        onStream: any,
-        onComplete: any
+        { onStream, onComplete }: any = {}
       ) => {
         onStream?.('Hello');
         streamedTokens.push('Hello');
@@ -347,8 +346,7 @@ describe('generationService', () => {
 
       mockedLlmService.generateResponse.mockImplementation((async (
         _messages: any,
-        onStream: any,
-        onComplete: any
+        { onStream, onComplete }: any = {}
       ) => {
         onStream?.('First');
         onStream?.(' token');
@@ -370,8 +368,7 @@ describe('generationService', () => {
 
       mockedLlmService.generateResponse.mockImplementation((async (
         _messages: any,
-        onStream: any,
-        onComplete: any
+        { onStream, onComplete }: any = {}
       ) => {
         onStream?.('Response');
         onComplete?.('Response');
@@ -439,7 +436,7 @@ describe('generationService', () => {
       // Start generation that accumulates content
       mockedLlmService.generateResponse.mockImplementation((async (
         _messages: any,
-        onStream: any
+        { onStream }: any = {}
       ) => {
         onStream?.('Partial');
         onStream?.(' content');
@@ -486,7 +483,7 @@ describe('generationService', () => {
 
       mockedLlmService.generateResponse.mockImplementation((async (
         _messages: any,
-        onStream: any
+        { onStream }: any = {}
       ) => {
         onStream?.('Content');
         await new Promise(() => {});
@@ -527,7 +524,7 @@ describe('generationService', () => {
       let capturedOnStream: ((t: string) => void) | undefined;
       mockedLlmService.generateResponse.mockImplementation((async (
         _messages: any,
-        onStream: any,
+        { onStream }: any = {},
       ) => {
         capturedOnStream = onStream;
         onStream?.('Partial');
@@ -747,7 +744,7 @@ describe('generationService', () => {
 
       mockedLlmService.generateResponse.mockImplementation((async (
         _messages: any,
-        onStream: any,
+        { onStream }: any = {},
       ) => {
         onStream?.('First');
         // Simulate abort
@@ -778,8 +775,7 @@ describe('generationService', () => {
 
       mockedLlmService.generateResponse.mockImplementation((async (
         _messages: any,
-        onStream: any,
-        onComplete: any
+        { onStream, onComplete }: any = {}
       ) => {
         onStream?.('Token');
         onComplete?.('Token');
@@ -801,8 +797,7 @@ describe('generationService', () => {
 
       mockedLlmService.generateResponse.mockImplementation((async (
         _messages: any,
-        onStream: any,
-        onComplete: any
+        { onStream, onComplete }: any = {}
       ) => {
         onStream?.('Response');
         onComplete?.('Response');
@@ -1023,7 +1018,7 @@ describe('generationService', () => {
         lastTokenCount: 100,
       });
 
-      mockedLlmService.generateResponse.mockImplementation(async (_msgs: any, onStream: any, onComplete: any) => {
+      mockedLlmService.generateResponse.mockImplementation(async (_msgs: any, { onStream, onComplete }: any = {}) => {
         onStream?.('Response');
         onComplete?.('Response');
         return 'Response';
@@ -1049,7 +1044,7 @@ describe('generationService', () => {
 
       useAppStore.setState({ hasEngagedSharePrompt: true });
 
-      mockedLlmService.generateResponse.mockImplementation(async (_msgs: any, onStream: any, onComplete: any) => {
+      mockedLlmService.generateResponse.mockImplementation(async (_msgs: any, { onStream, onComplete }: any = {}) => {
         onStream?.('Response');
         onComplete?.('Response');
         return 'Response';
@@ -1072,7 +1067,7 @@ describe('generationService', () => {
       setupWithActiveModel();
 
       mockedLlmService.generateResponse.mockImplementation(async (
-        _msgs: any, onStream: any, onComplete: any
+        _msgs: any, { onStream, onComplete }: any = {}
       ) => {
         onStream?.({ content: 'answer', reasoningContent: 'thinking step' });
         onComplete?.('answer');
@@ -1094,7 +1089,7 @@ describe('generationService', () => {
       const convId = setupWithConversation();
       setupWithActiveModel();
 
-      mockedLlmService.generateResponse.mockImplementation(async (_msgs: any, onStream: any) => {
+      mockedLlmService.generateResponse.mockImplementation(async (_msgs: any, { onStream }: any = {}) => {
         // Stream a token (sets flushTimer via buffering)
         onStream?.('partial');
         // Then throw
@@ -1218,7 +1213,7 @@ describe('generationService', () => {
       // Enqueue a message
       generationService.enqueueMessage({ id: 'q1', conversationId: convId, text: 'queued', messageText: 'queued' });
 
-      mockedLlmService.generateResponse.mockImplementation(async (_msgs: any, _onStream: any, onComplete: any) => {
+      mockedLlmService.generateResponse.mockImplementation(async (_msgs: any, { onStream: _onStream, onComplete }: any = {}) => {
         onComplete?.('done');
         return 'done';
       });
@@ -1246,7 +1241,7 @@ describe('generationService', () => {
       const convId = setupWithConversation();
       setupWithActiveModel();
 
-      mockedLlmService.generateResponse.mockImplementation(async (_msgs: any, onStream: any, onComplete: any) => {
+      mockedLlmService.generateResponse.mockImplementation(async (_msgs: any, { onStream, onComplete }: any = {}) => {
         onStream?.({ content: 'Hi' });
         onComplete?.('Hi');
         return 'Hi';
@@ -1257,7 +1252,7 @@ describe('generationService', () => {
       ]);
 
       // The service owns the count; the once-per-session decision lives in the util.
-      expect(maybeScheduleSharePrompt).toHaveBeenCalledWith('text', expect.any(Number), expect.any(Boolean), expect.any(Number));
+      expect(maybeScheduleSharePrompt).toHaveBeenCalledWith({ variant: 'text', count: expect.any(Number), hasEngaged: expect.any(Boolean), delayMs: expect.any(Number) });
     });
   });
 
@@ -1642,7 +1637,7 @@ describe('generationService', () => {
 
     it('uses local LLM when local model is loaded even if remote server is configured', async () => {
       const convId = setupWithConversation();
-      mockedLlmService.generateResponse.mockImplementation(async (_msgs, cb) => {
+      mockedLlmService.generateResponse.mockImplementation(async (_msgs, { onStream: cb }: any = {}) => {
         cb?.({ content: 'hello' });
         return 'hello';
       });

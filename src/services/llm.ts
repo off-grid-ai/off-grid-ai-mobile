@@ -10,7 +10,7 @@ import {
   hashString, ensureSessionCacheDir, getSessionPath, buildModelParams,
   buildCompletionParams, buildThinkingCompletionParams, supportsNativeThinking,
   getMaxContextForDevice, getGpuLayersForDevice, BYTES_PER_GB,
-  validateModelFile, checkMemoryForModel, safeCompletion,
+  validateModelFile, checkMemoryForModel, safeCompletion, resolveSafeContext,
 } from './llmHelpers';
 import { hardwareService } from './hardware';
 import { formatLlamaMessages, buildOAIMessages } from './llmMessages';
@@ -79,54 +79,12 @@ class LLMService {
       // Don't just warn and load into a near-certain native allocator crash (the iOS
       // metal_buffer_type_alloc_buffer / Android litert OOM clusters). Reduce context
       // to the largest size that fits; only block when the weights alone can't fit.
-      const downgrade = await this.resolveSafeContext(fileSize, params.ctxLen, quantizedCache, override);
+      const downgrade = await resolveSafeContext({ fileSize, requestedCtx: params.ctxLen, quantizedCache, override, getAvailableMemory: getMem });
       params.ctxLen = downgrade.ctxLen;
       memCheck = downgrade.memCheck;
     }
     logger.log(`[LLM] Memory check: estimatedMB=${memCheck.estimatedMB.toFixed(0)}, availableMB=${memCheck.availableMB.toFixed(0)}, safe=${memCheck.safe}, ctx=${params.ctxLen}`);
     return { fileSize, memCheck, params };
-  }
-  /**
-   * Find the largest context that fits available memory, stepping down from the
-   * requested size. Throws only when the model weights alone exceed available RAM
-   * (a load that would certainly crash the allocator); otherwise proceeds at the
-   * smallest context, since the estimate is intentionally conservative.
-   */
-  // eslint-disable-next-line max-params -- 4 clear positional inputs; an opts bag adds noise here
-  private async resolveSafeContext(
-    fileSize: number,
-    requestedCtx: number,
-    quantizedCache: boolean,
-    override: boolean = false,
-  ): Promise<{ ctxLen: number; memCheck: Awaited<ReturnType<typeof checkMemoryForModel>> }> {
-    const getMem = () => hardwareService.getAppMemoryUsage();
-    // Step down from the requested size so the LARGEST fitting context wins — a request
-    // of 16384 tries 14336, 12288, ... rather than jumping straight to a hardcoded 8192
-    // ceiling and needlessly shrinking context on devices that could hold more.
-    const STEP = 2048;
-    const fallbacks: number[] = [];
-    for (let ctx = requestedCtx - STEP; ctx >= 1024; ctx -= STEP) fallbacks.push(ctx);
-    for (const ctx of fallbacks) {
-      const mc = await checkMemoryForModel({ modelFileSize: fileSize, contextLength: ctx, getAvailableMemory: getMem, quantizedCache });
-      if (mc.safe) {
-        logger.warn(`[LLM] Memory tight — reducing context ${requestedCtx} → ${ctx} (~${mc.estimatedMB.toFixed(0)}MB of ${mc.availableMB.toFixed(0)}MB available)`);
-        return { ctxLen: ctx, memCheck: mc };
-      }
-    }
-    const minCtx = fallbacks.length ? fallbacks[fallbacks.length - 1] : requestedCtx;
-    const finalCheck = await checkMemoryForModel({ modelFileSize: fileSize, contextLength: minCtx, getAvailableMemory: getMem, quantizedCache });
-    const modelMB = (fileSize * 1.2) / (1024 * 1024);
-    if (finalCheck.availableMB > 0 && modelMB > finalCheck.availableMB && !override) {
-      throw new Error(`Not enough memory to load this model: it needs ~${Math.round(modelMB)}MB but only ${Math.round(finalCheck.availableMB)}MB is available. Close other apps or choose a smaller model.`);
-    }
-    if (override && finalCheck.availableMB > 0 && modelMB > finalCheck.availableMB) {
-      // User forced the load ("Load Anyway" / continue). Skip the hard block and let the
-      // native loader's GPU→CPU→smaller-ctx fallback + OOM recovery try — they accepted
-      // the risk, and eviction already freed everything it could. NORMAL loads still throw.
-      logger.warn(`[LLM] OVERRIDE — proceeding despite tight memory (~${Math.round(modelMB)}MB needed, ${Math.round(finalCheck.availableMB)}MB free)`);
-    }
-    logger.warn(`[LLM] Memory very tight — proceeding at minimum context ${minCtx} (estimate may be conservative)`);
-    return { ctxLen: minCtx, memCheck: finalCheck };
   }
   private async applyLoadedContext(opts: { context: LlamaContext; actualLength: number; gpuAttemptFailed: boolean; nGpuLayers: number; modelPath: string; mmProjPath?: string }): Promise<void> {
     const { context, actualLength, gpuAttemptFailed, nGpuLayers, modelPath, mmProjPath } = opts;
@@ -288,7 +246,8 @@ class LLMService {
   }
   isModelLoaded(): boolean { return this.context !== null; }
   getLoadedModelPath(): string | null { return this.currentModelPath; }
-  async generateResponse(messages: Message[], onStream?: StreamCallback, onComplete?: CompleteCallback, opts?: { disableThinking?: boolean }): Promise<string> {
+  async generateResponse(messages: Message[], options?: { onStream?: StreamCallback; onComplete?: CompleteCallback; disableThinking?: boolean }): Promise<string> {
+    const { onStream, onComplete, ...opts } = options ?? {};
     if (!this.context) throw new Error('No model loaded');
     if (this.isGenerating) throw new Error('Generation already in progress');
     this.isGenerating = true;

@@ -179,6 +179,25 @@ export function getActiveEngineService(): typeof llmService | typeof liteRTServi
 }
 
 /**
+ * Is a REMOTE (gateway / OpenAI-compatible) text model the ACTIVE text engine right now?
+ *
+ * THE single source of truth for "route text to a remote provider" — the exact rule
+ * generationService.isUsingRemoteProvider re-derived and generateStandalone used to inline.
+ * A remote model is active iff: a server is selected, its provider is actually REGISTERED (not
+ * just persisted from a prior session), and NO local model is loaded (a loaded local model always
+ * wins). Callers depend on this predicate instead of re-checking the store + registry + llmService
+ * themselves, so "is remote active" lives in ONE place (DIP/DRY). Adding a backend never touches a
+ * caller's readiness check.
+ */
+export function isRemoteTextModelActive(): boolean {
+  const { activeServerId } = useRemoteServerStore.getState();
+  if (!activeServerId) return false;
+  if (!providerRegistry.hasProvider(activeServerId)) return false;
+  if (llmService.isModelLoaded()) return false; // a loaded local model wins over a remote server
+  return true;
+}
+
+/**
  * One-shot standalone text completion on the ACTIVE text engine — engine-agnostic.
  *
  * For NON-chat callers (image-prompt enhancement) that need a prompt→text completion
@@ -199,7 +218,9 @@ export async function generateStandalone(
   // (Q8). Route the one-shot through the active provider, streaming content so the UI
   // can show live progress (B30b). Thinking OFF — enhancement is a utility rewrite.
   const { activeServerId, activeRemoteTextModelId } = useRemoteServerStore.getState();
-  const useRemote = !!activeServerId && providerRegistry.hasProvider(activeServerId) && !llmService.isModelLoaded() && getActiveEngineService() !== liteRTService;
+  // A loaded LiteRT model still wins over a selected remote server (isRemoteTextModelActive only
+  // rules out a loaded LLAMA model), so keep the litert guard here.
+  const useRemote = isRemoteTextModelActive() && getActiveEngineService() !== liteRTService;
   if (useRemote) {
     const provider = providerRegistry.getProvider(activeServerId!)!;
     if (activeRemoteTextModelId && provider.getLoadedModelId() !== activeRemoteTextModelId) {

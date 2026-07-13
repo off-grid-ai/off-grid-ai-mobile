@@ -208,7 +208,7 @@ export interface LlamaFake {
    *  enable_thinking===true the completion emits `thinkingText` (the model's reasoning-style output, as
    *  device B30 showed) instead of `text` — so a caller that fails to disable thinking gets the reasoning
    *  dump, EMERGENT from its own enable_thinking decision. With enable_thinking!==true it emits `text`. */
-  scriptCompletion(result: { text?: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; pauseAfter?: string; thinkingText?: string; completionMeta?: CompletionMeta }): void;
+  scriptCompletion(result: { text?: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; throwAfter?: string; pauseAfter?: string; thinkingText?: string; completionMeta?: CompletionMeta }): void;
   /** Release a stream held via scriptCompletion({ pauseAfter }). No-op if not paused. */
   releaseStream(): void;
   /** Make every GPU/HTP context init (initLlama with n_gpu_layers > 0) REJECT, as a real hung/timed-out
@@ -222,7 +222,7 @@ export interface LlamaFake {
 
 function makeLlamaFake(): LlamaFake {
   const calls: LlamaFake['calls'] = { completion: [] };
-  let pending: { text: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; pauseAfter?: string; thinkingText?: string; completionMeta?: CompletionMeta } = { text: '' };
+  let pending: { text: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; throwAfter?: string; pauseAfter?: string; thinkingText?: string; completionMeta?: CompletionMeta } = { text: '' };
   let releaseFn: (() => void) | null = null; // resolves a mid-stream pause
   let gpuInitFails = false; // when true, initLlama with n_gpu_layers>0 rejects (GPU/HTP init timeout → CPU fallback)
 
@@ -254,6 +254,11 @@ function makeLlamaFake(): LlamaFake {
           }
         }
       }
+      // Device-faithful mid/end-stream fatal decode failure: llama_decode fails AFTER some tokens
+      // streamed (B13 wire: tokens flow, then `llama_decode: failed to decode, ret = -1` →
+      // "Failed to evaluate chunks"). Distinct from throwMessage (fails at the very start): throwAfter
+      // reproduces the case where the spinner is already up + streaming when the runtime dies.
+      if (pending.throwAfter) throw new Error(pending.throwAfter);
       // Defaults model a NORMAL complete turn (stopped on EOS, under the cap); a scripted completionMeta
       // overrides them to model a truncated turn (B15: stopped_eos=false, stopped_limit=1 at n_predict).
       const meta = pending.completionMeta ?? {};
@@ -310,7 +315,7 @@ function makeLlamaFake(): LlamaFake {
 
   return {
     module, calls,
-    scriptCompletion: (r) => { pending = { text: r.text ?? '', toolCalls: r.toolCalls, throwMessage: r.throwMessage, pauseAfter: r.pauseAfter, thinkingText: r.thinkingText, completionMeta: r.completionMeta }; },
+    scriptCompletion: (r) => { pending = { text: r.text ?? '', toolCalls: r.toolCalls, throwMessage: r.throwMessage, throwAfter: r.throwAfter, pauseAfter: r.pauseAfter, thinkingText: r.thinkingText, completionMeta: r.completionMeta }; },
     releaseStream: () => { const f = releaseFn; releaseFn = null; f?.(); },
     scriptGpuInitFailure: (fail = true) => { gpuInitFails = fail; },
   };

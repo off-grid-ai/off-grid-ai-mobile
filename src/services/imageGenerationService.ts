@@ -1,7 +1,7 @@
 /** ImageGenerationService - Handles image generation independently of UI lifecycle */
 import { localDreamGeneratorService as onnxImageGeneratorService } from './localDreamGenerator';
 import { activeModelService } from './activeModelService';
-import { getActiveEngineService, generateStandalone } from './engines';
+import { getActiveEngineService, generateStandalone, isRemoteTextModelActive } from './engines';
 import { useAppStore, useChatStore } from '../stores';
 import { GeneratedImage } from '../types';
 import logger from '../utils/logger';
@@ -241,8 +241,11 @@ class ImageGenerationService {
     }
     // Engine-agnostic loaded check — a LiteRT text model lives in liteRTService, so the
     // old llmService.isModelLoaded() always read false for it and enhancement was skipped
-    // even though the model was resident.
-    let isTextModelLoaded = getActiveEngineService()?.isModelLoaded() ?? false;
+    // even though the model was resident. A REMOTE text model has no LOCAL residency at all
+    // (it runs over the network), so "loaded" for it means the remote provider is active —
+    // otherwise the gate below tries a pointless on-demand LOCAL load of a remote model id,
+    // stays "not loaded", and skips enhancement entirely (B30, remote path).
+    let isTextModelLoaded = isRemoteTextModelActive() || (getActiveEngineService()?.isModelLoaded() ?? false);
     logger.log('[ImageGen] 🎨 Starting prompt enhancement - Model loaded:', isTextModelLoaded);
     if (!isTextModelLoaded) {
       // Text and image models are mutually exclusive (one resident at a time), so

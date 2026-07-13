@@ -313,7 +313,14 @@ const MAX_LLM_RETRIES = 4;
 const RETRY_BACKOFF_MS = 1000;
 const CONTEXT_RELEASE_PAUSE_MS = 500;
 function isNonRetryableError(msg: string): boolean {
-  return msg.includes('No model loaded') || msg.includes('aborted') || msg.includes('Remote provider');
+  return msg.includes('No model loaded') || msg.includes('aborted') || msg.includes('Remote provider')
+    // A native decode/evaluation failure (llama_decode: failed to decode, ret=-1 →
+    // "Failed to evaluate chunks", or an invalid-token abort) is FATAL and DETERMINISTIC: the
+    // context/inputs that failed the decode will fail identically on every retry. Retrying it only
+    // burns ~26s per attempt × 4 attempts of silent spinner (B13: "the vision thing failed and I
+    // didn't get an error") before finally surfacing. Break immediately so the error reaches the
+    // user and the loading state clears at once.
+    || /failed to decode|evaluate chunks|invalid token/i.test(msg);
 }
 /** A server rejected the request because it couldn't compile the tool schemas into a
  *  grammar (llama.cpp: "failed to parse grammar" / "failed to initialize samplers").

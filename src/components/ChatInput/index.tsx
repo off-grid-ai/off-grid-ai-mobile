@@ -46,6 +46,9 @@ interface ChatInputProps {
   isRemote?: boolean;
   activeSpotlight?: number | null;
   showSettingsDot?: boolean;
+  /** Opens the shared fullscreen image viewer when a pending (pre-send)
+   * attachment thumbnail is tapped — the same handler in-message images use. */
+  onImagePress?: (uri: string) => void;
 }
 
 const IMAGE_MODE_CYCLE: ImageModeState[] = ['auto', 'force', 'disabled'];
@@ -115,6 +118,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   isRemote = false,
   activeSpotlight = null,
   showSettingsDot = false,
+  onImagePress,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -335,7 +339,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   return (
     <View style={styles.container}>
-      <AttachmentPreview attachments={attachments} onRemove={removeAttachment} />
+      <AttachmentPreview attachments={attachments} onRemove={removeAttachment} onImagePress={onImagePress} />
       <QueueRow
         queueCount={queueCount}
         queuedTexts={queuedTexts}

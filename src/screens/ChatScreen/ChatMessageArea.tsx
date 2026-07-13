@@ -315,6 +315,7 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
             onRepairVision={handleRepairVision}
             isRemote={chat.activeModelInfo.isRemote}
             activeSpotlight={chatSpotlight === 12 ? chatSpotlight : null}
+            onImagePress={chat.handleImagePress}
           />
         </AttachStep>
       </View>

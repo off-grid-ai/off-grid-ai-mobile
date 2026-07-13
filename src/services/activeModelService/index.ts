@@ -1,3 +1,7 @@
+/* eslint-disable max-lines -- 505 lines. This is the single owning service for
+   loading/unloading every model (text/LiteRT/image) through the residency lock;
+   splitting the one gateway would scatter the load lifecycle it exists to unify.
+   The recent overflow is the text-only (skip-mmproj) load option. */
 // ActiveModelService — THE ONLY PLACE models should be loaded/unloaded from.
 import { llmService } from '../llm';
 import { liteRTService } from '../litert';
@@ -115,7 +119,7 @@ class ActiveModelService {
   async loadTextModel(
     modelId: string,
     timeoutMs: number = 120000,
-    opts?: { override?: boolean },
+    opts?: { override?: boolean; textOnly?: boolean },
   ): Promise<void> {
     // Fast path — model already loaded (no lock; just sync the store).
     if (this.isTextModelCurrent(modelId)) {
@@ -134,7 +138,7 @@ class ActiveModelService {
   private async doLoadTextModelLocked(
     modelId: string,
     timeoutMs: number,
-    opts?: { override?: boolean },
+    opts?: { override?: boolean; textOnly?: boolean },
   ): Promise<void> {
     // Re-check after acquiring — a queued call may have loaded it already.
     if (this.isTextModelCurrent(modelId)) {
@@ -151,7 +155,11 @@ class ActiveModelService {
     }
     // Use estimated runtime RAM (file size + overhead), not just file size,
     // so the residency budget reflects the model's real memory footprint.
-    const textSizeMB = Math.round((hardwareService.estimateModelRam(model) || 0) / (1024 * 1024));
+    // Text-only loads (transcription/insights) skip the vision mmproj clip, so
+    // size the budget on the gguf weights alone - don't reserve for a clip we
+    // won't load.
+    const ramModel = opts?.textOnly ? { fileSize: model.fileSize, mmProjFileSize: 0 } : model;
+    const textSizeMB = Math.round((hardwareService.estimateModelRam(ramModel) || 0) / (1024 * 1024));
     // LiteRT weights + KV are dirty/accelerator memory → gated on REAL free RAM (mmap GGUF
     // stays clean/physical-cap). Derived once so makeRoomFor and register agree.
     const textIsDirty = model.engine === 'litert';
@@ -175,6 +183,7 @@ class ActiveModelService {
       store,
       timeoutMs,
       override: !!opts?.override || modelResidencyManager.hasSessionOverride(modelId),
+      textOnly: !!opts?.textOnly,
       loadedTextModelId: this.loadedTextModelId,
       onLoaded: id => {
         this.loadedTextModelId = id;

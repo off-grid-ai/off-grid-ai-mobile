@@ -85,6 +85,9 @@ export interface TextLoadContext {
   /** User forced this load ("Load Anyway"/continue) — skip the conservative native
    *  memory gate so the loader's own fallbacks try instead of a hard block. */
   override?: boolean;
+  /** Text-only load (transcription/insights) — do NOT load the vision mmproj clip,
+   *  saving its RAM. The model's stored mmproj link is preserved for later vision use. */
+  textOnly?: boolean;
   onLoaded: (modelId: string) => void;
   onError: () => void;
   onFinally: () => void;
@@ -192,7 +195,8 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
       ctx.onError(); // resets loadedTextModelId to null before reassignment
     }
 
-    const mmProjPath = await resolveMmProjPath(ctx.model, ctx.modelId);
+    // Text-only load (transcription/insights): skip the vision mmproj clip entirely.
+    const mmProjPath = ctx.textOnly ? undefined : await resolveMmProjPath(ctx.model, ctx.modelId);
 
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -222,7 +226,9 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
     // (incompatible file), clear it so the eye icon reappears for repair.
     // Only applies when the link was already persisted before this load attempt — not
     // when resolveMmProjPath just discovered the file via directory scan.
-    if (ctx.model.mmProjPath && !multimodalSupport?.vision) {
+    // (Skip when textOnly: we deliberately didn't load the clip, so its absence is
+    // expected and must NOT be mistaken for an incompatible file to clear.)
+    if (!ctx.textOnly && ctx.model.mmProjPath && !multimodalSupport?.vision) {
       await modelManager.clearMmProjLink(ctx.modelId);
     }
 

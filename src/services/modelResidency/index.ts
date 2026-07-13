@@ -9,7 +9,7 @@
  *
  * See docs/design/MODEL_ROUTING.md §5.1–5.2.
  */
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { hardwareService } from '../hardware';
 import logger from '../../utils/logger';
 import {
@@ -18,7 +18,7 @@ import {
   Resident,
   ResidentType,
 } from './policy';
-import { LoadPolicy } from '../memoryBudget';
+import { LoadPolicy, effectiveAvailableMB } from '../memoryBudget';
 
 type UnloadFn = () => Promise<void>;
 
@@ -238,21 +238,27 @@ class ModelResidencyManager {
     // paged out like clean mmap weights, so while one is present EVERY load (even an
     // mmap sidecar) must also respect real free RAM, or stacking onto the spike jetsams
     // the app. With no dirty pressure, mmap GGUF stays bounded by physical RAM only.
-    // Only a DIRTY incoming (CoreML/ONNX image, LiteRT — real committed RAM that cannot
-    // page) needs the real-free gate. A CLEAN incoming (mmap GGUF) pages in even when
-    // instantaneous free is low, so physical RAM is its only ceiling — regardless of what
-    // is already resident (a clean model co-resides beside a dirty one, paging around it).
-    if (!spec.dirtyMemory) {
+    const dirtyPressure =
+      !!spec.dirtyMemory ||
+      [...this.residents.values()].some(r => r.dirtyMemory);
+    if (!dirtyPressure) {
+      // mmap'd, no dirty pressure: physical RAM is the ceiling (clean, file-backed
+      // weights page in even when instantaneous available is low).
       return Math.round(Math.max(MIN_BUDGET_MB, physicalCapMB));
     }
-    // Dirty incoming: gate on REAL free RAM (raw os_proc available, which already bakes in
-    // the iOS jetsam limit) + resident footprint − OS headroom. We do NOT apply the
-    // Android background-reclaim credit here: that models the OS evicting OTHER apps, not
-    // RAM pinned by our own resident dirty model — crediting it let a 2nd dirty heavy
-    // co-load past real physical free and OOM (M2). Clean residents' footprint is still
-    // added (they page out, freeing their RAM); planEviction's usedMB excludes them so
-    // they co-reside rather than being counted against the incoming.
-    const availableMB = hardwareService.getAvailableMemoryGB() * 1024;
+    // Under dirty pressure: also gate on real free RAM (+ evictable residents − OS
+    // headroom). Use the reclaimable-aware availability (the SAME owner the override
+    // survival floor reads) — on Android a foreground load may commit up to the physical
+    // budget because the OS reclaims background apps, so a raw availMem snapshot here
+    // under-counted and refused a dirty model the override path then loaded fine (B1).
+    // iOS gets NO reclaim credit (jetsam kills US, not background apps) so this stays the
+    // raw snapshot there — which is what refuses a clean sidecar piled onto a dirty spike.
+    const availableMB = effectiveAvailableMB(
+      hardwareService.getAvailableMemoryGB() * 1024,
+      hardwareService.getTotalMemoryGB() * 1024,
+      Platform.OS,
+      this.loadPolicy,
+    );
     const residentMB = [...this.residents.values()].reduce(
       (sum, r) => sum + r.sizeMB,
       0,

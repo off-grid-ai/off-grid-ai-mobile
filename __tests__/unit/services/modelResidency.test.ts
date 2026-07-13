@@ -736,19 +736,29 @@ describe('ModelResidencyManager', () => {
     });
     afterEach(() => jest.restoreAllMocks());
 
-    it('REFUSES an override load when live free RAM is below the survival floor (background apps case)', async () => {
+    it('LOADS an override regardless of the old survival floor, while the SAME normal load refuses (background apps case)', async () => {
       modelResidencyManager.setBudgetOverrideMB(null);
       jest
         .spyOn(hardwareService, 'refreshMemoryInfo')
         .mockResolvedValue(undefined as never);
       jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(12);
       jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockReturnValue(0.8); // ~820MB free — starved
-      const { fits, evicted } = await modelResidencyManager.makeRoomFor(
-        { key: 'text', type: 'text', sizeMB: 5000 },
-        { override: true },
-      );
-      expect(fits).toBe(false); // even override won't cross the floor → graceful refuse, no crash
-      expect(evicted).toEqual([]); // and we didn't strand the device by evicting
+      // A DIRTY model: the normal path gates on live free RAM (~820MB), so it refuses.
+      const spec = {
+        key: 'text',
+        type: 'text' as const,
+        sizeMB: 5000,
+        dirtyMemory: true,
+      };
+
+      // Fails-before: a NORMAL load in this starved condition refuses (protection intact).
+      expect((await modelResidencyManager.makeRoomFor(spec)).fits).toBe(false);
+
+      // Passes-after: "Load Anyway" is unconditional — the user accepted the risk, so it loads.
+      const { fits } = await modelResidencyManager.makeRoomFor(spec, {
+        override: true,
+      });
+      expect(fits).toBe(true); // override always loads, no survival floor
     });
 
     it('ALLOWS the same override load when there is survival headroom', async () => {
@@ -803,7 +813,7 @@ describe('ModelResidencyManager', () => {
       expect(fits).toBe(true); // real post-evict RAM (5120-3600) clears the 1200 floor
     });
 
-    it('override STILL refuses when the model is too big even after the unload reclaims RAM (physics floor preserved)', async () => {
+    it('override LOADS an oversized dirty model (evicting everything first) even where a normal load refuses', async () => {
       modelResidencyManager.setBudgetOverrideMB(null);
       jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(8);
       let residentLoaded = true;
@@ -821,39 +831,46 @@ describe('ModelResidencyManager', () => {
         unloadSmall,
         1,
       );
+      const huge = {
+        key: 'text-huge',
+        type: 'text' as const,
+        sizeMB: 6000,
+        dirtyMemory: true,
+      };
 
-      // A 6GB dirty model: even 4096 - 6000 is below the 1200 floor → refuse (would jetsam).
-      const { fits } = await modelResidencyManager.makeRoomFor(
-        { key: 'text-huge', type: 'text', sizeMB: 6000, dirtyMemory: true },
-        { override: true },
-      );
+      // Fails-before: a NORMAL load of this 6GB dirty model refuses (physics floor for the safe path).
+      expect((await modelResidencyManager.makeRoomFor(huge)).fits).toBe(false);
+      residentLoaded = true; // restore the pre-eviction condition for the override attempt
 
-      expect(unloadSmall).toHaveBeenCalledTimes(1); // we tried (freed everything first)
-      expect(fits).toBe(false); // but real physics still refuses
+      // Passes-after: "Load Anyway" is unconditional — it evicts everything first, then loads.
+      const { fits, evicted } = await modelResidencyManager.makeRoomFor(huge, {
+        override: true,
+      });
+
+      expect(unloadSmall).toHaveBeenCalled(); // freed the resident first
+      expect(evicted).toEqual(['text']); // reported what it evicted
+      expect(fits).toBe(true); // override always loads regardless of the old physics floor
     });
 
-    // Platform-aware floor: Android backs the OS/other apps with zram, so the override reserves a
-    // smaller physical margin (KV growth) than iOS's full jetsam floor. This is what lets a
-    // ~3.7GB model load on a 12GB phone (physical availMem ~4.5GB) instead of the iOS-calibrated
-    // 1200 floor refusing it — WITHOUT the swap-credit mistake (the dirty footprint is still
-    // subtracted from real physical, so an oversized dirty model still goes negative → refused).
+    // Override is unconditional on every platform: "Load Anyway" always loads because the user
+    // explicitly accepted the risk. There is no survival floor and no platform-specific refusal
+    // under override — not the iOS jetsam floor, not the Android oversized-OOM guard. Every one of
+    // these dirty models, on either OS, LOADS under override regardless of the raw availMem read.
     describe('platform-aware override floor', () => {
       const RN = require('react-native');
       const originalOS = RN.Platform.OS;
       afterEach(() => { RN.Platform.OS = originalOS; });
 
       // Same real seam (makeRoomFor with override on a dirty model) on a 12GB device whose raw
-      // availMem reads ~4.5GB. ANDROID uses the reclaimable-aware ceiling (foreground load → the
-      // LMK frees background apps → the physical budget modelMemoryBudgetMB ≈ 12288*0.70 = 8601MB),
-      // so a 5.2GB E4B LOADS. A genuinely oversized dirty model (bigger than that budget) still goes
-      // negative → refused (the OOM guard survives — NOT the reverted swap-credit). iOS gets no
-      // reclaim (jetsam kills US), so it stays on raw availMem and refuses the 3.7GB model.
+      // availMem reads ~4.5GB. Under override, size and platform no longer gate the load: even a
+      // genuinely oversized 9GB dirty model on Android and a 3.7GB model on iOS (which a normal load
+      // would refuse) both LOAD, because override always loads.
       it.each([
-        { os: 'android', sizeMB: 3700, expected: true, why: '8601-3700 → LOADS (reclaimable ceiling)' },
-        { os: 'android', sizeMB: 5235, expected: true, why: '8601-5235 → E4B LOADS on a 12GB phone (the fix)' },
-        { os: 'android', sizeMB: 9000, expected: false, why: '8601-9000 negative → refused (oversized OOM guard)' },
-        { os: 'ios', sizeMB: 3700, expected: false, why: 'raw availMem 4500-3700=800 < 1200 iOS jetsam floor → refused' },
-      ])('$os: a $sizeMB MB dirty model → fits=$expected ($why)', async ({ os, sizeMB, expected }) => {
+        { os: 'android', sizeMB: 3700, expected: true, why: 'override always loads' },
+        { os: 'android', sizeMB: 5235, expected: true, why: 'override always loads (E4B on a 12GB phone)' },
+        { os: 'android', sizeMB: 9000, expected: true, why: 'override always loads (no oversized OOM guard under override)' },
+        { os: 'ios', sizeMB: 3700, expected: true, why: 'override always loads (no iOS jetsam floor under override)' },
+      ])('$os: a $sizeMB MB dirty model under override → fits=$expected ($why)', async ({ os, sizeMB, expected }) => {
         RN.Platform.OS = os;
         modelResidencyManager.setBudgetOverrideMB(null);
         jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
@@ -1015,7 +1032,7 @@ describe('ModelResidencyManager', () => {
       expect(modelResidencyManager.getLoadPolicy()).toBe('aggressive');
     });
 
-    it('aggressive keeps ONE model at a time — evicts a co-resident that would otherwise fit', async () => {
+    it('conservative keeps ONE model at a time — evicts a co-resident that would otherwise fit', async () => {
       modelResidencyManager.setBudgetOverrideMB(8000); // roomy: both would co-reside under balanced
       jest
         .spyOn(hardwareService, 'refreshMemoryInfo')
@@ -1027,9 +1044,9 @@ describe('ModelResidencyManager', () => {
         1,
       );
 
-      // Balanced would keep both (400 + 800 ≤ 8000). Aggressive evicts the image so
-      // only the incoming text model remains.
-      modelResidencyManager.setLoadPolicy('aggressive');
+      // Balanced would keep both (400 + 800 ≤ 8000). Conservative is single-model, so it
+      // evicts the image so only the incoming text model remains.
+      modelResidencyManager.setLoadPolicy('conservative');
       const room = await modelResidencyManager.makeRoomFor({
         key: 'text',
         type: 'text',
@@ -1063,7 +1080,7 @@ describe('ModelResidencyManager', () => {
       expect(unloadImg).not.toHaveBeenCalled();
     });
 
-    it('aggressive single-model still spares a pinned classifier', async () => {
+    it('conservative single-model still spares a pinned classifier', async () => {
       modelResidencyManager.setBudgetOverrideMB(8000);
       jest
         .spyOn(hardwareService, 'refreshMemoryInfo')
@@ -1079,7 +1096,7 @@ describe('ModelResidencyManager', () => {
         unloadImg,
         2,
       );
-      modelResidencyManager.setLoadPolicy('aggressive');
+      modelResidencyManager.setLoadPolicy('conservative');
       const room = await modelResidencyManager.makeRoomFor({
         key: 'text',
         type: 'text',

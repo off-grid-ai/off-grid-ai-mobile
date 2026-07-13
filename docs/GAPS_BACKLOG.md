@@ -257,9 +257,6 @@ state-machine traces:
 - **Concurrent-retry race journey test (owed).** The 'No response'-card race fix (per-turn
   ToolLoopOutcome) is covered by construction + the stop journey's no-card assertions; still owed a
   rendered journey that starts a retry BEFORE the stopped turn's classifier runs and asserts no card.
-- **Stale failure card not cleared when a NEW attempt starts (still open).** Clear the text
-  modelFailure card at generation dispatch so a card from a failed/stopped attempt never sits next to
-  a live stream (IMG 00:23). Small seam: clearModelFailure('text') at prepare/dispatch + rendered test.
 - **Mic button shows a loader for the WHOLE background STT download — reads as "app not ready to
   chat"** (device-reported 2026-07-13, IMG_0143; re-raised 2026-07-14). VoiceRecordButton derives its
   loading/unavailable rendering from the whisper DOWNLOAD state (useWhisperStore.downloadProgressById

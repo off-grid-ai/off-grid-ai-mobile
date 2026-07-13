@@ -1117,20 +1117,7 @@ describe('RAG context injection in startGenerationFn', () => {
     expect(mockGenerateWithTools).toHaveBeenCalled();
   });
 
-  it('auto-enables search_knowledge_base tool for project conversations', async () => {
-    const conv = { id: 'conv-1', projectId: 'proj-1', messages: [{ id: 'm1', role: 'user', content: 'hello', timestamp: 0 }] };
-    mockChatStoreGetState.mockReturnValue({ conversations: [conv], updateCompactionState: jest.fn() });
-    mockProjectStoreGetProject.mockReturnValue({ id: 'proj-1', systemPrompt: 'Be helpful', name: 'Test' });
-    mockGetDocsByProject.mockResolvedValue([{ id: 1, name: 'doc.txt', enabled: 1 }]);
-    (llmService.supportsToolCalling as jest.Mock).mockReturnValue(true);
-    const deps = makeGenerationDeps({ settings: { ...makeGenerationDeps().settings, enabledTools: ['web_search'] } });
-    await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'hello' });
 
-    // generateWithTools should have been called (not generateResponse) since tools are enabled
-    const { generationService: genSvc } = require('../../../src/services/generationService');
-    // The generation should include search_knowledge_base in the tool list
-    expect(genSvc.generateWithTools || genSvc.generateResponse).toBeDefined();
-  });
 });
 
 describe('RAG context injection in regenerateResponseFn', () => {

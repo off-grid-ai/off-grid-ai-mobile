@@ -15,7 +15,7 @@ import { abortPreload } from '../../services/modelPreloader';
 import { modelResidencyManager } from '../../services/modelResidency';
 import { reportModelFailure } from '../../services/modelFailureHandler';
 import { embeddingService } from '../../services/rag/embedding';
-import { useChatStore, useProjectStore, useRemoteServerStore } from '../../stores';
+import { useChatStore, useProjectStore, useRemoteServerStore, useAppStore } from '../../stores';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { Message, MediaAttachment, Project, DownloadedModel, RemoteModel, CacheType } from '../../types';
 import logger from '../../utils/logger';
@@ -300,8 +300,15 @@ async function injectRagContext(projectId: string | undefined, query: string, pr
 }
 /** Gemma 4 E2B/E4B need <|think|> prepended to activate thinking mode — both llama.cpp and LiteRT.
  *  The engine-specific decision lives in engines.wantsLeadingThinkToken (the seam), not here. */
-const applyGemma4ThinkToken = (prompt: string, model: DownloadedModel | null | undefined, opts: { isRemote: boolean; thinkingEnabled: boolean }): string =>
-  wantsLeadingThinkToken(model, opts) ? `<|think|>\n${prompt}` : prompt;
+const applyGemma4ThinkToken = (prompt: string, model: DownloadedModel | null | undefined, opts: { isRemote: boolean; thinkingEnabled: boolean }): string => {
+  const prepend = wantsLeadingThinkToken(model, opts);
+  // [THINK-SM] Validate the off-by-one report: does the <|think|> activation decision lag the toggle?
+  // depsThinkingEnabled = the value threaded from the screen's render snapshot (potentially stale);
+  // storeThinkingEnabled = the live store value RIGHT NOW (fresh). If prepend follows deps and deps
+  // lags store, that's the ON-lag (fresh enable_thinking says ON, but the activation token is missing).
+  logger.log(`[THINK-SM] prepend=${prepend} depsThinkingEnabled=${opts.thinkingEnabled} storeThinkingEnabled=${useAppStore.getState().settings.thinkingEnabled} isRemote=${opts.isRemote} engine=${model?.engine ?? 'none'}`);
+  return prepend ? `<|think|>\n${prompt}` : prompt;
+};
 
 function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any, _messageText: string): { enabledTools: string[]; rawPrompt: string; localToolSupport: boolean } {
   const project = conversation?.projectId ? useProjectStore.getState().getProject(conversation.projectId) : null;
@@ -312,15 +319,12 @@ function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any, _message
   // Honour the UI gate: "N/A" (supportsToolCalling === false) means the picker is unreachable, so don't inject tools the user can't disable.
   const canUseTools = deps.supportsToolCalling !== false && (localToolSupport || !!(activeServerId && activeRemoteTextModelId));
 
-  let enabledTools = canUseTools ? (deps.settings.enabledTools || []) : [];
-
-  // Auto-add search_knowledge_base for project chats even if not in user's enabled list.
-  // Key on the RESOLVED project existing, not a truthy projectId — a chat orphaned by
-  // project deletion has a dangling projectId but no docs, so injecting the KB tool made
-  // the model call a tool over a project whose RAG is gone (Q9b).
-  if (project && !enabledTools.includes('search_knowledge_base')) {
-    enabledTools = [...enabledTools, 'search_knowledge_base'];
-  }
+  // SINGLE source of truth for the turn's tools: ONLY what the user toggled (settings.enabledTools).
+  // No auto-injection — a project no longer silently adds search_knowledge_base. This keeps the tools
+  // SENT identical to the tools the quick-settings count SHOWS (both read settings.enabledTools), so
+  // the two can never drift ("0 tools" in the popover but "Tools sent in request (1)" — device 2026-07-14).
+  // The user enables KB search explicitly when they want it.
+  const enabledTools = canUseTools ? (deps.settings.enabledTools || []) : [];
 
   const rawPrompt = project?.systemPrompt || deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt;
   return { enabledTools, rawPrompt, localToolSupport };

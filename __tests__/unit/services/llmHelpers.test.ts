@@ -417,6 +417,36 @@ describe('captureGpuInfo', () => {
     const info = captureGpuInfo(ctx, false, 32);
     expect(info.gpuEnabled).toBe(false);
   });
+
+  it('carries gpuAttemptFailed through for the fallback verdict', () => {
+    const ctx = { gpu: true, reasonNoGPU: '', devices: [] } as any;
+    expect(captureGpuInfo(ctx, true, 32).gpuAttemptFailed).toBe(true);
+    expect(captureGpuInfo(ctx, false, 32).gpuAttemptFailed).toBe(false);
+  });
+});
+
+describe('describeGpuFallback — the silent GPU→CPU downgrade verdict (device 2026-07-13 18:57)', () => {
+  const { describeGpuFallback } = require('../../../src/services/llmHelpers');
+
+  it('null when the user selected CPU (nothing was downgraded)', () => {
+    expect(describeGpuFallback({ requestedGpuLayers: 0, activeGpuLayers: 0, gpuAttemptFailed: false })).toBeNull();
+  });
+
+  it('null when the GPU offload succeeded', () => {
+    expect(describeGpuFallback({ requestedGpuLayers: 99, activeGpuLayers: 24, gpuAttemptFailed: false })).toBeNull();
+  });
+
+  it('names the init failure when the GPU attempt failed (the 8000ms timeout class)', () => {
+    const notice = describeGpuFallback({ requestedGpuLayers: 99, activeGpuLayers: 0, gpuAttemptFailed: true });
+    expect(notice).toMatch(/running on CPU/i);
+    expect(notice).toMatch(/failed or timed out/i);
+  });
+
+  it('names the device refusal when GPU was requested but never attempted (capability/RAM cap zeroed it)', () => {
+    const notice = describeGpuFallback({ requestedGpuLayers: 99, activeGpuLayers: 0, gpuAttemptFailed: false });
+    expect(notice).toMatch(/running on CPU/i);
+    expect(notice).toMatch(/on this device/i);
+  });
 });
 
 describe('logContextMetadata', () => {

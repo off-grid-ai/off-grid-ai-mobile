@@ -11,7 +11,7 @@ import {
   buildCompletionParams, buildThinkingCompletionParams, supportsNativeThinking,
   getMaxContextForDevice, getGpuLayersForDevice, BYTES_PER_GB,
   validateModelFile, checkMemoryForModel, safeCompletion, resolveSafeContext,
-  describeGpuFallback,
+  describeGpuFallback, isTruncatedResult,
 } from './llmHelpers';
 import { hardwareService } from './hardware';
 import { formatLlamaMessages, buildOAIMessages } from './llmMessages';
@@ -307,7 +307,7 @@ class LLMService {
       this.performanceStats = recordGenerationStats(startTime, firstTokenMs, tokenCount);
       // Capture truncation (hit n_predict cap without EOS) so the UI can flag a cut-off
       // reply instead of it looking finished (B15).
-      this.performanceStats.lastTruncated = cr?.stopped_eos === false || cr?.stopped_limit === 1 || cr?.truncated === true;
+      this.performanceStats.lastTruncated = isTruncatedResult(cr);
       if (completionResult?.context_full) { logger.log('[LLM] Context full detected — signalling for compaction'); throw new Error('Context is full'); }
       const result = { content: cr?.content || cr?.text || fullContent, reasoningContent: cr?.reasoning_content || fullReasoningContent };
       logger.log(`[LLM][THINKING] Final result — hasContent=${!!result.content}, hasReasoningContent=${!!result.reasoningContent}, reasoningLength=${result.reasoningContent?.length ?? 0}, fullReasoningFromStream=${fullReasoningContent.length}`);

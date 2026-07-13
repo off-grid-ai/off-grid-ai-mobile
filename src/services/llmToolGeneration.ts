@@ -6,7 +6,7 @@
 import { useAppStore } from '../stores/appStore';
 import type { Message } from '../types';
 import type { ToolCall } from './tools/types';
-import { recordGenerationStats, buildCompletionParams, buildThinkingCompletionParams, safeCompletion } from './llmHelpers';
+import { recordGenerationStats, buildCompletionParams, buildThinkingCompletionParams, safeCompletion, isTruncatedResult } from './llmHelpers';
 import type { StreamToken } from './llmStreamTypes';
 import logger from '../utils/logger';
 import { TOOL_CALL_OPENERS, TOOL_CALL_CLOSERS, maxPartialTagSuffix } from '../utils/messageContent';
@@ -194,8 +194,9 @@ export async function generateWithToolsImpl(
 
     deps.setPerformanceStats({
       ...recordGenerationStats(startTime, firstTokenMs, tokenCount),
-      // Flag a reply cut off at the n_predict cap (no EOS) so the UI can show it (B15).
-      lastTruncated: cr?.stopped_eos === false || cr?.stopped_limit === 1 || cr?.truncated === true,
+      // Flag a reply cut off at the n_predict cap so the UI can show it (B15) — but NOT a user stop
+      // (interrupted), which also has stopped_eos:false. Single verdict shared with the plain path.
+      lastTruncated: isTruncatedResult(cr),
     });
     generating = false;
     deps.setIsGenerating(false);

@@ -465,6 +465,20 @@ export function buildCompletionParams(settings: {
     ctx_shift: options?.disableCtxShift ? false : true,
   };
 }
+/**
+ * Did a completion get cut off at the n_predict cap (B15) — as opposed to finishing on EOS or being
+ * STOPPED by the user? SINGLE source for the truncation verdict (both the plain and the tool-loop
+ * completion paths call this, so they can never disagree). A user stop lands as `interrupted:true`
+ * with `stopped_eos:false`; that is NOT truncation — only an n_predict-cap hit is. (The old inline
+ * `stopped_eos === false` term was too broad: a stopped turn also has stopped_eos false, so it was
+ * mislabeled "Reply cut off at the token limit" — device 2026-07-14.)
+ */
+export function isTruncatedResult(
+  cr: { interrupted?: boolean; stopped_limit?: number | boolean; truncated?: boolean } | null | undefined,
+): boolean {
+  if (!cr || cr.interrupted === true) return false;
+  return cr.stopped_limit === 1 || cr.stopped_limit === true || cr.truncated === true;
+}
 export function recordGenerationStats(
   startTime: number,
   firstTokenMs: number,

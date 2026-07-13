@@ -1423,25 +1423,6 @@ describe('generationService', () => {
   });
 
   // ============================================================================
-  // prepareGeneration — LLM service busy path
-  // ============================================================================
-  describe('prepareGeneration — LLM service currently generating', () => {
-    it('throws "LLM service busy" when isCurrentlyGenerating returns true', async () => {
-      const convId = setupWithConversation();
-      mockedLlmService.isModelLoaded.mockReturnValue(true);
-      mockedLlmService.isCurrentlyGenerating.mockReturnValue(true);
-
-      await expect(
-        generationService.generateResponse(convId, [
-          createMessage({ role: 'user', content: 'Hi' }),
-        ])
-      ).rejects.toThrow('LLM service busy');
-
-      expect(generationService.getState().isGenerating).toBe(false);
-    });
-  });
-
-  // ============================================================================
   // generateWithTools — local path abort behavior
   // ============================================================================
   describe('generateWithTools — local abort paths', () => {

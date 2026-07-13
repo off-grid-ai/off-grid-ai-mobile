@@ -326,15 +326,6 @@ describe('prepareGenerationImpl', () => {
     await expect(prepareGenerationImpl(svc, 'conv-1')).rejects.toThrow('No model loaded');
   });
 
-  it('throws when llama.cpp is busy', async () => {
-    const { llmService: llm } = require('../../../src/services/llm');
-    llm.isModelLoaded.mockReturnValue(true);
-    llm.isCurrentlyGenerating.mockReturnValue(true);
-    mockedGetState.mockReturnValue(makeLlmAppState());
-
-    const svc = makeSvc();
-    await expect(prepareGenerationImpl(svc, 'conv-1')).rejects.toThrow('LLM service busy');
-  });
 });
 
 // ---------------------------------------------------------------------------

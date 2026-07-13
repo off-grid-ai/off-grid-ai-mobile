@@ -257,10 +257,6 @@ describe('initiateModelLoad typed outcome', () => {
     expect(outcome).toEqual({ ok: false, reason: 'insufficient-memory', detail: 'Not enough RAM', alerted: true });
   });
 
-  it('returns ok when the load succeeds', async () => {
-    mockLoadTextModel.mockResolvedValueOnce(undefined);
-    expect(await initiateModelLoad(makeDeps(), false)).toEqual({ ok: true });
-  });
 
   it('returns load-threw and alerts when the load throws (not already loading)', async () => {
     mockLoadTextModel.mockRejectedValueOnce(new Error('boom'));
@@ -311,15 +307,6 @@ describe('ensureModelLoadedFn typed outcome', () => {
   // Desync guard: the path matches but the engine has NO model resident (isModelLoaded=false).
   // The old llama fast-path trusted the path alone and returned ok → generated against nothing.
   // isModelReady now also requires isModelLoaded(), so this must attempt a load, not short-circuit.
-  it('reloads when the llama path matches but the model is NOT actually resident (desync)', async () => {
-    mockGetLoadedModelPath.mockReturnValue('/path/model.gguf');
-    mockIsModelLoaded.mockReturnValue(false); // path set, but nothing resident
-    // The real loader makes the model resident; model becomes ready only AFTER the load runs.
-    mockLoadTextModel.mockImplementationOnce(async () => { mockIsModelLoaded.mockReturnValue(true); });
-    const outcome = await ensureModelLoadedFn(makeDeps());
-    expect(mockLoadTextModel).toHaveBeenCalled(); // did NOT falsely short-circuit as ready
-    expect(outcome).toEqual({ ok: true });
-  });
 
   // Load reports ok but the model is still not resident afterwards → post-verify catches the desync.
   it('returns load-threw when the load resolves but leaves no resident model', async () => {

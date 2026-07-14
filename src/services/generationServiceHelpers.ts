@@ -232,10 +232,8 @@ function assertLiteRTImageSupport(
   }
 }
 
-// assertLiteRTAudioSupport was removed: audio is transcript-only (modelInputAudioUris always []),
-// so it could never fire and, when it did, it WRONGLY hard-rejected a non-audio LiteRT model that
-// merely carried a voice note. The model's audio-capability flag (liteRTAudio) is retained as
-// latent data; if a future feature feeds audio, it re-gates at the modelMedia seam, not here.
+// assertLiteRTAudioSupport removed: audio is transcript-only (modelInputAudioUris always []), so it
+// only ever wrongly hard-rejected a non-audio LiteRT model carrying a voice note. Re-gate at modelMedia.
 
 async function runLiteRTResponseImpl(svc: any, req: GenerationRequest): Promise<void> {
   const { conversationId, messages, onFirstToken } = req;
@@ -252,10 +250,8 @@ async function runLiteRTResponseImpl(svc: any, req: GenerationRequest): Promise<
   const systemMsg = messages.find(m => m.role === 'system');
   const systemPrompt = typeof systemMsg?.content === 'string' ? systemMsg.content : '';
   const allAttachments = lastUser.attachments ?? [];
-  // Single source of truth (modelMedia): images may be model input; a voice note is transcript-only,
-  // so audioUris is ALWAYS empty — the transcript is already in lastUser.content. This mirrors the
-  // llama/OAI path (llmMessages) so a voice note behaves identically on every engine (B5/B9 parity):
-  // never send the audio, and never hard-reject a non-audio LiteRT model for carrying a voice note.
+  // Single source of truth (modelMedia): images may be model input; a voice note is transcript-only
+  // (audioUris ALWAYS empty — transcript is already in lastUser.content), matching the llama/OAI path.
   const imageUris = modelInputImageUris(allAttachments);
   const audioUris = modelInputAudioUris(allAttachments);
 

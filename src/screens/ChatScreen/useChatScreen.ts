@@ -20,6 +20,7 @@ import { startGenerationFn, handleSendFn, handleStopFn, handleSelectProjectFn, d
 import { handleRetryMessageFn, handleEditMessageFn, handleDeleteConversationFn, handleGenerateImageFromMsgFn } from './useChatMessageHandlers';
 import { getDisplayMessages } from './types';
 import { saveImageToGallery } from './useSaveImage';
+import { needsVisionRepair } from '../../utils/visionRepair';
 import {
   isSuspiciousRecoveredImageModel,
   isSuspiciousRecoveredTextModel,
@@ -379,6 +380,8 @@ export const useChatScreen = () => {
     imageGenerationStatus: imageGenState.status,
     imagePreviewPath: imageGenState.previewPath,
     isStreaming, isThinking, isCompacting, isGeneratingForThisConversation, hasPendingSettings, handleReloadTextModel, textModelEvicted, displayMessages, downloadedModels, hasAvailableModels, projects, settings,
+    // The chat knows the active model IS a vision model but is missing its projector — surface repair, not a crash.
+    visionNeedsRepair: !activeModelInfo.isRemote && needsVisionRepair(activeModel),
     navigation, hardwareService,
     handleSend,
     handleStop: () => handleStopFn(genDeps),

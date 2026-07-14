@@ -293,6 +293,7 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
             disabled={!chat.hasActiveModel}
             isGenerating={chat.isStreaming || chat.isThinking}
             supportsVision={chat.supportsVision}
+            visionNeedsRepair={chat.visionNeedsRepair}
             conversationId={chat.activeConversationId}
             imageModelLoaded={chat.imageModelLoaded}
             onOpenSettings={() => chat.setShowSettingsPanel(true)}

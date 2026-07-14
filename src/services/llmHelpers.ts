@@ -255,11 +255,9 @@ export function captureGpuInfo(
 }
 
 /**
- * UI copy for a GPU-selected load that landed on CPU (0 layers offloaded). SINGLE source for the
- * fallback verdict: the user asked for GPU layers and got none — an init failure/timeout
- * (gpuAttemptFailed) or a pre-init refusal (device capability / RAM cap zeroed the attempt).
- * Null = nothing to report (CPU was selected, or the GPU offload succeeded). Never silent:
- * the device-reported "Backend=GPU but the turn ran on CPU at 3.4 tok/s" class (2026-07-13 18:57).
+ * UI notice for a GPU-selected load that landed on CPU (requested GPU layers, got 0 — init
+ * failure/timeout, or a device/RAM refusal). Null when nothing to report. Never a silent CPU
+ * downgrade (device 2026-07-13 18:57: "Backend=GPU but ran on CPU at 3.4 tok/s").
  */
 export function describeGpuFallback(info: { requestedGpuLayers: number; activeGpuLayers: number; gpuAttemptFailed: boolean }): string | null {
   if (info.requestedGpuLayers <= 0 || info.activeGpuLayers > 0) return null;
@@ -311,7 +309,12 @@ export function getModelMaxContext(context: LlamaContext): number | null {
   try {
     const metadata = (context as any).model?.metadata;
     if (!metadata) return null;
-    const trainCtx = metadata['llama.context_length'] || metadata['general.context_length'] || metadata.context_length;
+    // GGUF stores the trained context under an ARCHITECTURE-prefixed key (gemma4.context_length,
+    // qwen3.context_length, …). Reading only the llama key returned null for gemma/qwen → 32K slider cap.
+    const arch = metadata['general.architecture'];
+    const trainCtx =
+      (arch && metadata[`${arch}.context_length`]) ||
+      metadata['llama.context_length'] || metadata['general.context_length'] || metadata.context_length;
     if (!trainCtx) return null;
     const maxModelCtx = Number.parseInt(trainCtx, 10);
     return Number.isNaN(maxModelCtx) || maxModelCtx <= 0 ? null : maxModelCtx;
@@ -466,12 +469,9 @@ export function buildCompletionParams(settings: {
   };
 }
 /**
- * Did a completion get cut off at the n_predict cap (B15) — as opposed to finishing on EOS or being
- * STOPPED by the user? SINGLE source for the truncation verdict (both the plain and the tool-loop
- * completion paths call this, so they can never disagree). A user stop lands as `interrupted:true`
- * with `stopped_eos:false`; that is NOT truncation — only an n_predict-cap hit is. (The old inline
- * `stopped_eos === false` term was too broad: a stopped turn also has stopped_eos false, so it was
- * mislabeled "Reply cut off at the token limit" — device 2026-07-14.)
+ * Was a completion cut off at the n_predict cap (B15), vs finishing on EOS or being STOPPED? SINGLE
+ * truncation verdict for both the plain and tool-loop paths. A user stop is `interrupted:true`
+ * (stopped_eos:false) — NOT truncation; only a stopped_limit/truncated hit is (device 2026-07-14).
  */
 export function isTruncatedResult(
   cr: { interrupted?: boolean; stopped_limit?: number | boolean; truncated?: boolean } | null | undefined,

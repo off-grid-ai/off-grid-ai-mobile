@@ -330,6 +330,18 @@ describe('supportsNativeThinking — toolUse branch', () => {
 });
 
 describe('getModelMaxContext — alternative metadata keys', () => {
+  it('reads the ARCHITECTURE-prefixed key (gemma4.context_length = 131072) — device gemma-4-E2B', () => {
+    // GGUF ground truth from the device log: general.architecture=gemma4, gemma4.context_length=131072.
+    // Reading only the llama-prefixed key returned null → the slider was wrongly capped at 32K.
+    const ctx = { model: { metadata: { 'general.architecture': 'gemma4', 'gemma4.context_length': '131072' } } } as any;
+    expect(getModelMaxContext(ctx)).toBe(131072);
+  });
+
+  it('reads the arch key for other architectures too (qwen3)', () => {
+    const ctx = { model: { metadata: { 'general.architecture': 'qwen3', 'qwen3.context_length': '32768' } } } as any;
+    expect(getModelMaxContext(ctx)).toBe(32768);
+  });
+
   it('falls back to general.context_length when llama key absent', () => {
     const ctx = { model: { metadata: { 'general.context_length': '8192' } } } as any;
     expect(getModelMaxContext(ctx)).toBe(8192);

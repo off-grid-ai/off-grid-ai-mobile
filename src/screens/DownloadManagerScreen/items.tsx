@@ -170,6 +170,24 @@ interface CompletedDownloadCardProps {
   isRepairingVision?: boolean;
 }
 
+/** Feather icon for a completed model row. A vision model missing its projector reads as
+ *  "needs repair" (wrench), not "has vision" (eye) — actionable-broken, not a working capability. */
+function modelTypeIconName(item: DownloadItem, needsVisionRepair: boolean): string {
+  if (item.modelType === 'image') return 'image';
+  if (item.modelType === 'tts') return 'volume-2';
+  if (item.modelType === 'stt') return 'mic';
+  if (needsVisionRepair) return 'tool';
+  if (item.isVisionModel) return 'eye';
+  return 'message-square';
+}
+
+function modelTypeIconColor(item: DownloadItem, needsVisionRepair: boolean, colors: ReturnType<typeof useTheme>['colors']): string {
+  if (item.modelType === 'image') return colors.info;
+  if (item.modelType === 'tts' || item.modelType === 'stt') return colors.success;
+  if (needsVisionRepair || item.isVisionModel) return colors.warning;
+  return colors.primary;
+}
+
 export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ item, onDelete, onRepairVision, isRepairingVision = false }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -186,11 +204,9 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
       <View style={styles.downloadHeader}>
         <View style={styles.modelTypeIcon}>
           <Icon
-            // A vision model missing its projector is not "has vision" — it's "needs repair": show a wrench,
-            // not an eye, so the state reads as actionable-broken rather than a working capability (device 2026-07-14).
-            name={item.modelType === 'image' ? 'image' : item.modelType === 'tts' ? 'volume-2' : item.modelType === 'stt' ? 'mic' : needsVisionRepair ? 'tool' : item.isVisionModel ? 'eye' : 'message-square'}
+            name={modelTypeIconName(item, needsVisionRepair)}
             size={16}
-            color={item.modelType === 'image' ? colors.info : item.modelType === 'tts' || item.modelType === 'stt' ? colors.success : needsVisionRepair || item.isVisionModel ? colors.warning : colors.primary}
+            color={modelTypeIconColor(item, needsVisionRepair, colors)}
           />
         </View>
         <View style={styles.downloadInfo}>

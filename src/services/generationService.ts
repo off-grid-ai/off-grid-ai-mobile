@@ -1,6 +1,5 @@
 /** GenerationService - Handles LLM generation independently of UI lifecycle */
 import { llmService } from './llm';
-import { liteRTService } from './litert';
 import { getActiveEngineService, stopAllTextEngines } from './engines';
 import { useAppStore, useChatStore, useRemoteServerStore } from '../stores';
 import { Message, GenerationMeta, MediaAttachment } from '../types';
@@ -177,7 +176,6 @@ class GenerationService {
     // Local generation with tools
     const { enabledToolIds, projectId, ...callbacks } = options;
     if (!(await this.prepareGeneration(conversationId))) return;
-    const chatStore = useChatStore.getState();
 
     try {
       const outcome = await runToolLoop({

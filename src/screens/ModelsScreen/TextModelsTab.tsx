@@ -23,7 +23,8 @@ import { TextFiltersSection } from './TextFiltersSection';
 import { FilterState, SortOption } from './types';
 import { SORT_OPTIONS } from './constants';
 import { formatNumber, getTextModelCompatibility } from './utils';
-import { CURATED_LITERT_ENTRIES, buildCuratedLiteRTFiles, curatedLiteRTDownloadWarning, LITERT_PARENT_ID } from '../../services/curatedLiteRTRegistry';
+import { curatedLiteRTDownloadWarning, LITERT_PARENT_ID } from '../../services/curatedLiteRTRegistry';
+import { LITERT_FILE_META, LITERT_RECOMMENDED_MODEL, LITERT_PARENT_RECOMMENDED } from './litertRecommended';
 import { backgroundDownloadService, modelManager } from '../../services';
 import { useAppStore } from '../../stores';
 
@@ -304,33 +305,6 @@ const ModelDetailView: React.FC<DetailProps> = ({
       <CustomAlert {...alertState} onClose={() => setAlertState(hideAlert())} />
     </View>
   );
-};
-
-// LiteRT-specific per-file metadata (display name + highlight) used to render
-// individual file cards in the detail view. Derived from the curated registry —
-// the registry is the single source of truth; this map is just a UI-shaped view.
-const LITERT_FILE_META: Record<string, { displayName: string; highlight: string }> =
-  Object.fromEntries(
-    CURATED_LITERT_ENTRIES.map(e => [e.fileName, { displayName: e.displayName, highlight: e.highlight }]),
-  );
-
-// Synthetic parent ModelInfo whose `files` are derived from the curated registry.
-// Adding a new curated LiteRT model only requires updating the registry — this
-// list, the display map above, and the download flow all pick it up automatically.
-const LITERT_RECOMMENDED_MODEL: ModelInfo = {
-  id: LITERT_PARENT_ID,
-  name: 'Gemma 4 LiteRT',
-  author: 'google',
-  description: 'Hardware-accelerated inference with vision support.',
-  downloads: 0, likes: 0, tags: ['litert'], lastModified: '',
-  modelType: 'vision',
-  files: buildCuratedLiteRTFiles(),
-};
-
-const LITERT_PARENT_RECOMMENDED = {
-  pillLabel: 'Recommended',
-  chips: ['Vision', 'GPU'],
-  // No highlightText — the model description already carries it (rendered commonly).
 };
 
 const DeviceBanner: React.FC<{ ramGB: number; rec: { maxParameters: number; recommendedQuantization: string }; showTitle: boolean; styles: any }> = ({ ramGB, rec, showTitle, styles }) => (

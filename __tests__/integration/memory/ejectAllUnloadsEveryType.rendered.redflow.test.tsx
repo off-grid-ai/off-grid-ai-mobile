@@ -23,7 +23,10 @@ jest.mock('@react-navigation/native', () => ({
 
 describe('T023b (rendered) — Eject All frees every resident, sidecars included (DEV-B1, fixed)', () => {
   it('leaves NO model resident after ejectAll (whisper sidecar freed too)', async () => {
-    const h = await setupChatScreen({ engine: 'litert', platform: 'android', whisper: true });
+    // A heavy (4GB) text model so its "one heavy at a time" premise holds: loading the image model
+    // must EVICT the text model (they can't co-reside), leaving residents = image + whisper. The
+    // harness default is a lighter 2GB model (fits chat-flow budgets) which would co-reside here.
+    const h = await setupChatScreen({ engine: 'litert', platform: 'android', whisper: true, modelFileSizeBytes: 4 * 1024 * 1024 * 1024 });
     h.render();
     await h.placeImageModel({ backend: 'mnn' });
     /* eslint-disable @typescript-eslint/no-var-requires */

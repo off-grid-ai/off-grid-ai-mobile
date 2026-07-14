@@ -22,7 +22,9 @@ jest.mock('@react-navigation/native', () => ({
 
 describe('per-model eject (TDD) — model selector In Memory section', () => {
   it('lists every resident with RAM and ejects one individually, leaving the others', async () => {
-    const h = await setupChatScreen({ engine: 'litert', platform: 'android', whisper: true });
+    // Heavy (4GB) text model so the image load EVICTS it (one heavy at a time) → residents = image +
+    // whisper. The harness default is a lighter 2GB model (fits chat-flow budgets) which would co-reside.
+    const h = await setupChatScreen({ engine: 'litert', platform: 'android', whisper: true, modelFileSizeBytes: 4 * 1024 * 1024 * 1024 });
     h.render();
     // Real interactions to reach image + whisper resident.
     await h.placeImageModel({ backend: 'mnn' });

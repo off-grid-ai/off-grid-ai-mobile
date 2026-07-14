@@ -5,7 +5,7 @@
  *
  * pickMmProjForModel must pick the projector that belongs to the model. Real function, no mocks.
  */
-import { pickMmProjForModel } from '../../../src/services/activeModelService/loaders';
+import { pickMmProjForModel, mmProjBelongsToModel } from '../../../src/services/activeModelService/loaders';
 
 describe('pickMmProjForModel — the projector matches the model, not just the first mmproj in the dir', () => {
   const E2B = 'gemma-4-E2B-it-Q4_K_M.gguf';
@@ -39,5 +39,15 @@ describe('pickMmProjForModel — the projector matches the model, not just the f
     expect(pickMmProjForModel('gemma-4-E2B-it-Q8_0.gguf', [E2B_MMPROJ])).toBe(E2B_MMPROJ);
     // …and with an E4B projector also present, each E2B quant still avoids it.
     expect(pickMmProjForModel('gemma-4-E2B-it-Q8_0.gguf', [E4B_MMPROJ, E2B_MMPROJ])).toBe(E2B_MMPROJ);
+  });
+
+  describe('mmProjBelongsToModel — the fast-path self-heal gate (reject a stale mismatched projector)', () => {
+    it('rejects the E4B projector persisted onto the E2B model (the exact device mispairing)', () => {
+      expect(mmProjBelongsToModel(E2B, E4B_MMPROJ)).toBe(false);
+    });
+    it('accepts the correct projector regardless of quant', () => {
+      expect(mmProjBelongsToModel(E2B, E2B_MMPROJ)).toBe(true);
+      expect(mmProjBelongsToModel(E2B, 'gemma-4-E2B-it-Q8_0-mmproj.gguf')).toBe(true);
+    });
   });
 });

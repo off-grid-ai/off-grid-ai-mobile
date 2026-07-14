@@ -13,6 +13,7 @@ import { localDreamGeneratorService as onnxImageGeneratorService } from '../loca
 import { modelManager } from '../modelManager';
 import { hardwareService } from '../hardware';
 import { modelResidencyManager } from '../modelResidency';
+import logger from '../../utils/logger';
 import RNFS from 'react-native-fs';
 
 function isMMProjFile(fileName: string): boolean {
@@ -48,6 +49,11 @@ function modelIdentityStem(fileName: string): string {
  * "Multimodal support not enabled"; device 2026-07-14). Match on the quant-stripped model stem so the
  * projector always follows its model family, across quantizations. Pure + exported for direct testing.
  */
+/** True when a projector filename belongs to a model filename (same quant-stripped model stem). */
+export function mmProjBelongsToModel(modelFileName: string, mmProjFileName: string): boolean {
+  return modelIdentityStem(modelFileName) === modelIdentityStem(mmProjFileName);
+}
+
 export function pickMmProjForModel(modelFileName: string, candidateNames: string[]): string | undefined {
   if (candidateNames.length <= 1) return candidateNames[0];
   const modelStem = modelIdentityStem(modelFileName);
@@ -78,11 +84,17 @@ export async function resolveMmProjPath(
   model: LlamaDownloadedModel,
   modelId: string,
 ): Promise<string | undefined> {
-  // Fast path: persisted mmProjPath still exists on disk
-  if (model.mmProjPath) {
-    if (await RNFS.exists(model.mmProjPath)) {
+  // Fast path: a persisted mmProjPath that still exists AND actually belongs to this model. The old
+  // first-match scan could persist a MISMATCHED projector (E2B model → E4B mmproj); without the belongs-to
+  // check the fast path would keep returning that stale wrong path forever, so the vision fix never lands on
+  // an already-broken install. Validate the stem and re-scan (self-heal) when it doesn't match.
+  if (model.mmProjPath && (await RNFS.exists(model.mmProjPath))) {
+    const persistedName = model.mmProjPath.substring(model.mmProjPath.lastIndexOf('/') + 1);
+    const modelName = model.filePath.substring(model.filePath.lastIndexOf('/') + 1);
+    if (mmProjBelongsToModel(modelName, persistedName)) {
       return model.mmProjPath;
     }
+    logger.warn(`[LLM] persisted mmproj "${persistedName}" does not belong to model "${modelName}" — rescanning`);
   }
 
   try {

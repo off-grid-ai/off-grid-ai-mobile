@@ -217,7 +217,7 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
       {showRepairProgress && (
         <View style={styles.progressContainer} testID="repair-vision-progress">
           <View style={styles.progressBarBackground}>
-            <View style={[styles.progressBarFill, { width: `${Math.round(repairEntry.progress * 100)}%` as const, backgroundColor: colors.warning }]} />
+            <View style={[styles.progressBarFill, { width: `${Math.round(repairEntry.progress * 100)}%` as const, backgroundColor: colors.primary }]} />
           </View>
           <Text style={styles.progressText}>
             {formatBytes(repairEntry.bytesDownloaded)} / {formatBytes(repairEntry.totalBytes)}
@@ -238,7 +238,7 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
         )}
         {isRepairingVision && (
           <View style={styles.repairingBadge} testID="repairing-vision-badge">
-            <ActivityIndicator size="small" color={colors.warning} />
+            <ActivityIndicator size="small" color={colors.primary} />
             <Text style={styles.repairingBadgeText}>Repairing</Text>
           </View>
         )}

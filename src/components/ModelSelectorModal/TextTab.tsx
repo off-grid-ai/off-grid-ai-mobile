@@ -15,6 +15,8 @@ export interface TextTabProps {
   selectedModelPath?: string | null;
   currentRemoteModelId: string | null;
   isAnyLoading: boolean;
+  /** Id of the model being loaded right now (the row just tapped) — drives the per-row spinner. */
+  loadingModelId?: string | null;
   onSelectModel: (model: DownloadedModel) => void;
   onSelectRemoteModel: (model: RemoteModel, serverId: string) => void;
   onUnloadModel: () => void;
@@ -23,7 +25,7 @@ export interface TextTabProps {
 }
 
 export const TextTab: React.FC<TextTabProps> = ({
-  downloadedModels, remoteModels, currentModelPath, selectedModelPath = null, currentRemoteModelId, isAnyLoading, onSelectModel, onUnloadModel, onSelectRemoteModel, onAddServer, onBrowseModels,
+  downloadedModels, remoteModels, currentModelPath, selectedModelPath = null, currentRemoteModelId, isAnyLoading, loadingModelId = null, onSelectModel, onUnloadModel, onSelectRemoteModel, onAddServer, onBrowseModels,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createAllStyles);
@@ -114,13 +116,14 @@ export const TextTab: React.FC<TextTabProps> = ({
             return (
               <ModelRow
                 key={model.id}
+                testID={`text-model-row-${model.id}`}
                 name={model.name}
                 size={hardwareService.formatModelSize(model)}
                 quant={model.quantization}
                 isVision={model.engine === 'llama' && model.isVisionModel}
                 isActive={isActive}
                 isLoaded={isLoaded}
-                loading={isAnyLoading && isActive}
+                loading={loadingModelId === model.id}
                 disabled={isAnyLoading || isLoaded}
                 onPress={() => onSelectModel(model)}
               />

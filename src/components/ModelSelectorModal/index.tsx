@@ -72,6 +72,14 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
 
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [isLoadingImage, setIsLoadingImage] = useState(false);
+  // The image model currently being LOADED (the row the user just tapped) — distinct from
+  // activeImageModelId, which only flips to the new model on success. The row spinner keys off THIS,
+  // else it shows on the previously-active model instead of the one that's loading (device 2026-07-14).
+  const [loadingImageModelId, setLoadingImageModelId] = useState<string | null>(null);
+  // Same for text: the row the user tapped, so a switch (e.g. gemma llama → gemma litert) spins the NEW
+  // row, not the still-loaded old one. isLoading is the parent's signal; clear when it goes false.
+  const [loadingTextModelId, setLoadingTextModelId] = useState<string | null>(null);
+  useEffect(() => { if (!isLoading) setLoadingTextModelId(null); }, [isLoading]);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   const filteredDownloadedModels = useMemo(
@@ -110,8 +118,8 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
       (opts) => activeModelService.loadImageModel(model.id, undefined, opts),
       {
         setAlertState,
-        onAttemptStart: () => setIsLoadingImage(true),
-        onAttemptEnd: () => setIsLoadingImage(false),
+        onAttemptStart: () => { setIsLoadingImage(true); setLoadingImageModelId(model.id); },
+        onAttemptEnd: () => { setIsLoadingImage(false); setLoadingImageModelId(null); },
         onSuccess: () => {
           setActiveRemoteImageModelId(null); // clear remote selection when selecting local
           onSelectImageModel?.(model);
@@ -164,6 +172,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   // Handle selecting a local model - clear remote selection
   const handleSelectLocalModel = (model: DownloadedModel) => {
     remoteServerManager.clearActiveRemoteModel();
+    setLoadingTextModelId(model.id); // spinner goes on THE ROW JUST TAPPED, not the old active one
     onSelectModel(model);
   };
 
@@ -223,6 +232,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
               selectedModelPath={selectedModelPath}
               currentRemoteModelId={activeRemoteTextModelId}
               isAnyLoading={isAnyLoading}
+              loadingModelId={loadingTextModelId}
               onSelectModel={handleSelectLocalModel}
               onSelectRemoteModel={handleSelectRemoteTextModel}
               onUnloadModel={handleUnloadModel}
@@ -237,6 +247,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
               activeRemoteImageModelId={activeRemoteImageModelId}
               isAnyLoading={isAnyLoading}
               isLoadingImage={isLoadingImage}
+              loadingModelId={loadingImageModelId}
               onSelectImageModel={handleSelectImageModel}
               onSelectRemoteVisionModel={handleSelectRemoteVisionModel}
               onUnloadImageModel={handleUnloadImageModel}

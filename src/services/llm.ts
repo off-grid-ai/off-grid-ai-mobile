@@ -1,3 +1,9 @@
+/* eslint-disable max-lines -- 541 lines. This is the core llama generation
+   service: prompt build, streaming, and tool-call orchestration in one cohesive
+   unit. The overflow is the union of two independently-valid changes landing in
+   the same merge (base's generation work + the streaming-accumulator reset for
+   the ungrammared grammar-retry); splitting it mid-reconcile would risk the
+   generation critical path for a cosmetic line count. Matches whisperService.ts. */
 import { LlamaContext, RNLlamaOAICompatibleMessage } from 'llama.rn';
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
@@ -17,6 +23,7 @@ import { formatLlamaMessages, buildOAIMessages } from './llmMessages';
 import { generateWithToolsImpl } from './llmToolGeneration';
 import type { ToolCall } from './tools/types';
 import type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
+import { applyDevGrammarOverrides, noteDevGrammarError } from './devInference';
 import logger from '../utils/logger';
 export type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
 export type StreamToken = { content?: string; reasoningContent?: string };
@@ -301,8 +308,12 @@ class LLMService {
       let firstTokenMs = 0, tokenCount = 0, firstReceived = false;
       let fullContent = '', fullReasoningContent = '', streamedContentSoFar = '', streamedReasoningSoFar = '';
       const completionParams = { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }), ...buildThinkingCompletionParams(this.isThinkingEnabled(), this.isGemma4Model()) };
+      // DEV-only: a pasted GBNF grammar / temp / prefill can override this turn.
+      // No-op unless enabled from the __DEV__ grammar modal.
+      const devGrammarApplied = applyDevGrammarOverrides(completionParams);
+      if (devGrammarApplied) logger.log(`[DevGrammar] reached native completion (no-tools path); grammar in params=${!!(completionParams as any).grammar}`);
       logger.log(`[LLM][THINKING] thinkingSupported=${this.thinkingSupported}, thinkingEnabled=${useAppStore.getState().settings.thinkingEnabled}, isThinkingEnabled=${this.isThinkingEnabled()}, enable_thinking=${(completionParams as any).enable_thinking}, reasoning_format=${(completionParams as any).reasoning_format}`);
-      const completionResult = await safeCompletion(ctx, () => ctx.completion(completionParams, (data: any) => {
+      const onCompletionData = (data: any) => {
         if (!this.isGenerating || !data.token) return;
         if (!firstReceived) { firstReceived = true; firstTokenMs = Date.now() - startTime; logger.log(`[LLM][THINKING] First token raw data — token: ${JSON.stringify(data.token)}, content: ${JSON.stringify(data.content)}, reasoning_content: ${JSON.stringify(data.reasoning_content)}`); }
         tokenCount++;
@@ -314,7 +325,20 @@ class LLMService {
         if (content) fullContent += content;
         if (reasoningContent) fullReasoningContent += reasoningContent;
         onStream?.({ reasoningContent, content });
-      }), 'generateResponse');
+      };
+      let completionResult;
+      try {
+        completionResult = await safeCompletion(ctx, () => ctx.completion(completionParams, onCompletionData), 'generateResponse');
+      } catch (e) {
+        // A bad dev grammar must never brick chat: record it and retry ungrammared.
+        if (!devGrammarApplied) throw e;
+        noteDevGrammarError(completionParams, e);
+        // Reset streaming state so the ungrammared retry doesn't append to / re-emit
+        // the failed attempt's partial output (would duplicate/garble the result).
+        fullContent = ''; fullReasoningContent = '';
+        streamedContentSoFar = ''; streamedReasoningSoFar = '';
+        completionResult = await safeCompletion(ctx, () => ctx.completion(completionParams, onCompletionData), 'generateResponse-fallback');
+      }
       const cr = completionResult as any;
       this.performanceStats = recordGenerationStats(startTime, firstTokenMs, tokenCount);
       if (completionResult?.context_full) { logger.log('[LLM] Context full detected — signalling for compaction'); throw new Error('Context is full'); }
@@ -395,10 +419,15 @@ class LLMService {
    * user-facing). Pass onToken to stream the output as it is produced; the
    * delta is the newly generated token text.
    */
-  async generateWithMaxTokens(messages: Message[], maxTokens: number, onToken?: (delta: string) => void): Promise<string> {
+  async generateWithMaxTokens(
+    messages: Message[],
+    maxTokens: number,
+    opts?: { onToken?: (delta: string) => void; grammar?: string; repeatPenalty?: number },
+  ): Promise<string> {
     if (!this.context) throw new Error('No model loaded');
     if (this.isGenerating) throw new Error('Generation already in progress');
     this.isGenerating = true;
+    const onToken = opts?.onToken;
     const oaiMessages = this.convertToOAIMessages(messages);
     const { settings } = useAppStore.getState();
     let fullResponse = '';
@@ -407,11 +436,31 @@ class LLMService {
     // model to "think" - reasoning wastes the token budget, is slow + hot, and
     // leaks into the output. Force thinking OFF (for models that gate it via the
     // thinking channel; prose chain-of-thought is additionally curbed by prompts).
-    const params = { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }), ...buildThinkingCompletionParams(false, this.isGemma4Model()), n_predict: maxTokens };
-    const completionWork = safeCompletion(ctx, () => ctx.completion(
-      params,
+    const params: Record<string, unknown> = { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }), ...buildThinkingCompletionParams(false, this.isGemma4Model()), n_predict: maxTokens };
+    // Optional GBNF grammar (llama.cpp constrained decoding) so callers like the
+    // insights pass can force a fixed output shape. A bad grammar must never
+    // brick generation, so retry once without it on failure.
+    if (opts?.grammar) params.grammar = opts.grammar;
+    // Stronger repetition penalty for callers (insights) prone to small-model
+    // loops; overrides the default penalty_repeat from buildCompletionParams.
+    if (opts?.repeatPenalty != null) params.penalty_repeat = opts.repeatPenalty;
+    const run = () => ctx.completion(
+      params as Parameters<typeof ctx.completion>[0],
       (data) => { if (this.isGenerating && data.token) { fullResponse += data.token; onToken?.(data.token); } },
-    ), 'generateWithMaxTokens');
+    );
+    const completionWork = (async () => {
+      try {
+        return await safeCompletion(ctx, run, 'generateWithMaxTokens');
+      } catch (e) {
+        if (params.grammar) {
+          logger.warn(`[LLM] grammared generation failed, retrying without grammar: ${String(e)}`);
+          fullResponse = '';
+          delete params.grammar;
+          return await safeCompletion(ctx, run, 'generateWithMaxTokens-fallback');
+        }
+        throw e;
+      }
+    })();
     this.activeCompletionPromise = completionWork.then(() => { }, () => { });
     try { await completionWork; return fullResponse.trim(); } finally { this.isGenerating = false; this.activeCompletionPromise = null; }
   }

@@ -15,6 +15,7 @@ jest.mock('../../../src/services', () => ({
     unloadModel: jest.fn(),
     deleteModel: jest.fn(),
     isModelDownloaded: jest.fn(),
+    listDownloadedModels: jest.fn(),
   },
   WHISPER_MODELS: [{ id: 'tiny', size: 75 }, { id: 'base', size: 142 }],
 }));
@@ -39,10 +40,16 @@ const mockResidency = modelResidencyManager as jest.Mocked<typeof modelResidency
 
 const getState = () => useWhisperStore.getState();
 
+// Build the on-disk model list shape whisperService.listDownloadedModels returns.
+const onDisk = (...ids: string[]) =>
+  ids.map((modelId) => ({ modelId, fileName: `ggml-${modelId}.bin`, sizeBytes: 1, filePath: `/models/ggml-${modelId}.bin` }));
+
 describe('whisperStore', () => {
   beforeEach(() => {
     resetWhisperStore();
     jest.clearAllMocks();
+    // Default: nothing else on disk (delete flows fall back to no model).
+    mockWhisperService.listDownloadedModels.mockResolvedValue(onDisk());
   });
 
   // ============================================================================
@@ -384,7 +391,10 @@ describe('whisperStore', () => {
 
         const result = await getState().loadModel();
 
-        expect(mockWhisperService.loadModel).toHaveBeenCalledWith('/models/ggml-tiny');
+        // loadModel() forwards its (here undefined) options arg to the service, so
+        // the recorded call is (path, undefined) - assert both, since jest's
+        // toHaveBeenCalledWith does not match a trailing undefined against one arg.
+        expect(mockWhisperService.loadModel).toHaveBeenCalledWith('/models/ggml-tiny', undefined);
         expect(mockResidency.register).toHaveBeenCalled();
         expect(getState().isModelLoaded).toBe(true);
         expect(result).toBe('loaded');
@@ -564,17 +574,19 @@ describe('whisperStore', () => {
       expect(mockWhisperService.downloadModel).not.toHaveBeenCalled();
     });
 
-    it('deleteModelById removes the file and clears active when it was active', async () => {
+    it('deleteModelById falls back to another on-disk model when the active one is deleted', async () => {
       useWhisperStore.setState({ presentModelIds: ['tiny', 'base'], downloadedModelId: 'base', isModelLoaded: true });
+      mockWhisperService.listDownloadedModels.mockResolvedValue(onDisk('tiny'));
       await getState().deleteModelById('base');
       expect(mockWhisperService.deleteModel).toHaveBeenCalledWith('base');
       expect(getState().presentModelIds).toEqual(['tiny']);
-      expect(getState().downloadedModelId).toBeNull();
+      expect(getState().downloadedModelId).toBe('tiny');
       expect(getState().isModelLoaded).toBe(false);
     });
 
     it('deleteModelById keeps the active model when deleting a different one', async () => {
       useWhisperStore.setState({ presentModelIds: ['tiny', 'base'], downloadedModelId: 'base' });
+      mockWhisperService.listDownloadedModels.mockResolvedValue(onDisk('base'));
       await getState().deleteModelById('tiny');
       expect(getState().presentModelIds).toEqual(['base']);
       expect(getState().downloadedModelId).toBe('base');

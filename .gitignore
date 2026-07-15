@@ -86,5 +86,10 @@ fastlane/*.p8
 !.yarn/sdks
 !.yarn/versions
 docs/TRACTION_KNOWLEDGE_BASE.md
+# Dev-only insights sim harness + private real recordings (never commit)
+/sim/
+# Debug screenshots (scratch)
+/image.png
+/image-*.png
 # Local marketing drafts (not part of the app)
 marketing/

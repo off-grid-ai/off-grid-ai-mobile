@@ -44,24 +44,20 @@ const CHUNK_SUMMARY_TOKENS = 256;
 /** Tokens reserved for the final combined summary output. */
 const FINAL_SUMMARY_TOKENS = 512;
 
-/** Estimated overhead for the summarizer instruction + chat template. */
-const INSTRUCTION_OVERHEAD_TOKENS = 160;
-
-/** Safety margin so we never sit exactly at the context edge. */
-const SAFETY_MARGIN_TOKENS = 128;
-
 /** Hard cap on reduce rounds, so a pathological input can't loop forever. */
 const MAX_REDUCE_ROUNDS = 4;
 
-// Cap each MAP chunk well below the full context window. On CPU-only low-RAM
-// devices, prefill (reading the chunk in) dominates wall-clock and there is no
-// token callback during it, so a chunk that fills the whole 4096 context takes
-// ~2 min before the first token streams. ~1500 input tokens (~6000 chars, a
-// coherent few-minutes-of-speech slice) prefills in well under a minute, so each
-// part starts streaming quickly. Smaller = sooner first token but more chunks;
-// this is a deliberate balance, not the minimum. The reduce/combine passes still
-// use the full context budget.
-const MAP_INPUT_TOKEN_TARGET = 1500;
+// Fraction of the ACTIVE backend's context window we spend on input per chunk.
+// The rest is headroom for the summary output + the instruction/template +
+// safety, and keeps small models off the context edge (where they degrade).
+// Sized off the real context (see resolveContextTokens) so a big remote/flagship
+// window one-shots a long transcript while a 2k on-device model stays small.
+const INPUT_CONTEXT_FRACTION = 0.6;
+
+// Assumed context when a remote provider doesn't report its own (remote servers
+// are typically large; better to under-chunk a big window than over-chunk it).
+const REMOTE_DEFAULT_CONTEXT_TOKENS = 8192;
+const LITERT_DEFAULT_CONTEXT_TOKENS = 4096;
 
 // The prompts forbid any reasoning/preamble up front: some on-device models
 // (e.g. Gemma-style instruct models) otherwise spend the whole token budget
@@ -92,10 +88,37 @@ function isLiteRTActive(): boolean {
   );
 }
 
-/** Is a remote provider serving generation (no on-device native context)? */
+/**
+ * Is a remote provider available to serve summaries? Summaries PREFER remote
+ * whenever one is active, even if a local model is also loaded - offloading the
+ * generation off-device saves the phone's battery/RAM (chat generation keeps its
+ * own local-first policy; this only affects the summarizer). Deliberately does
+ * NOT check `llmService.isModelLoaded()`.
+ */
 function isRemoteActive(): boolean {
   const activeServerId = useRemoteServerStore.getState().activeServerId;
-  return !!activeServerId && providerRegistry.hasProvider(activeServerId) && !llmService.isModelLoaded();
+  return !!activeServerId && providerRegistry.hasProvider(activeServerId);
+}
+
+/**
+ * The ACTIVE backend's real context window (tokens) + a label for logs. Chunk
+ * sizing is derived from this, so it adapts per backend instead of assuming a
+ * fixed on-device 2k. Remote uses the provider's reported context when known,
+ * else a large default; LiteRT uses its configured max; local uses the loaded
+ * model's setting.
+ */
+function resolveContextTokens(): { tokens: number; source: string } {
+  // Remote is preferred for summaries, so size chunks off its window first.
+  if (isRemoteActive()) {
+    const id = useRemoteServerStore.getState().activeServerId;
+    const provider = id ? providerRegistry.getProvider(id) : undefined;
+    const reported = provider?.capabilities?.maxContextLength;
+    return { tokens: reported && reported > 0 ? reported : REMOTE_DEFAULT_CONTEXT_TOKENS, source: 'remote' };
+  }
+  if (isLiteRTActive()) {
+    return { tokens: liteRTService.getContextTokens() || LITERT_DEFAULT_CONTEXT_TOKENS, source: 'litert' };
+  }
+  return { tokens: llmService.getPerformanceSettings().contextLength || 2048, source: 'local' };
 }
 
 /**
@@ -108,13 +131,53 @@ function isRemoteActive(): boolean {
 async function generateSummaryText(
   systemPrompt: string,
   userText: string,
-  opts: { maxTokens: number; onToken?: (delta: string) => void },
+  opts: { maxTokens: number; onToken?: (delta: string) => void; grammar?: string; repeatPenalty?: number },
 ): Promise<string> {
   const { maxTokens, onToken } = opts;
   const messages: Message[] = [
     { id: 'summarize-instruction', role: 'system', content: systemPrompt, timestamp: 0 },
     { id: 'summarize-input', role: 'user', content: userText, timestamp: 0 },
   ];
+
+  // Remote provider (PREFERRED for summaries: offload off-device even when a
+  // local model is loaded). OpenAI-compatible streaming completion, tools off.
+  // If it fails BEFORE any token streams (e.g. the server left the LAN mid-use),
+  // fall through to on-device so a vanished server never turns into a hard error.
+  // A failure AFTER tokens have streamed is surfaced (we don't double-write).
+  if (isRemoteActive()) {
+    const activeServerId = useRemoteServerStore.getState().activeServerId as string;
+    const provider = providerRegistry.getProvider(activeServerId);
+    if (provider) {
+      const { settings } = useAppStore.getState();
+      const options: GenerationOptions = {
+        temperature: settings.temperature,
+        topP: settings.topP,
+        maxTokens,
+        tools: [],
+        enableThinking: false,
+      };
+      let emittedAny = false;
+      try {
+        return await new Promise<string>((resolve, reject) => {
+          let content = '';
+          provider
+            .generate(messages, options, {
+              onToken: (t: string) => { content += t; emittedAny = true; onToken?.(t); },
+              onReasoning: () => { /* summaries ignore reasoning output */ },
+              onComplete: (result) => resolve(result.content || content),
+              onError: (e: Error) => reject(e),
+            })
+            .catch(reject);
+        });
+      } catch (e) {
+        if (emittedAny) throw e;
+        logger.warn(
+          `[TranscriptSummarizer] remote summary failed before streaming, falling back to on-device: ${String(e)}`,
+        );
+        // fall through to LiteRT / local
+      }
+    }
+  }
 
   // LiteRT: run on a throwaway, tools-free conversation so it never pollutes a
   // real chat's KV/history (mirrors the LiteRT tool-selection pass).
@@ -126,35 +189,9 @@ async function generateSummaryText(
     return liteRTService.generateRaw(userText, undefined, { onToken });
   }
 
-  // Remote provider: OpenAI-compatible streaming completion, tools off.
-  const activeServerId = useRemoteServerStore.getState().activeServerId;
-  if (activeServerId && providerRegistry.hasProvider(activeServerId) && !llmService.isModelLoaded()) {
-    const provider = providerRegistry.getProvider(activeServerId);
-    if (provider) {
-      const { settings } = useAppStore.getState();
-      const options: GenerationOptions = {
-        temperature: settings.temperature,
-        topP: settings.topP,
-        maxTokens,
-        tools: [],
-        enableThinking: false,
-      };
-      return new Promise<string>((resolve, reject) => {
-        let content = '';
-        provider
-          .generate(messages, options, {
-            onToken: (t: string) => { content += t; onToken?.(t); },
-            onReasoning: () => { /* summaries ignore reasoning output */ },
-            onComplete: (result) => resolve(result.content || content),
-            onError: (e: Error) => reject(e),
-          })
-          .catch(reject);
-      });
-    }
-  }
-
-  // Local llama.rn (default).
-  return llmService.generateWithMaxTokens(messages, maxTokens, onToken);
+  // Local llama.rn (default). Grammar (GBNF) is applied here when the caller
+  // passes one; LiteRT/remote ignore it for now (constrained decoding TBD).
+  return llmService.generateWithMaxTokens(messages, maxTokens, { onToken, grammar: opts.grammar, repeatPenalty: opts.repeatPenalty });
 }
 
 class TranscriptSummarizerService {
@@ -163,6 +200,33 @@ class TranscriptSummarizerService {
 
   get isSummarizing(): boolean {
     return this._isSummarizing;
+  }
+
+  /**
+   * Abort the in-flight generation NOW (not just between chunks). A cooperative
+   * loop cancel only skips the next unit; the current native completion keeps
+   * running and holds the single-context lock, so callers that "Stop" still see
+   * "busy" until it finishes. This interrupts the current completion via
+   * llmService.stopGeneration, which lets the awaited summarize() unwind and
+   * clear _isSummarizing. Safe to call when idle (no-op).
+   */
+  async abort(): Promise<void> {
+    logger.log(
+      `[TranscriptSummarizer] abort requested (isSummarizing=${this._isSummarizing}, ` +
+        `llmGenerating=${llmService.isCurrentlyGenerating()})`,
+    );
+    try {
+      await llmService.stopGeneration();
+      // Summaries PREFER a remote provider (and may run on one even with a local
+      // model loaded), so a local-only stop wouldn't interrupt a remote in-flight
+      // completion. Stop the active remote provider too (it aborts its stream).
+      if (isRemoteActive()) {
+        const activeServerId = useRemoteServerStore.getState().activeServerId as string;
+        await providerRegistry.getProvider(activeServerId)?.stopGeneration?.();
+      }
+    } finally {
+      this._isSummarizing = false;
+    }
   }
 
   /** True if any backend (local llama, LiteRT, or a remote provider) can summarize now. */
@@ -199,33 +263,40 @@ class TranscriptSummarizerService {
       // (e.g. a bulleted, section-headed summary) pass their own here.
       systemPrompt?: string;
       combinePrompt?: string;
+      // Stronger repetition penalty (insights) to stop small-model loops.
+      repeatPenalty?: number;
+      // Optional GBNF grammar to force the final output shape (llama.rn only).
+      // Applied only on the final single-pass / combine pass so intermediate
+      // map/reduce partials stay free-form. Ignored by LiteRT/remote for now.
+      grammar?: string;
     },
   ): Promise<string> {
     const onProgress = opts?.onProgress;
     const onToken = opts?.onToken;
+    const grammar = opts?.grammar;
+    const repeatPenalty = opts?.repeatPenalty;
     const mapPrompt = opts?.systemPrompt ?? SUMMARIZER_SYSTEM_PROMPT;
     const combinePrompt = opts?.combinePrompt ?? COMBINE_SYSTEM_PROMPT;
     this._isSummarizing = true;
     try {
       await llmService.clearKVCache(true);
 
-      const ctxLength = llmService.getPerformanceSettings().contextLength || 2048;
-      const inputBudgetTokens = Math.max(
-        256,
-        ctxLength - CHUNK_SUMMARY_TOKENS - INSTRUCTION_OVERHEAD_TOKENS - SAFETY_MARGIN_TOKENS,
-      );
+      // Size chunks dynamically off the ACTIVE backend's real context (local
+      // model setting / LiteRT / remote server), not a fixed number - so a big
+      // remote/flagship context one-shots a long transcript while a 2k on-device
+      // model stays conservative. Use a fraction of the window so there's always
+      // headroom for the output + instructions + safety (no fixed cap).
+      const ctx = resolveContextTokens();
+      const inputBudgetTokens = Math.max(512, Math.round(ctx.tokens * INPUT_CONTEXT_FRACTION));
       const chunkCharBudget = inputBudgetTokens * CHARS_PER_TOKEN;
-      // Map split is capped smaller than the full budget so each part prefills
-      // fast and streams sooner; reduce/combine still use the full chunkCharBudget.
-      const mapCharBudget = Math.min(chunkCharBudget, MAP_INPUT_TOKEN_TARGET * CHARS_PER_TOKEN);
 
-      const chunks = splitIntoChunks(text.trim(), mapCharBudget);
-      logger.log(`[TranscriptSummarizer] ${text.length} chars, ctx=${ctxLength}, mapBudget=${mapCharBudget} chars, chunks=${chunks.length}`);
+      const chunks = splitIntoChunks(text.trim(), chunkCharBudget);
+      logger.log(`[TranscriptSummarizer] ${text.length} chars, backend=${ctx.source} ctx=${ctx.tokens}, budget=${inputBudgetTokens}tok (${Math.round(INPUT_CONTEXT_FRACTION * 100)}%), chunks=${chunks.length}`);
 
       // Small enough to summarize in one pass.
       if (chunks.length <= 1) {
         this.emit({ phase: 'mapping', current: 1, total: 1 }, onProgress);
-        const summary = await this.summarizeOne(mapPrompt, chunks[0] ?? text, { maxTokens: FINAL_SUMMARY_TOKENS, onToken });
+        const summary = await this.summarizeOne(mapPrompt, chunks[0] ?? text, { maxTokens: FINAL_SUMMARY_TOKENS, onToken, grammar, repeatPenalty });
         this.emit({ phase: 'done' }, onProgress);
         return summary.trim();
       }
@@ -260,7 +331,7 @@ class TranscriptSummarizerService {
       // Final combine pass into one coherent summary. Streamed to the caller.
       this.emit({ phase: 'combining' }, onProgress);
       await llmService.clearKVCache(true);
-      const finalSummary = await this.summarizeOne(combinePrompt, combined, { maxTokens: FINAL_SUMMARY_TOKENS, onToken });
+      const finalSummary = await this.summarizeOne(combinePrompt, combined, { maxTokens: FINAL_SUMMARY_TOKENS, onToken, grammar, repeatPenalty });
 
       this.emit({ phase: 'done' }, onProgress);
       return finalSummary.trim();
@@ -276,10 +347,10 @@ class TranscriptSummarizerService {
   private async summarizeOne(
     systemPrompt: string,
     input: string,
-    opts: { maxTokens: number; onToken?: (delta: string) => void },
+    opts: { maxTokens: number; onToken?: (delta: string) => void; grammar?: string; repeatPenalty?: number },
   ): Promise<string> {
     // Dispatches to the active backend (local llama.rn / LiteRT / remote).
-    const out = await generateSummaryText(systemPrompt, input, { maxTokens: opts.maxTokens, onToken: opts.onToken });
+    const out = await generateSummaryText(systemPrompt, input, { maxTokens: opts.maxTokens, onToken: opts.onToken, grammar: opts.grammar, repeatPenalty: opts.repeatPenalty });
     // Backstop for tag-based reasoning that slipped through (<think>...</think>).
     return stripControlTokens(out);
   }

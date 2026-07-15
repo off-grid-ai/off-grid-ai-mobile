@@ -274,3 +274,54 @@ state-machine traces:
   onboarding screen with device-init + Android litert rendering is heavier). Follow-up: add a
   `ModelDownloadScreen`-mounted rendered test (Android, 12GB) that taps the E4B litert download and asserts
   no "may exceed your device's memory" sheet — the exact device-reported surface (IMG_0142).
+
+---
+
+## Cosmetic voice-mode label (deferred from the 0.0.103 device session)
+
+**Verdict: instrument-and-revisit.** During the 0.0.103-beta device session, two fixes landed (Lean
+per-model eject + thinking-block width). A third item — a **cosmetic label/chip in voice mode**
+rendering the wrong text — was deferred: it is purely cosmetic (no functional impact) and pinning the
+exact wrong value needs a device-log pull, not code reading. Next device session: pull the live tail of
+`offgrid-debug.log` from the `.dev` container, grep the `[*-SM]` traces while entering voice mode, read
+the actual rendered label value, then fix in `pro/audio/` UI. NOT a release hazard.
+
+---
+
+## #510 audit follow-ups (deferred from the load-anyway/dedup fix batch, 2026-07-15)
+
+- **Onboarding litert download-warning unreachable** (`ModelDownloadScreen.tsx:299`): fix is code-ready
+  (route the over-budget-but-warnable card through the owned `curatedLiteRTDownloadWarning`) but blocked
+  by a mockist test `__tests__/rntl/screens/ModelDownloadScreen.test.tsx:607` that asserts the buggy
+  pre-filter. Per doctrine: update/delete that mockist test, then land the fix.
+- **`ModelSelectorModal.test.tsx` is mockist** (jest.mocks our stores/services/hardware) — 44 tests over a
+  fake store. The RAM-parity fix is really proven by `pickerRamMatchesResidencyChip.rendered.redflow.test.tsx`;
+  replace this file with rendered coverage post-release. Source carries a harmless `s.settings?.` to keep it green.
+- **Queued-message imageMode carry** (`useChatGenerationActions`/`generationService`/`useChatScreen`): a
+  force-image send that gets queued loses its force flag (re-decided at 'auto' on drain). Needs the
+  QueuedMessage interface + drain handler edited together — own PR.
+- **huggingface.findMatchingMMProj strict migration**: keep the generic-single-projector case, refuse a
+  projector naming a DIFFERENT model (E4B for E2B). Own download-listing matcher in mmproj.ts. See the
+  it.failing at `huggingfaceProjectorStrictness.test.ts`.
+- **Reclaim-aware pre-load gate**: in progress on its own branch (device-verify on 12GB Android before merge).
+
+---
+
+## DEVICE FINDING (2026-07-15, iPhone) — false "something else is generating an image" (stale IMG-SM lock)
+
+Symptom: image generation refused with a message that something else is generating an image ("I can't
+help you right now, you can reload the model") when NOTHING else was generating. Reloading the model
+cleared it and generation started.
+
+Mechanism: `imageGenerationService.generateImage` rejects when `isInFlight(state.phase)` is true
+(imageGenerationService.ts:402). The known failure paths reset the phase (`_ensureImageModelLoaded`→`_fail`;
+`_runGenerationAndSave` catch→`resetState`/`_fail`), so a DIFFERENT path leaves `state.phase` stuck
+in-flight ('loading'/'enhancing'/'generating') — plausibly tied to a refused/slow SDXL load or an
+interrupted 120s ANE compile. Reload resets the service state → clears the false lock.
+
+NOT fixed yet (would be a speculative guard without a red-verifiable repro). TO PIN IT: reproduce on
+device, `xcrun devicectl device copy` the `.dev` container's `offgrid-debug.log`, grep `[IMG-SM]` — the
+stuck transition (a `phase X → <in-flight>` with no following reset) names the exact path. Then fix at
+that seam + a rendered red-flow (image mode → trigger the stuck path → next generate must NOT report
+"already generating"). Candidate hardening once pinned: a top-level try/finally in generateImage so no
+throw can leave the phase in-flight, and/or a self-healing staleness check on the isInFlight rejection.

@@ -22,7 +22,7 @@ const MODEL_ID = 'org/fit-hint';
 describe('detail Available Files fit hint matches the owned fileExceedsBudget verdict (rendered)', () => {
   it('offers exactly the files fileExceedsBudget says fit — hides the over-budget quant', async () => {
     // Device: a 6GB Android phone → budget = 6 * modelBudgetFraction(6)=0.60 = 3.6GB.
-    const boundary = installNativeBoundary({ download: true, fs: true, ram: { platform: 'android', totalBytes: 6 * GB, availBytes: 4 * GB } });
+    installNativeBoundary({ download: true, fs: true, ram: { platform: 'android', totalBytes: 6 * GB, availBytes: 4 * GB } });
 
     // Two quant files straddling the budget: a 2GB (fits) and a 5GB (exceeds).
     const fitFile = { name: 'model-Q4_K_M.gguf', size: 2 * GB, quantization: 'Q4_K_M', downloadUrl: `https://hf.co/${MODEL_ID}/resolve/main/model-Q4_K_M.gguf` };

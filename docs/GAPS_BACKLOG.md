@@ -345,3 +345,31 @@ These are honestly NOT fully closed by the load-anyway batch — logged so they 
 - **ModelPickerSheet:216 RAM display**: the fit VERDICT uses the owned fileExceedsBudget, but the
   displayed "~X GB RAM" number is a separate 1.5x estimate — the "(may not fit)" tag and the number can
   disagree at the margin. Assessed as by-design (verdict is authoritative; number is a hint) but noted.
+
+---
+
+## #510 audit — STT-terminal + embedding: VERIFIED WORKING-AS-DESIGNED (not bugs, do NOT "fix")
+
+Re-examined the two items I earlier logged as "partial fixes needed". Code inspection shows both are
+correct terminal states, NOT dead-ends — surfacing failure cards would be theater or a regression:
+- **Embedding load failure**: `src/services/rag/retrieval.ts:43,53` catch a failed embedding load/embed
+  and RETURN `ragDatabase.getChunksByProject` (keyword/FTS chunks) — search still works (graceful
+  degradation). `toolEmbeddingRouter`/`generationToolLoop:821` likewise fall back to "use all tools".
+  A reportModelFailure('embedding') card would interrupt a working degraded flow → NOT added.
+- **STT terminal**: `ensureWhisperForTranscription` frees the generation model and retries; if whisper
+  STILL won't load, whisper-alone exceeds the device → a genuine HARD limit. The "free some memory"
+  string is the honest message; a Load-Anyway there is a guaranteed-fail no-op. The recovery IS the fix.
+CONCLUSION: these two need no code change. Removed from the "to fix" list.
+
+## #26 text-half (deferred, cosmetic-low)
+ModelPickerSheet text RAM hint still uses formatModelRam's 1.5 default, not the backend-aware
+textOverheadMultiplier the residency chip / TextTab use — so on a GPU backend the picker number can
+read lower than the chip. Verdict (fileExceedsBudget) is correct; this is a display-number nicety.
+Fix = pass settings.inferenceBackend into ModelPickerSheet + formatModelRam(model, textOverheadMultiplier(backend)).
+Deferred to avoid a new HomeScreen-picker dependency right before release. Image half fixed.
+
+## M5a (marginal, logged) — exact budget boundary untested
+fileExceedsBudget's boundary (size == budget: `>` vs `>=`) has no test straddling the exact equality —
+the verifier's `>`↔`>=` mutant survived. Off-by-one-byte at the budget edge; no user-visible impact
+(a model exactly at the budget is a measure-zero case). Add a boundary test if fileExceedsBudget is
+touched again. Not fixed now (marginal, near release).

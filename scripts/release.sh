@@ -130,7 +130,7 @@ gh release create "v${NEW_VERSION}" \
 # Webhook comes from .env.keygen locally (mirrors the SLACK_WEBHOOK_URL repo secret the CI release
 # workflows use); notify-slack-release.mjs no-ops if it is unset.
 SLACK_WEBHOOK_URL="${SLACK_WEBHOOK_URL:-$(sed -n 's/^SLACK_WEBHOOK_URL=//p' "$ROOT_DIR/.env.keygen" 2>/dev/null)}" \
-  PRODUCT="Off Grid AI Mobile" VERSION="$NEW_VERSION" \
+  PRODUCT="Off Grid AI Mobile" VERSION="$NEW_VERSION" CHANNEL_LABEL="stable" \
   RELEASE_URL="$(gh release view "v${NEW_VERSION}" --json url -q .url 2>/dev/null)" NOTES_FILE="$NOTES_FILE" \
   node "$ROOT_DIR/scripts/notify-slack-release.mjs" || true
 

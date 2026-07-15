@@ -1,6 +1,7 @@
 import { LlamaContext } from 'llama.rn';
 import RNFS from 'react-native-fs';
 import logger from '../utils/logger';
+import { OverridableMemoryError } from '../utils/modelLoadErrors';
 
 /**
  * GGUF magic number — first 4 bytes of every valid GGUF file.
@@ -158,7 +159,12 @@ export async function resolveSafeContext(args: {
   const finalCheck = await checkMemoryForModel({ modelFileSize: fileSize, contextLength: minCtx, getAvailableMemory: getMem, quantizedCache });
   const modelMB = (fileSize * 1.2) / (1024 * 1024);
   if (finalCheck.availableMB > 0 && modelMB > finalCheck.availableMB && !override) {
-    throw new Error(`Not enough memory to load this model: it needs ~${Math.round(modelMB)}MB but only ${Math.round(finalCheck.availableMB)}MB is available. Close other apps or choose a smaller model.`);
+    // OVERRIDABLE, always: a budget refusal in ANY mode must offer "Load Anyway" — never a
+    // dead-end. This is the single behavior the image path already had (makeRoomFor →
+    // OverridableMemoryError); the text pre-load gate used to throw a plain Error here, which
+    // surfaced as an OK-only alert with no override (the 12GB-Aggressive-refused-with-no-Load-
+    // Anyway bug). OverridableMemoryError is pure, so this stays layering-clean.
+    throw new OverridableMemoryError(`Not enough memory to load this model: it needs ~${Math.round(modelMB)}MB but only ${Math.round(finalCheck.availableMB)}MB is available. Close other apps or choose a smaller model.`);
   }
   if (override && finalCheck.availableMB > 0 && modelMB > finalCheck.availableMB) {
     // User forced the load ("Load Anyway" / continue). Skip the hard block and let the

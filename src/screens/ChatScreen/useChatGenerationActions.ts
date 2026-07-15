@@ -494,7 +494,7 @@ export async function dispatchGenerationFn(
 }
 export type SendCall = { text: string; attachments?: MediaAttachment[]; imageMode?: 'auto' | 'force' | 'disabled'; startGeneration: (convId: string, text: string) => Promise<void>; setDebugInfo: SetState<any> };
 export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promise<void> {
-  const { text, attachments, imageMode, startGeneration } = call;
+  const { text, attachments, imageMode = 'auto', startGeneration } = call;
   abortPreload(); // user acted — stop background warming so it can't block them
   if (!deps.hasActiveModel) { deps.setAlertState(showAlert('No Model Selected', 'Please select a model first.')); return; }
   // Vision gate (shared with resend): never send an image to a model that can't do vision.
@@ -510,7 +510,9 @@ export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promis
   // Cross-modality serialization: queue if any generation is running (routed later).
   if (generationService.getState().isGenerating || imageGenerationService.getState().isGenerating) {
     const messageText = appendAttachmentText(text, attachments);
-    generationService.enqueueMessage({ id: nextMsgId(), conversationId: targetConversationId, text, attachments, messageText });
+    // Carry the user's forced modality through the queue so a queued force-image send is dispatched as
+    // image on drain — not re-decided at 'auto' by resolveTurnKind (#510).
+    generationService.enqueueMessage({ id: nextMsgId(), conversationId: targetConversationId, text, attachments, messageText, imageMode });
     return;
   }
   await dispatchGenerationFn(deps, { text, attachments, conversationId: targetConversationId, imageMode }, startGeneration);

@@ -61,9 +61,21 @@ const GEMMA_CHANNEL_PROBE_SSE =
   'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n\n' +
   'data: [DONE]\n\n';
 
+// NEGATIVE discriminator (the anti-M10 guard): a non-thinking model streams PLAIN content — no
+// channel opener, no reasoning_content/reasoning/thinking field. deltaHasThinking MUST return false
+// for every delta → supportsThinking=false → NO toggle. Without this case, an always-true
+// deltaHasThinking (e.g. a mutated `.includes`→`!.includes`, which is trivially true over the
+// multi-delimiter list) would pass the positive test — so this case is what makes the delimiter
+// check load-bearing.
+const PLAIN_PROBE_SSE =
+  'data: {"choices":[{"delta":{"role":"assistant","content":"Hi"}}]}\n\n' +
+  'data: {"choices":[{"delta":{"content":" there, how can I help?"}}]}\n\n' +
+  'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n' +
+  'data: [DONE]\n\n';
+
 /** Fake ONLY the network transport (global.fetch) with device-shaped responses per endpoint. Everything
  *  we own — discovery, fetchModelCapabilities, probeLmStudioThinking, deltaHasThinking — runs for real. */
-function installDiscoveryFetch(): () => void {
+function installDiscoveryFetch(probeSse: string): () => void {
   const original = global.fetch;
   const ok = (body: string): Response =>
     ({ ok: true, status: 200, json: async () => JSON.parse(body), text: async () => body }) as unknown as Response;
@@ -76,7 +88,7 @@ function installDiscoveryFetch(): () => void {
     // more specific path first, or the OpenAI-compat list body would be served for the native probe.
     if (u.endsWith('/api/v1/models')) return ok(LMSTUDIO_MODELS);
     if (u.endsWith('/v1/models')) return ok(V1_MODELS);
-    if (u.endsWith('/v1/chat/completions')) return ok(GEMMA_CHANNEL_PROBE_SSE); // the thinking probe
+    if (u.endsWith('/v1/chat/completions')) return ok(probeSse); // the thinking probe (per-case payload)
     // /props (llama.cpp) and /api/show (Ollama) must NOT answer with real data, or they'd win the
     // capability race ahead of the LM Studio probe. A non-llama.cpp / non-Ollama server 404s here.
     return notFound();
@@ -99,7 +111,7 @@ describe('remote Gemma-channel inline reasoning → Thinking toggle appears (DEV
     await llmService.unloadModel();
     useAppStore.getState().setActiveModelId(null);
 
-    const restoreFetch = installDiscoveryFetch();
+    const restoreFetch = installDiscoveryFetch(GEMMA_CHANNEL_PROBE_SSE);
     try {
       // REAL "add a server" end state + REAL discovery — this is what runs deltaHasThinking. No caps
       // are pre-placed; supportsThinking is EMERGENT from the probe stream through the real detection.
@@ -129,5 +141,36 @@ describe('remote Gemma-channel inline reasoning → Thinking toggle appears (DEV
     // Precondition guard against a false green: the popover IS open (its always-present Image Gen row
     // is there), so a missing thinking toggle would be a real absence, not an unopened popover.
     expect(h.view!.queryByTestId('quick-image-mode')).not.toBeNull();
+  });
+
+  it('does NOT show the toggle for a remote model whose probe is PLAIN content (anti-M10 discriminator)', async () => {
+    // Identical flow, but the probe streams plain content with NO reasoning signal at all →
+    // deltaHasThinking must return false → supportsThinking=false → NO thinking toggle. This is the
+    // discriminator: it FAILS if deltaHasThinking is broken to be always-true (the surviving M10 mutant),
+    // so together with the positive case it pins detection to the actual delimiter grammar.
+    const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
+    const { useRemoteServerStore, useAppStore } = require('../../../src/stores');
+    const { llmService } = require('../../../src/services/llm');
+    const { setActiveRemoteTextModelImpl } = require('../../../src/services/remoteServerManagerUtils');
+
+    await llmService.unloadModel();
+    useAppStore.getState().setActiveModelId(null);
+
+    const restoreFetch = installDiscoveryFetch(PLAIN_PROBE_SSE);
+    try {
+      const serverId = useRemoteServerStore.getState().addServer({
+        name: 'LM Studio', endpoint: ENDPOINT, providerType: 'openai-compatible',
+      });
+      await useRemoteServerStore.getState().discoverModels(serverId);
+      await setActiveRemoteTextModelImpl(serverId, MODEL_ID);
+    } finally {
+      restoreFetch();
+    }
+
+    h.render();
+    h.rtl.fireEvent.press(await h.rtl.waitFor(() => h.view!.getByTestId('quick-settings-button')));
+    // Popover open (guard), but NO thinking toggle for a non-thinking model.
+    await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('quick-image-mode')).not.toBeNull(); });
+    expect(h.view!.queryByTestId('quick-thinking-toggle')).toBeNull();
   });
 });

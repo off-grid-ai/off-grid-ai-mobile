@@ -69,7 +69,6 @@ describe('RAM display agreement — picker label matches the residency chip for 
     const g = globalThis as unknown as { window?: Record<string, unknown> };
     if (!g.window) g.window = { dispatchEvent: () => true, addEventListener: () => {}, removeEventListener: () => {} };
 
-    /* eslint-disable @typescript-eslint/no-var-requires */
     const React = require('react');
     const rtl = requireRTL();
     const { hardwareService } = require('../../../src/services/hardware');
@@ -81,7 +80,6 @@ describe('RAM display agreement — picker label matches the residency chip for 
     const { BackendSelector } = require('../../../src/components/settings/textGenAdvancedSections');
     const { ModelSelectorModal } = require('../../../src/components/ModelSelectorModal');
     const { llmService } = require('../../../src/services/llm');
-    /* eslint-enable @typescript-eslint/no-var-requires */
 
     // BOUNDARY: a downloaded 2GB model = the persisted record + the file on disk. 2GB makes the two
     // multipliers visibly disagree (1.5× → 3.0 GB, 2.2× → 4.4 GB) yet fit the 8GB-avail budget.

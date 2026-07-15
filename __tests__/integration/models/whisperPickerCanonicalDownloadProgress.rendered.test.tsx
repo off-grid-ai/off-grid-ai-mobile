@@ -66,4 +66,24 @@ describe('WhisperPickerSheet reflects a canonical-store STT download (device 202
 
     expect(getByTestId('whisper-row-queued')).toBeTruthy();
   });
+
+  // Fallback path: the whisper store seeds progress before the canonical download-store entry exists
+  // (the RNFS URL-import path never gets one). The single owner covers it, so the picker still reflects
+  // it. (Replaces the deleted mockist TranscriptionModelsTab fallback tests with a real render.)
+  it('shows progress from the whisper-store fallback when there is no canonical entry', () => {
+    useWhisperStore.setState({ downloadProgressById: { 'base.en': 0.3 } });
+
+    const { getByText, getByTestId } = render(<WhisperPickerSheet visible onClose={() => {}} />);
+
+    expect(getByTestId('whisper-row-progress')).toBeTruthy();
+    expect(getByText('30%')).toBeTruthy();
+  });
+
+  it('treats a 0% whisper-store fallback (awaiting a slot) as queued', () => {
+    useWhisperStore.setState({ downloadProgressById: { 'base.en': 0 } });
+
+    const { getByTestId } = render(<WhisperPickerSheet visible onClose={() => {}} />);
+
+    expect(getByTestId('whisper-row-queued')).toBeTruthy();
+  });
 });

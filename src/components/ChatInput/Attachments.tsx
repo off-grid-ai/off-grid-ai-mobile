@@ -49,6 +49,10 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
       if (result.assets && result.assets.length > 0) addAttachments(result.assets);
     } catch (_pickError) {
       // no-op: image picker already reports failure to the user via native UI
+    } finally {
+      // Re-assert the playback session: if the user CANCELS the picker we deactivated for, voice
+      // mode would otherwise stay muted until the next audio action (Gitar). iOS-only no-op on Android.
+      audioSessionManager.ensurePlayback().catch(() => {});
     }
   };
 
@@ -61,6 +65,9 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
       if (result.assets && result.assets.length > 0) addAttachments(result.assets);
     } catch (_cameraError) {
       // no-op: camera picker already reports failure to the user via native UI
+    } finally {
+      // Re-assert the playback session on cancel/return so voice mode isn't left muted (Gitar).
+      audioSessionManager.ensurePlayback().catch(() => {});
     }
   };
 

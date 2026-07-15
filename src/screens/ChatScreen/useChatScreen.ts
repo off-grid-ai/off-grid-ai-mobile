@@ -413,7 +413,11 @@ export const useChatScreen = () => {
       // tick once it has faded out. Harmless on Android (no nested-modal conflict there).
       const uri = viewerImageUri;
       setViewerImageUri(null);
-      setTimeout(() => { saveImageToGallery(uri, setAlertState).catch(() => {}); }, 350);
+      // Let the viewer <Modal> (animationType="fade", ~300ms) finish dismissing before the "Saved"
+      // AppSheet presents, so the two modals never overlap on iOS. Named + given headroom over the
+      // fade duration so the coupling is explicit (Gitar).
+      const VIEWER_FADE_OUT_MS = 350;
+      setTimeout(() => { saveImageToGallery(uri, setAlertState).catch(() => {}); }, VIEWER_FADE_OUT_MS);
     },
   };
 };

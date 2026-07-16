@@ -211,7 +211,9 @@ export function stripStreamingControlTokens(content: string): string {
  * Strip markdown formatting for TTS speech. Preserves the readable text
  * but removes syntax that Kokoro would read aloud as literal characters.
  */
-function stripMarkdownForSpeech(content: string): string {
+// Exported for the pro audio submodule (AudioMessageBubble) — dev's knip sweep de-exported
+// it as "internal-only" because knip can't see the pro submodule's usage. Keep it exported.
+export function stripMarkdownForSpeech(content: string): string {
   let result = content;
   // Headers: ### Title → Title
   result = result.replace(/^#{1,6}\s+/gm, '');

@@ -393,7 +393,7 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
               {/* Show TOTAL physical RAM — the device spec the user expects and the SAME number the
                   model recommendations are gated on (getTotalMemoryGB). deviceInfo.availableMemory is
                   the per-process allocatable ceiling (os_proc_available_memory), a budget input that
-                  reads as a wrong "device memory" here — e.g. 4.57GB on a device with more RAM. */}
+                  reads as a wrong "device memory" here — e.g. 4.57GB on the reported 11GB device. */}
               <Text style={styles.deviceValue}>{hardwareService.formatBytes(deviceInfo?.totalMemory || 0)}</Text>
             </View>
           </Card>

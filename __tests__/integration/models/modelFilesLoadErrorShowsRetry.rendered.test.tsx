@@ -12,38 +12,54 @@
  * successful retry then renders the files. "No compatible files found" is reserved for a fetch that
  * SUCCEEDED but returned nothing that fits.
  *
- * Boundary fakes only: native download + fs + RAM (installNativeBoundary) and the HuggingFace
- * network wrapper (searchModels returns the model; getModelFiles fails the first attempt, succeeds
- * the second). The screen, the useTextModels hook, handleSelectModel, and the real filesLoadError
- * state machine all run REAL.
+ * Boundary fakes only: native download + fs + RAM (installNativeBoundary) and global fetch (the
+ * HuggingFace transport). The real huggingFaceService, screen, useTextModels hook,
+ * handleSelectModel, timeout/fail-fast behavior, and filesLoadError state machine all run.
  */
 import { installNativeBoundary, requireRTL, GB } from '../../harness/nativeBoundary';
 
 const MODEL_ID = 'org/retry-model';
+const originalFetch = global.fetch;
+
+afterEach(() => { global.fetch = originalFetch; });
 
 describe('model detail Available Files — fetch failure shows Retry, success renders files', () => {
   it('shows the retry state on a failed file-list fetch, then renders files after Retry', async () => {
     installNativeBoundary({ download: true, fs: true, ram: { platform: 'android', totalBytes: 8 * GB, availBytes: 6 * GB } });
 
-    const okFile = { name: 'model-Q4_K_M.gguf', size: 2 * GB, quantization: 'Q4_K_M', downloadUrl: `https://hf.co/${MODEL_ID}/resolve/main/model-Q4_K_M.gguf` };
-    const modelInfo = { id: MODEL_ID, name: 'Retry Model', author: 'org', description: 'test', downloads: 50, likes: 1, tags: [], lastModified: '', files: [] };
-    // Per-id attempt counter: FIRST getModelFiles for this model fails (network down), the retry
-    // succeeds. Robust to any prefetch of other model ids.
-    const attempts: Record<string, number> = {};
-    jest.doMock('../../../src/services/huggingface', () => ({
-      huggingFaceService: {
-        searchModels: jest.fn(async () => [modelInfo]),
-        getModelDetails: jest.fn(async () => modelInfo),
-        getModelFiles: jest.fn(async (id: string) => {
-          attempts[id] = (attempts[id] || 0) + 1;
-          if (id === MODEL_ID && attempts[id] === 1) throw new Error('network down');
-          return [okFile];
-        }),
-        getDownloadUrl: (m: string, f: string, r = 'main') => `https://hf.co/${m}/resolve/${r}/${f}`,
-        formatModelSize: jest.fn(() => '2.0 GB'),
-        formatFileSize: jest.fn((b: number) => `${(b / GB).toFixed(1)} GB`),
-      },
-    }));
+    const hfModel = {
+      id: MODEL_ID,
+      author: 'org',
+      downloads: 50,
+      likes: 1,
+      tags: ['gguf'],
+      lastModified: '',
+      siblings: [],
+    };
+    let fileListAttempts = 0;
+
+    // Fake the external HTTP transport, not our HuggingFace service. Search succeeds. The first
+    // tree request fails as an aborted request (the real 5s-timeout shape), and Retry succeeds.
+    global.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/models?')) {
+        return { ok: true, json: async () => url.includes('search=retry') ? [hfModel] : [] } as Response;
+      }
+      if (url.endsWith(`/models/${MODEL_ID}/tree/main`)) {
+        fileListAttempts += 1;
+        if (fileListAttempts === 1) {
+          const aborted = new Error('network request timed out');
+          aborted.name = 'AbortError';
+          throw aborted;
+        }
+        return {
+          ok: true,
+          json: async () => [{ type: 'file', path: 'model-Q4_K_M.gguf', size: 2 * GB }],
+        } as Response;
+      }
+      const modelId = decodeURIComponent(url.split('/models/')[1] || 'org/unknown');
+      return { ok: true, json: async () => ({ ...hfModel, id: modelId }) } as Response;
+    }) as typeof fetch;
 
     const React = require('react');
     const { render, fireEvent, waitFor, act } = requireRTL();
@@ -60,8 +76,8 @@ describe('model detail Available Files — fetch failure shows Retry, success re
       fireEvent(getByTestId('search-input'), 'submitEditing');
       await new Promise((r) => setTimeout(r, 600));
     });
-    await waitFor(() => expect(getByText('Retry Model')).toBeTruthy(), { timeout: 6000 });
-    await act(async () => { fireEvent.press(getByText('Retry Model')); });
+    await waitFor(() => expect(getByText('retry-model')).toBeTruthy(), { timeout: 6000 });
+    await act(async () => { fireEvent.press(getByText('retry-model')); });
 
     // The first file-list fetch failed → the RETRY state renders, NOT "No compatible files found".
     await waitFor(() => expect(getByTestId('model-files-load-error')).toBeTruthy(), { timeout: 4000 });

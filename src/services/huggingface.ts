@@ -9,6 +9,13 @@ import { isMMProjFile, pickMmProjForDownload } from './mmproj';
 // the UI falls to a retry state fast instead of staring at a spinner.
 const HF_REQUEST_TIMEOUT_MS = 5000;
 
+function isAbortError(error: unknown): boolean {
+  return typeof error === 'object'
+    && error !== null
+    && 'name' in error
+    && error.name === 'AbortError';
+}
+
 class HuggingFaceService {
   private baseUrl = HF_API.baseUrl;
   private apiUrl = HF_API.apiUrl;
@@ -75,7 +82,7 @@ class HuggingFaceService {
       // siblings fallback; fail fast so the UI can show retry. The fallback stays for its intended
       // case: the tree endpoint returned a non-ok status (handled above) on a repo whose file list
       // the model page can still provide.
-      if (e instanceof Error && e.name === 'AbortError') throw e;
+      if (isAbortError(e)) throw e;
       return this.getModelFilesFromSiblings(modelId);
     }
   }

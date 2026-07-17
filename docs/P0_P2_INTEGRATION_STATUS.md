@@ -14,7 +14,7 @@ row does **not** mean that no test exists.
 - Release-checklist traceability contributes 196 rows; the app-derived inventory
   currently contributes 48 additional journeys, including the first P3 set.
 - P0: **24 verified**, **9 partial/device-gated**, **0 confirmed gaps**, **0 audit pending**.
-- P1: **78 verified**, **3 partial/device-gated**, **0 confirmed gaps**, **37 audit pending**.
+- P1: **82 verified**, **3 partial/device-gated**, **0 confirmed gaps**, **33 audit pending**.
 - P2: **40 verified**, **0 partial/device-gated**, **8 confirmed gaps**, **36 audit pending**.
 - P3: **0 verified**, **0 partial/device-gated**, **0 confirmed gaps**, **10 audit pending**.
 - `[x]` verified; `[~]` automated portion verified with a physical-device gate left; `[ ]` confirmed coverage gap; `[?]` evidence audit pending.
@@ -219,10 +219,10 @@ row does **not** mean that no test exists.
 - [x] #94 Idle STT reclaimed in a voice turn
 - [x] #95 Whisper blocked then freed then retried
 - [~] #96 OS memory-warning evicts idle sidecars - strict full-App warning/reclaim coverage exists; physical-device pressure remains
-- [?] #97 Aggressive loads bigger automatically
-- [?] #100 Estimators agree (no safe-then-refuse)
+- [x] #97 Aggressive loads bigger automatically — `__tests__/integration/memory/aggressiveLargerModelFullApp.rendered.happy.test.tsx`
+- [x] #100 Estimators agree (no safe-then-refuse) — `__tests__/integration/memory/imageToChatSwapFullApp.rendered.happy.test.tsx`
 - [?] #102 Survival floor blocks a guaranteed OOM
-- [?] #103 Image->chat swap
+- [x] #103 Image->chat swap — `__tests__/integration/memory/imageToChatSwapFullApp.rendered.happy.test.tsx`
 - [x] #104 Switch active model mid-chat — `__tests__/integration/generation/midChatModelSwitchFullApp.rendered.redflow.test.tsx`
 - [x] #105 Eject All frees everything
 - [x] #106 Eject one resident from In Memory
@@ -284,7 +284,7 @@ row does **not** mean that no test exists.
 - [x] #184 Remote activation frees local heavy — `__tests__/integration/memory/remoteActivationFreesLocalFullApp.rendered.happy.test.tsx`
 - [x] #185 Mid-chat model switch stays coherent — `__tests__/integration/generation/midChatModelSwitchFullApp.rendered.redflow.test.tsx`
 - [?] #186 Remote stream interruption recovers
-- [?] #188 Litert download warning is device-aware (BOTH screens)
+- [x] #188 Litert download warning is device-aware (BOTH screens) — `__tests__/integration/models/litertWarningBothScreensFullApp.rendered.happy.test.tsx`
 - [x] #190 Send racing a settings reload keeps thinking
 - [x] #191 GPU->CPU fallback is visibly reported
 - [x] #192 Mic during a background STT download is not a loader

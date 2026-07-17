@@ -9,7 +9,7 @@ coverage.
 - Canonical critical rows: **126** — **27 P0** and **99 P1**.
 - A checked row requires a real `App`/navigation journey driven by user gestures and visible
   assertions. Native/OS-only behavior additionally requires XCTest, JUnit, or the release-device gate.
-- Current automated critical coverage: **35 complete rows** plus **8 partial device rows**. Test counts
+- Current automated critical coverage: **39 complete rows** plus **8 partial device rows**. Test counts
   and line coverage are not substitutes for this journey ledger.
 - Supporting pure-function or component contracts may remain useful, but they do not check a row here.
 
@@ -144,10 +144,13 @@ still required; `[ ]` critical journey is open.
 - [ ] #94 Idle STT is reclaimed in a voice turn.
 - [ ] #95 Whisper can retry after memory is freed.
 - [ ] #96 OS memory warning evicts idle sidecars.
-- [ ] #97 Aggressive mode loads larger models automatically.
-- [ ] #100 Advisory and load-gate estimators agree.
+- [x] #97 Aggressive mode loads larger models automatically.
+  - `__tests__/integration/memory/aggressiveLargerModelFullApp.rendered.happy.test.tsx`
+- [x] #100 Advisory and load-gate estimators agree.
+  - `__tests__/integration/memory/imageToChatSwapFullApp.rendered.happy.test.tsx`
 - [ ] #102 Survival floor blocks a guaranteed OOM.
-- [ ] #103 Image-to-chat transition swaps residency correctly.
+- [x] #103 Image-to-chat transition swaps residency correctly.
+  - `__tests__/integration/memory/imageToChatSwapFullApp.rendered.happy.test.tsx`
 - [x] #104 Active model can switch mid-chat.
   - `__tests__/integration/generation/midChatModelSwitchFullApp.rendered.redflow.test.tsx`
 - [ ] #105 Eject All frees every resident model.
@@ -212,7 +215,8 @@ still required; `[ ]` critical journey is open.
 - [x] #185 Mid-chat model switch stays coherent.
   - `__tests__/integration/generation/midChatModelSwitchFullApp.rendered.redflow.test.tsx`
 - [ ] #186 Remote stream interruption recovers.
-- [ ] #188 LiteRT download warning is device-aware on both screens.
+- [x] #188 LiteRT download warning is device-aware on both screens.
+  - `__tests__/integration/models/litertWarningBothScreensFullApp.rendered.happy.test.tsx`
 - [ ] #190 Send racing settings reload keeps thinking capability.
 - [ ] #191 GPU -> CPU fallback is visibly reported.
 - [ ] #192 Mic during STT download is not shown as a model loader.

@@ -42,7 +42,7 @@ async function renderApp() {
 
 /** Render the real App with the empty storage/filesystem state of a fresh install. */
 export async function renderFreshApp(
-  options: Pick<AppJourneyOptions, 'boundary'> = {},
+  options: Pick<AppJourneyOptions, 'boundary' | 'beforeRender'> = {},
 ) {
   const boundary = installNativeBoundary({
     ...options.boundary,
@@ -52,6 +52,7 @@ export async function renderFreshApp(
   const asyncStorage = (asyncStorageModule.default ??
     asyncStorageModule) as typeof import('@react-native-async-storage/async-storage').default;
   await asyncStorage.clear();
+  await options.beforeRender?.({ boundary, asyncStorage });
 
   const rendered = await renderApp();
   return { boundary, asyncStorage, ...rendered };

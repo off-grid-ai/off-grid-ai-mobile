@@ -154,6 +154,9 @@ npm run ios
 [![CI](https://github.com/alichherawalla/off-grid-mobile/actions/workflows/ci.yml/badge.svg)](https://github.com/alichherawalla/off-grid-mobile/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/alichherawalla/off-grid-mobile/graph/badge.svg)](https://codecov.io/gh/alichherawalla/off-grid-mobile)
 
+For deterministic physical Android and iOS runs with UIAutomator and XCTest/WebDriverAgent, see
+[Physical-device UI automation](docs/E2E_DEVICE_AUTOMATION.md).
+
 Tests run across three platforms on every PR:
 
 | Platform | Framework | What's covered |

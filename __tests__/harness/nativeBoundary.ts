@@ -279,6 +279,16 @@ function makeLlamaFake(onRelease?: () => void, chatTemplate?: string, mtpLayers:
     reasoning: r.reasoning,
     completionMeta: r.completionMeta,
   });
+  // Script inputs stay ergonomic; emitted results use llama.rn's native OpenAI-compatible envelope.
+  const nativeToolCalls = (toolCalls: typeof pending.toolCalls) =>
+    toolCalls?.map((toolCall, index) => ({
+      type: 'function' as const,
+      id: `call-${index}`,
+      function: {
+        name: toolCall.name,
+        arguments: JSON.stringify(toolCall.arguments),
+      },
+    }));
   let releaseFn: (() => void) | null = null; // resolves a mid-stream pause
   // Faithful llama.rn stop semantics: stopCompletion() aborts the IN-FLIGHT completion — it stops
   // streaming further tokens, releases a held pause, and the completion RESOLVES with
@@ -331,7 +341,7 @@ function makeLlamaFake(onRelease?: () => void, chatTemplate?: string, mtpLayers:
             text: `<|channel>thought\n${pending.reasoning}<channel|>${pending.text}`,
             content: pending.text,
             reasoning_content: pending.reasoning,
-            tool_calls: pending.toolCalls,
+            tool_calls: nativeToolCalls(pending.toolCalls),
             tokens_predicted: metaR.tokens_predicted ?? 8, tokens_evaluated: 4,
             stopped_eos: metaR.stopped_eos ?? true, stopped_limit: metaR.stopped_limit ?? 0, truncated: metaR.truncated ?? false,
             ...mtpResult,
@@ -381,7 +391,7 @@ function makeLlamaFake(onRelease?: () => void, chatTemplate?: string, mtpLayers:
       return {
         text: outText,
         content: outText,
-        tool_calls: pending.toolCalls,
+        tool_calls: nativeToolCalls(pending.toolCalls),
         tokens_predicted: meta.tokens_predicted ?? 8, tokens_evaluated: 4,
         stopped_eos: meta.stopped_eos ?? true,
         stopped_limit: meta.stopped_limit ?? 0,

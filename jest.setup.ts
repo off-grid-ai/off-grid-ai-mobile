@@ -41,6 +41,9 @@ jest.mock('react-native-edge-to-edge', () => ({
   NavigationBar: () => null,
 }));
 
+// Native splash is outside the JS product; keep the real App boot/navigation path mounted in Jest.
+jest.mock('react-native-bootsplash', () => ({ hide: jest.fn(async () => {}) }), { virtual: true });
+
 // ============================================================================
 // AsyncStorage Mock
 // ============================================================================
@@ -95,6 +98,9 @@ export const clearMockStorage = () => {
 // ============================================================================
 // Navigation Mocks
 // ============================================================================
+// Direct-screen tests keep navigation as lightweight plumbing. Real-App journeys
+// explicitly unmock this module before importing App so route behavior stays real
+// whenever navigation is part of the user-visible behavior under test.
 jest.mock('@react-navigation/native', () => {
   const actual = jest.requireActual('@react-navigation/native');
   return {

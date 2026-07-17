@@ -16,7 +16,7 @@ import { hardwareService, modelManager, authService, ragService, remoteServerMan
 import logger from './src/utils/logger';
 import { useAppStore, useAuthStore, useRemoteServerStore, useWhisperStore } from './src/stores';
 import { useDebugLogsStore } from './src/stores/debugLogsStore';
-import { initDebugLogFile, appendDebugLine } from './src/utils/debugLogFile';
+import { initDebugLogFile, appendDebugLine, shutdownDebugLogFile } from './src/utils/debugLogFile';
 import { loadProFeatures } from './src/bootstrap/loadProFeatures';
 import { checkProStatus } from './src/services/proLicenseService';
 import { hydrateDownloadStore } from './src/services/downloadHydration';
@@ -56,7 +56,6 @@ if (__DEV__) {
   logger.log = tap('log');
   logger.warn = tap('warn');
   logger.error = tap('error');
-  initDebugLogFile();
 }
 
 const ensureRemoteServerStoreHydrated = async () => {
@@ -69,6 +68,11 @@ const ensureRemoteServerStoreHydrated = async () => {
 
 function App() {
   useDownloadListeners();
+  useEffect(() => {
+    if (!__DEV__) return undefined;
+    initDebugLogFile();
+    return shutdownDebugLogFile;
+  }, []);
   // Reactive: when Pro is activated at runtime (license key → loadProFeatures),
   // the appRoot slot (TTS engine bridge) registers and this re-renders to mount
   // it live — no restart needed.

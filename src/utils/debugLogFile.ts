@@ -90,6 +90,15 @@ export function initDebugLogFile(): void {
   scheduleFlush();
 }
 
+/** End capture, cancel owned timers, and flush remaining lines best-effort. */
+export function shutdownDebugLogFile(): void {
+  enabled = false;
+  if (timer) clearTimeout(timer);
+  if (wireTimer) clearTimeout(wireTimer);
+  timer = null; wireTimer = null;
+  flush().catch(() => {}); flushWire().catch(() => {});
+}
+
 /** Append one captured log line. Called from the App.tsx logger tap. */
 export function appendDebugLine(level: string, message: string): void {
   if (!enabled) return;

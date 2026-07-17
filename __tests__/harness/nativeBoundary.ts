@@ -218,9 +218,15 @@ export interface CompletionMeta {
   draft_tokens_accepted?: number;
 }
 
+type LlamaScriptToolCall = {
+  name: string;
+  /** Object for ordinary scripts; raw string for malformed native argument-wire fixtures. */
+  arguments: Record<string, unknown> | string;
+};
+
 type LlamaCompletionScript = {
   text?: string;
-  toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>;
+  toolCalls?: LlamaScriptToolCall[];
   throwMessage?: string;
   throwAfter?: string;
   pauseAfter?: string;
@@ -266,7 +272,7 @@ export interface LlamaFake {
 
 function makeLlamaFake(onRelease?: () => void, chatTemplate?: string, mtpLayers: number = 0): LlamaFake {
   const calls: LlamaFake['calls'] = { completion: [] };
-  let pending: { text: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; throwAfter?: string; pauseAfter?: string; holdBeforeStream?: boolean; thinkingText?: string; reasoning?: string; completionMeta?: CompletionMeta } = { text: '' };
+  let pending: { text: string; toolCalls?: LlamaScriptToolCall[]; throwMessage?: string; throwAfter?: string; pauseAfter?: string; holdBeforeStream?: boolean; thinkingText?: string; reasoning?: string; completionMeta?: CompletionMeta } = { text: '' };
   let scriptedQueue: Array<typeof pending> = [];
   const normalizeScript = (r: LlamaCompletionScript): typeof pending => ({
     text: r.text ?? '',
@@ -286,7 +292,10 @@ function makeLlamaFake(onRelease?: () => void, chatTemplate?: string, mtpLayers:
       id: `call-${index}`,
       function: {
         name: toolCall.name,
-        arguments: JSON.stringify(toolCall.arguments),
+        arguments:
+          typeof toolCall.arguments === 'string'
+            ? toolCall.arguments
+            : JSON.stringify(toolCall.arguments),
       },
     }));
   let releaseFn: (() => void) | null = null; // resolves a mid-stream pause

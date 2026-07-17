@@ -14,7 +14,7 @@ row does **not** mean that no test exists.
 - Release-checklist traceability contributes 196 rows; the app-derived inventory
   currently contributes 48 additional journeys, including the first P3 set.
 - P0: **18 verified**, **10 partial/device-gated**, **0 confirmed gaps**, **5 audit pending**.
-- P1: **15 verified**, **1 partial/device-gated**, **41 confirmed gaps**, **60 audit pending**.
+- P1: **16 verified**, **1 partial/device-gated**, **40 confirmed gaps**, **60 audit pending**.
 - P2: **5 verified**, **0 partial/device-gated**, **25 confirmed gaps**, **54 audit pending**.
 - P3: **0 verified**, **0 partial/device-gated**, **0 confirmed gaps**, **10 audit pending**.
 - `[x]` verified; `[~]` automated portion verified with a physical-device gate left; `[ ]` confirmed coverage gap; `[?]` evidence audit pending.
@@ -164,7 +164,7 @@ row does **not** mean that no test exists.
 - [ ] #15 Delete does not cancel another download
 - [?] #16 Concurrent / queued downloads
 - [x] #17 Download with NO network
-- [ ] #19 Truncated file not listed as ready
+- [x] #19 Truncated file not listed as ready
 - [ ] #20 Kill mid-extraction recovers
 - [ ] #21 Retry a failed image extraction
 

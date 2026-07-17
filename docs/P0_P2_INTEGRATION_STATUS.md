@@ -14,7 +14,7 @@ row does **not** mean that no test exists.
 - Release-checklist traceability contributes 196 rows; the app-derived inventory
   currently contributes 48 additional journeys, including the first P3 set.
 - P0: **18 verified**, **10 partial/device-gated**, **0 confirmed gaps**, **5 audit pending**.
-- P1: **11 verified**, **1 partial/device-gated**, **45 confirmed gaps**, **60 audit pending**.
+- P1: **12 verified**, **1 partial/device-gated**, **44 confirmed gaps**, **60 audit pending**.
 - P2: **4 verified**, **0 partial/device-gated**, **26 confirmed gaps**, **54 audit pending**.
 - P3: **0 verified**, **0 partial/device-gated**, **0 confirmed gaps**, **10 audit pending**.
 - `[x]` verified; `[~]` automated portion verified with a physical-device gate left; `[ ]` confirmed coverage gap; `[?]` evidence audit pending.
@@ -200,7 +200,7 @@ row does **not** mean that no test exists.
 
 - [?] #67 Image Size + Guidance honored
 - [?] #69 Image steps applies
-- [ ] #70 Tap image opens fullscreen preview
+- [x] #70 Tap image opens fullscreen preview
 - [?] #72 Non-draw prompt routes to text
 - [ ] #73 Resend of an image request re-draws
 

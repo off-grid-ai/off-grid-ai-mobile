@@ -96,8 +96,10 @@ describe('P1 full-App project knowledge-base journey', () => {
         sqlite.install();
         installPdfBoundary(FACT);
         boundary.fs!.seedFile(PDF_PATH, 4096);
+        // The embedding model ships in the app bundle. Leave Documents empty so
+        // the first KB gesture proves the real first-use install/copy path.
         boundary.fs!.seedFile(
-          `${boundary.fs!.DocumentDirectoryPath}/all-MiniLM-L6-v2-Q8_0.gguf`,
+          '/bundle/all-MiniLM-L6-v2-Q8_0.gguf',
           25 * 1024 * 1024,
         );
         const picker = require('@react-native-documents/picker');
@@ -132,6 +134,14 @@ describe('P1 full-App project knowledge-base journey', () => {
     await first.rtl.waitFor(() =>
       expect(first.view.getByText('No documents yet')).toBeTruthy(),
     );
+    const embeddingDocumentPath = `${
+      first.boundary.fs!.DocumentDirectoryPath
+    }/all-MiniLM-L6-v2-Q8_0.gguf`;
+    expect(
+      await (first.boundary.fs!.module.exists as jest.Mock)(
+        embeddingDocumentPath,
+      ),
+    ).toBe(false);
 
     first.rtl.fireEvent.press(first.view.getByText('Add Document'));
     await first.rtl.waitFor(
@@ -152,6 +162,11 @@ describe('P1 full-App project knowledge-base journey', () => {
       },
       { timeout: 8000 },
     );
+    expect(
+      await (first.boundary.fs!.module.exists as jest.Mock)(
+        embeddingDocumentPath,
+      ),
+    ).toBe(true);
 
     const { useProjectStore } = require('../../../src/stores/projectStore');
     const { ragService } = require('../../../src/services/rag');
@@ -182,6 +197,25 @@ describe('P1 full-App project knowledge-base journey', () => {
       expect(first.view.getByTestId('projects-tab')).toBeTruthy(),
     );
     first.rtl.fireEvent.press(first.view.getByTestId('home-tab'));
+    // #92: the real embed load remains visible as a reclaimable sidecar in the
+    // product's In Memory surface after the KB operation completes.
+    first.rtl.fireEvent.press(
+      await first.rtl.waitFor(() => first.view.getByTestId('models-summary')),
+    );
+    await first.rtl.waitFor(
+      () => {
+        expect(first.view.getByTestId('resident-item-embedding')).toBeTruthy();
+        expect(
+          first.view.getByTestId('resident-item-embedding-ram'),
+        ).toHaveTextContent(/GB/);
+      },
+      { timeout: 4000 },
+    );
+    const doneButtons = first.view.getAllByText('Done');
+    first.rtl.fireEvent.press(doneButtons[doneButtons.length - 1]);
+    await first.rtl.waitFor(() =>
+      expect(first.view.queryByTestId('resident-item-embedding')).toBeNull(),
+    );
     await openChatWithJourneyModel(first.rtl, first.view);
     first.rtl.fireEvent.press(
       first.view.getByText('Project: Default — tap to change'),

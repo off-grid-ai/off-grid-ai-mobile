@@ -1101,6 +1101,7 @@ function makeFsFake(): FsFake {
 
   const module: Record<string, unknown> = {
     DocumentDirectoryPath,
+    MainBundlePath: '/bundle',
     CachesDirectoryPath: '/caches',
     exists: jest.fn(async (p: string) => vol.existsSync(norm(p))),
     mkdir: jest.fn(async (p: string) => {

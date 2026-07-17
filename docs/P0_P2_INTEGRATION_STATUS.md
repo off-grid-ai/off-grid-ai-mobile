@@ -14,7 +14,7 @@ row does **not** mean that no test exists.
 - Release-checklist traceability contributes 196 rows; the app-derived inventory
   currently contributes 48 additional journeys, including the first P3 set.
 - P0: **23 verified**, **10 partial/device-gated**, **0 confirmed gaps**, **0 audit pending**.
-- P1: **57 verified**, **2 partial/device-gated**, **8 confirmed gaps**, **51 audit pending**.
+- P1: **66 verified**, **2 partial/device-gated**, **0 confirmed gaps**, **50 audit pending**.
 - P2: **40 verified**, **0 partial/device-gated**, **8 confirmed gaps**, **36 audit pending**.
 - P3: **0 verified**, **0 partial/device-gated**, **0 confirmed gaps**, **10 audit pending**.
 - `[x]` verified; `[~]` automated portion verified with a physical-device gate left; `[ ]` confirmed coverage gap; `[?]` evidence audit pending.
@@ -166,13 +166,13 @@ row does **not** mean that no test exists.
 - [?] #16 Concurrent / queued downloads
 - [x] #17 Download with NO network
 - [x] #19 Truncated file not listed as ready
-- [ ] #20 Kill mid-extraction recovers
-- [ ] #21 Retry a failed image extraction
+- [x] #20 Kill mid-extraction recovers
+- [x] #21 Retry a failed image extraction
 
 ### 2 Text gen
 
 - [x] #24 First message replies (litert)
-- [ ] #25 GPU/OpenCL backend
+- [x] #25 GPU/OpenCL backend
 - [?] #28 GPU layers slider applies
 - [x] #29 litert CPU backend fails gracefully
 - [?] #30 NPU/HTP backend gated or graceful
@@ -227,7 +227,7 @@ row does **not** mean that no test exists.
 - [x] #105 Eject All frees everything
 - [x] #106 Eject one resident from In Memory
 - [x] #107 Lazy reload after eject
-- [ ] #108 In Memory shows loaded model RAM
+- [x] #108 In Memory shows loaded model RAM
 - [?] #109 Stale TTS pressure cleared on delete
 
 ### 6 KB/Projects
@@ -253,9 +253,9 @@ row does **not** mean that no test exists.
 
 - [x] #138 Remote model replies
 - [x] #142 Remote reasoning renders (LM Studio)
-- [ ] #143 Remote parallel tool calls
+- [x] #143 Remote parallel tool calls
 - [?] #144 Remote prompt-enhance runs
-- [?] #145 Remote server dies mid-generation
+- [x] #145 Remote server dies mid-generation
 
 ### 9 Enhancement
 
@@ -279,14 +279,14 @@ row does **not** mean that no test exists.
 
 ### 12 This-release
 
-- [ ] #182 Parse-once thinking+tool+answer on litert
+- [x] #182 Parse-once thinking+tool+answer on litert
 - [?] #183 Parse-once thinking+tool+answer on remote
 - [?] #184 Remote activation frees local heavy
 - [?] #185 Mid-chat model switch stays coherent
 - [?] #186 Remote stream interruption recovers
 - [?] #188 Litert download warning is device-aware (BOTH screens)
-- [ ] #190 Send racing a settings reload keeps thinking
-- [ ] #191 GPU->CPU fallback is visibly reported
+- [x] #190 Send racing a settings reload keeps thinking
+- [x] #191 GPU->CPU fallback is visibly reported
 - [x] #192 Mic during a background STT download is not a loader
 - [x] #193 Stale failure card cleared when a new attempt starts
 - [x] #194 Embedded MTP activates only for capable GGUFs

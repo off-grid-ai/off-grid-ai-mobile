@@ -77,6 +77,22 @@ describe('P0 STT-model download journey', () => {
       expect(view.getByText(FILE_NAME)).toBeTruthy();
       expect(view.getByText('Transcription')).toBeTruthy();
     });
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('back-button'));
+    });
+    await waitFor(() => expect(view.getByTestId('models-screen')).toBeTruthy());
+    await act(async () => {
+      fireEvent.press(view.getByTestId('home-tab'));
+    });
+    await waitFor(() => expect(view.getByTestId('home-screen')).toBeTruthy());
+    await act(async () => {
+      fireEvent.press(view.getByTestId('models-summary'));
+    });
+    await waitFor(() =>
+      expect(view.getByTestId('models-row-speech')).toBeTruthy(),
+    );
+    expect(view.queryByTestId('models-row-speech-ram')).toBeNull();
     view.unmount();
   }, 30000);
 });

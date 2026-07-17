@@ -14,8 +14,8 @@ row does **not** mean that no test exists.
 - Release-checklist traceability contributes 196 rows; the app-derived inventory
   currently contributes 48 additional journeys, including the first P3 set.
 - P0: **18 verified**, **10 partial/device-gated**, **0 confirmed gaps**, **5 audit pending**.
-- P1: **28 verified**, **1 partial/device-gated**, **28 confirmed gaps**, **60 audit pending**.
-- P2: **29 verified**, **0 partial/device-gated**, **15 confirmed gaps**, **40 audit pending**.
+- P1: **32 verified**, **1 partial/device-gated**, **25 confirmed gaps**, **59 audit pending**.
+- P2: **31 verified**, **0 partial/device-gated**, **15 confirmed gaps**, **38 audit pending**.
 - P3: **0 verified**, **0 partial/device-gated**, **0 confirmed gaps**, **10 audit pending**.
 - `[x]` verified; `[~]` automated portion verified with a physical-device gate left; `[ ]` confirmed coverage gap; `[?]` evidence audit pending.
 - This file is updated as journeys are verified or product fixes land.
@@ -194,7 +194,7 @@ row does **not** mean that no test exists.
 - [x] #59 Voice-mode transcript renders
 - [x] #61 Voice draw-request routes to image
 - [x] #62 Voice calculator journey
-- [ ] #63 Voice-mode Stop button while generating
+- [x] #63 Voice-mode Stop button while generating
 
 ### 4 Image
 
@@ -206,10 +206,10 @@ row does **not** mean that no test exists.
 
 ### 4 Vision
 
-- [ ] #80 Vision answers about an image
+- [x] #80 Vision answers about an image
 - [?] #82 Big vision model decode handled
-- [ ] #83 litert vision affordance consistent
-- [?] #84 Non-vision model image is refused gracefully
+- [x] #83 litert vision affordance consistent
+- [x] #84 Non-vision model image is refused gracefully
 
 ### 5 Memory
 
@@ -335,8 +335,8 @@ row does **not** mean that no test exists.
 
 ### 4 Vision
 
-- [?] #78 Photo permission prompt on first attach - existing-test evidence audit pending
-- [?] #79 Photo permission DENIED handled gracefully - existing-test evidence audit pending
+- [x] #78 Photo permission prompt on first attach
+- [x] #79 Photo permission DENIED handled gracefully
 - [ ] #81 Image + text in one turn
 
 ### 5 Memory

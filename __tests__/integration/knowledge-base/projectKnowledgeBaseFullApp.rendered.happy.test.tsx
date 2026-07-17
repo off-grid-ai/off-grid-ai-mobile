@@ -12,10 +12,12 @@ import { createPersistentRealSqliteBoundary } from '../../harness/sqliteFake';
 
 const PROJECT = 'Field Research';
 const FACT = 'The North Ridge beacon code is QUARTZ-731.';
+const REPLACEMENT_FACT = 'The North Ridge beacon code is now AMBER-902.';
 const PDF_NAME = 'ridge-notes.pdf';
 const PDF_PATH = '/tmp/ridge-notes.pdf';
 const QUESTION = 'What is the North Ridge beacon code?';
 const ANSWER = 'The beacon code is QUARTZ-731.';
+const REPLACEMENT_ANSWER = 'The current beacon code is AMBER-902.';
 const TOOL_MODEL: DownloadedModel = {
   id: 'test/llama-3-tools/llama-3-tools-Q4_K_M.gguf',
   name: 'Llama 3 Tools',
@@ -30,6 +32,12 @@ const TOOL_MODEL: DownloadedModel = {
 
 function installPdfBoundary(text: string): void {
   const { NativeModules } = require('react-native');
+  if (NativeModules.PDFExtractorModule?.extractText?.mockImplementation) {
+    NativeModules.PDFExtractorModule.extractText.mockImplementation(
+      async () => text,
+    );
+    return;
+  }
   NativeModules.PDFExtractorModule = {
     extractText: jest.fn(async () => text),
   };
@@ -59,8 +67,20 @@ async function createProjectThroughApp(
   await rtl.waitFor(() => expect(view.getByText(PROJECT)).toBeTruthy());
 }
 
+function expandKnowledgeBaseResult(
+  app: Awaited<ReturnType<typeof renderMainApp>>,
+  expectedContent: RegExp,
+): void {
+  if (app.view.queryAllByText(expectedContent).length > 1) return;
+  let node = app.view.getByTestId('tool-result-label-search_knowledge_base');
+  while (node.parent && node.props.accessible !== true) {
+    node = node.parent;
+  }
+  app.rtl.fireEvent.press(node);
+}
+
 describe('P1 full-App project knowledge-base journey', () => {
-  it('retries failed PDF embedding, retrieves it in an inherited project chat, and restores the usable document after relaunch', async () => {
+  it('retries failed PDF embedding, then deletes and replaces its index without stale retrieval', async () => {
     const sqlite = createPersistentRealSqliteBoundary();
     const first = await renderMainApp({
       boundary: {
@@ -218,12 +238,132 @@ describe('P1 full-App project knowledge-base journey', () => {
       },
       { timeout: 10000 },
     );
-    first.rtl.fireEvent.press(
-      first.view.getByTestId('tool-result-label-search_knowledge_base'),
-    );
+    expandKnowledgeBaseResult(first, /QUARTZ-731/);
     await first.rtl.waitFor(() =>
       expect(first.view.getAllByText(/QUARTZ-731/).length).toBeGreaterThan(1),
     );
+
+    first.rtl.fireEvent.press(
+      first.view
+        .UNSAFE_getAllByType(Icon)
+        .find(icon => icon.props.name === 'arrow-left')!,
+    );
+    await first.rtl.waitFor(() =>
+      expect(first.view.getByTestId('home-screen')).toBeTruthy(),
+    );
+    first.rtl.fireEvent.press(first.view.getByTestId('projects-tab'));
+    first.rtl.fireEvent.press(
+      await first.rtl.waitFor(() => first.view.getByText(PROJECT)),
+    );
+    await first.rtl.waitFor(() =>
+      expect(first.view.getByText(PDF_NAME)).toBeTruthy(),
+    );
+    let documentRow = first.view.getByText(PDF_NAME);
+    while (
+      documentRow.parent &&
+      documentRow.findAllByType(Switch).length === 0
+    ) {
+      documentRow = documentRow.parent;
+    }
+    const trash = documentRow
+      .findAllByType(Icon)
+      .find(icon => icon.props.name === 'trash-2');
+    if (!trash) throw new Error('Knowledge-base delete control not found');
+    first.rtl.fireEvent.press(trash.parent!);
+    await first.rtl.waitFor(() =>
+      expect(first.view.getByText('Remove Document')).toBeTruthy(),
+    );
+    const removeButtons = first.view.getAllByText('Remove');
+    first.rtl.fireEvent.press(removeButtons[removeButtons.length - 1]);
+    await first.rtl.waitFor(() => {
+      expect(first.view.queryByText(PDF_NAME)).toBeNull();
+      expect(first.view.getByText('No documents added')).toBeTruthy();
+    });
+
+    installPdfBoundary(REPLACEMENT_FACT);
+    first.rtl.fireEvent.press(first.view.getByText('Add'));
+    await first.rtl.waitFor(
+      () => expect(first.view.getByText(PDF_NAME)).toBeTruthy(),
+      { timeout: 8000 },
+    );
+    first.rtl.fireEvent.press(first.view.getByText(PDF_NAME));
+    await first.rtl.waitFor(
+      () => {
+        expect(first.view.getByText(REPLACEMENT_FACT)).toBeTruthy();
+        expect(first.view.queryByText(FACT)).toBeNull();
+      },
+      { timeout: 8000 },
+    );
+    first.rtl.fireEvent.press(
+      first.view
+        .UNSAFE_getAllByType(Icon)
+        .find(icon => icon.props.name === 'arrow-left')!,
+    );
+    const [replacementDocument] = await ragService.getDocumentsByProject(
+      projectId,
+    );
+    const replacementPdfPath = replacementDocument.path;
+
+    first.rtl.fireEvent.press(
+      first.view
+        .UNSAFE_getAllByType(Icon)
+        .find(icon => icon.props.name === 'arrow-left')!,
+    );
+    first.rtl.fireEvent.press(first.view.getByTestId('home-tab'));
+    first.rtl.fireEvent.press(
+      await first.rtl.waitFor(() => first.view.getByTestId('new-chat-button')),
+    );
+    await first.rtl.waitFor(() =>
+      expect(first.view.getByTestId('chat-screen')).toBeTruthy(),
+    );
+    first.rtl.fireEvent.press(
+      first.view.getByText('Project: Default — tap to change'),
+    );
+    first.rtl.fireEvent.press(
+      await first.rtl.waitFor(() => first.view.getByText(PROJECT)),
+    );
+    first.rtl.fireEvent.press(first.view.getByTestId('quick-settings-button'));
+    const replacementTools = await first.rtl.waitFor(() =>
+      first.view.getByTestId('quick-tools'),
+    );
+    await first.rtl.waitFor(
+      () =>
+        expect(
+          first.rtl.within(replacementTools).queryByText('N/A'),
+        ).toBeNull(),
+      { timeout: 8000 },
+    );
+    first.rtl.fireEvent.press(replacementTools);
+    const replacementKbTool = await first.rtl.waitFor(() =>
+      first.view.getByTestId('tool-picker-row-search_knowledge_base'),
+    );
+    first.rtl.fireEvent(
+      first.rtl.within(replacementKbTool).UNSAFE_getByType(Switch),
+      'valueChange',
+      true,
+    );
+    first.rtl.fireEvent.press(first.view.getByTestId('tools-back-button'));
+    first.boundary.llama!.scriptCompletions([
+      {
+        toolCalls: [
+          {
+            name: 'search_knowledge_base',
+            arguments: { query: QUESTION },
+          },
+        ],
+      },
+      { text: REPLACEMENT_ANSWER },
+    ]);
+    sendChatMessage(first.rtl, first.view, QUESTION);
+    await first.rtl.waitFor(
+      () => expect(first.view.getByText(REPLACEMENT_ANSWER)).toBeTruthy(),
+      { timeout: 10000 },
+    );
+    expandKnowledgeBaseResult(first, /AMBER-902/);
+    await first.rtl.waitFor(() => {
+      expect(first.view.getAllByText(/AMBER-902/).length).toBeGreaterThan(1);
+      expect(first.view.queryByText(/QUARTZ-731/)).toBeNull();
+    });
 
     first.view.unmount();
     const relaunched = await relaunchMainApp({
@@ -237,8 +377,8 @@ describe('P1 full-App project knowledge-base journey', () => {
       },
       beforeRender: ({ boundary }) => {
         sqlite.install();
-        installPdfBoundary(FACT);
-        boundary.fs!.seedFile(durablePdfPath!, 4096);
+        installPdfBoundary(REPLACEMENT_FACT);
+        boundary.fs!.seedFile(replacementPdfPath!, 4096);
       },
     });
     relaunched.rtl.fireEvent.press(relaunched.view.getByTestId('projects-tab'));
@@ -251,7 +391,10 @@ describe('P1 full-App project knowledge-base journey', () => {
     );
     relaunched.rtl.fireEvent.press(relaunched.view.getByText(PDF_NAME));
     await relaunched.rtl.waitFor(
-      () => expect(relaunched.view.getByText(FACT)).toBeTruthy(),
+      () => {
+        expect(relaunched.view.getByText(REPLACEMENT_FACT)).toBeTruthy();
+        expect(relaunched.view.queryByText(FACT)).toBeNull();
+      },
       { timeout: 8000 },
     );
 

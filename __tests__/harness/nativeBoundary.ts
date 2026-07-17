@@ -218,6 +218,18 @@ export interface CompletionMeta {
   draft_tokens_accepted?: number;
 }
 
+type LlamaCompletionScript = {
+  text?: string;
+  toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>;
+  throwMessage?: string;
+  throwAfter?: string;
+  pauseAfter?: string;
+  holdBeforeStream?: boolean;
+  thinkingText?: string;
+  reasoning?: string;
+  completionMeta?: CompletionMeta;
+};
+
 export interface LlamaFake {
   /** Set the result the NEXT context.completion() resolves with (text drives the text tool-call parser).
    *  Pass { throwMessage } to make completion REJECT (e.g. a native context-overflow error).
@@ -225,7 +237,9 @@ export interface LlamaFake {
    *  enable_thinking===true the completion emits `thinkingText` (the model's reasoning-style output, as
    *  device B30 showed) instead of `text` — so a caller that fails to disable thinking gets the reasoning
    *  dump, EMERGENT from its own enable_thinking decision. With enable_thinking!==true it emits `text`. */
-  scriptCompletion(result: { text?: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; throwAfter?: string; pauseAfter?: string; holdBeforeStream?: boolean; thinkingText?: string; reasoning?: string; completionMeta?: CompletionMeta }): void;
+  scriptCompletion(result: LlamaCompletionScript): void;
+  /** Script consecutive native completions for a real multi-turn tool loop. */
+  scriptCompletions(results: LlamaCompletionScript[]): void;
   /** Release a stream held via scriptCompletion({ pauseAfter }). No-op if not paused. */
   releaseStream(): void;
   /** Make every GPU/HTP context init (initLlama with n_gpu_layers > 0) REJECT, as a real hung/timed-out
@@ -253,6 +267,18 @@ export interface LlamaFake {
 function makeLlamaFake(onRelease?: () => void, chatTemplate?: string, mtpLayers: number = 0): LlamaFake {
   const calls: LlamaFake['calls'] = { completion: [] };
   let pending: { text: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; throwAfter?: string; pauseAfter?: string; holdBeforeStream?: boolean; thinkingText?: string; reasoning?: string; completionMeta?: CompletionMeta } = { text: '' };
+  let scriptedQueue: Array<typeof pending> = [];
+  const normalizeScript = (r: LlamaCompletionScript): typeof pending => ({
+    text: r.text ?? '',
+    toolCalls: r.toolCalls,
+    throwMessage: r.throwMessage,
+    throwAfter: r.throwAfter,
+    pauseAfter: r.pauseAfter,
+    holdBeforeStream: r.holdBeforeStream,
+    thinkingText: r.thinkingText,
+    reasoning: r.reasoning,
+    completionMeta: r.completionMeta,
+  });
   let releaseFn: (() => void) | null = null; // resolves a mid-stream pause
   // Faithful llama.rn stop semantics: stopCompletion() aborts the IN-FLIGHT completion — it stops
   // streaming further tokens, releases a held pause, and the completion RESOLVES with
@@ -276,6 +302,7 @@ function makeLlamaFake(onRelease?: () => void, chatTemplate?: string, mtpLayers:
     // false (a real stop), because the service's own callback guards on `data.token` + isGenerating.
     completion: jest.fn(async (params: unknown, onToken?: (data: { token: string; content?: string; reasoning_content?: string }) => void) => {
       calls.completion.push([params]);
+      if (scriptedQueue.length > 0) pending = scriptedQueue.shift()!;
       stopRequested = false; // per-completion abort flag — a fresh completion starts un-stopped
       if (pending.throwMessage) throw new Error(pending.throwMessage);
       const speculative = (params as { speculative?: unknown })?.speculative;
@@ -431,7 +458,8 @@ function makeLlamaFake(onRelease?: () => void, chatTemplate?: string, mtpLayers:
 
   return {
     module, calls,
-    scriptCompletion: (r) => { pending = { text: r.text ?? '', toolCalls: r.toolCalls, throwMessage: r.throwMessage, throwAfter: r.throwAfter, pauseAfter: r.pauseAfter, holdBeforeStream: r.holdBeforeStream, thinkingText: r.thinkingText, reasoning: r.reasoning, completionMeta: r.completionMeta }; },
+    scriptCompletion: (r) => { scriptedQueue = []; pending = normalizeScript(r); },
+    scriptCompletions: (results) => { scriptedQueue = results.map(normalizeScript); pending = { text: '' }; },
     releaseStream: () => { const f = releaseFn; releaseFn = null; f?.(); },
     scriptGpuInitFailure: (fail = true) => { gpuInitFails = fail; },
     scriptInitFailure: (fail = true) => { initFails = fail; },

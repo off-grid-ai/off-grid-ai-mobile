@@ -48,6 +48,7 @@ class LLMService {
   /** GPU layers the user's settings asked for at load time (pre device-cap/backend resolution).
    *  >0 with activeGpuLayers 0 means the load silently downgraded to CPU — the fallback-notice verdict. */
   private requestedGpuLayers: number = 0;
+  private backendFallbackNoticeConsumed: boolean = false;
   private sessionCacheDir: string = `${RNFS.CachesDirectoryPath}/llm-sessions`;
   /** Serializes loadModel / unloadModel / reloadWithSettings to prevent concurrent native context init. */
   private contextMutexPromise: Promise<void> = Promise.resolve();
@@ -126,6 +127,7 @@ class LLMService {
     this.toolCallingSupported = toolCallingSupported;
     this.thinkingSupported = thinkingSupported;
     this.requestedGpuLayers = requestedGpuLayers;
+    this.backendFallbackNoticeConsumed = false;
     Object.assign(this, captureGpuInfo(context, gpuAttemptFailed, nGpuLayers));
     useAppStore.getState().setModelMaxContext(getModelMaxContext(context));
     logger.log(`[LLM] Model loaded, vision: ${this.supportsVision()}, tools: ${this.toolCallingSupported}, thinking: ${this.thinkingSupported}, mtp: ${this.mtp.description()}`);
@@ -448,6 +450,13 @@ class LLMService {
   getBackendFallbackNotice(): string | null {
     if (!this.context) return null;
     return describeGpuFallback({ requestedGpuLayers: this.requestedGpuLayers, activeGpuLayers: this.activeGpuLayers, gpuAttemptFailed: this.gpuAttemptFailed });
+  }
+  /** Consume this native load's downgrade once; UI callers choose where to render it. */
+  consumeBackendFallbackNotice(): string | null {
+    if (this.backendFallbackNoticeConsumed) return null;
+    const notice = this.getBackendFallbackNotice();
+    if (notice) this.backendFallbackNoticeConsumed = true;
+    return notice;
   }
   isCurrentlyGenerating(): boolean { return this.isGenerating; }
   private formatMessages(messages: Message[]): string { return formatLlamaMessages(messages, this.supportsVision(), this.multimodalSupport?.audio ?? false); }

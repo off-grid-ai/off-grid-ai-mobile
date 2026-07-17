@@ -258,6 +258,8 @@ export interface LlamaFake {
    *  accelerator init does — so initContextWithFallback falls back to the CPU attempt (n_gpu_layers:0).
    *  Models B24 (GPU init timeout → CPU/partial fallback). Persistent until cleared. */
   scriptGpuInitFailure(fail?: boolean): void;
+  /** Let GPU init resolve while native truth reports that no layers were offloaded. */
+  scriptGpuNativeRefusal(refuse?: boolean): void;
   /** Make EVERY init attempt fail (a model that can't load on any backend) — the real load path throws. */
   scriptInitFailure(fail?: boolean): void;
   /** Reject the next MTP completion before streaming, then allow standard decoding. */
@@ -311,6 +313,7 @@ function makeLlamaFake(onRelease?: () => void, chatTemplate?: string, mtpLayers:
   // is per-completion (a fresh completion starts un-stopped), matching the native abort behavior.
   let stopRequested = false;
   let gpuInitFails = false; // when true, initLlama with n_gpu_layers>0 rejects (GPU/HTP init timeout → CPU fallback)
+  let gpuNativeRefuses = false;
   let initFails = false; // when true, EVERY initLlama attempt rejects (a model that fails to load on any backend)
   let mtpInitialized = false;
   let mtpFailure: string | null = null;
@@ -469,9 +472,12 @@ function makeLlamaFake(onRelease?: () => void, chatTemplate?: string, mtpLayers:
       if (gpuInitFails && n > 0) throw new Error('GPU context init timed out after 8000ms');
       mtpInitialized = Number(params?.spec_draft_n_max ?? 0) > 0;
       const devices = Array.isArray(params?.devices) ? (params!.devices as string[]) : [];
-      (context as Record<string, unknown>).gpu = n > 0;
-      (context as Record<string, unknown>).devices = n > 0 ? devices : [];
-      (context as Record<string, unknown>).reasonNoGPU = n > 0 ? '' : 'gpu layers not requested';
+      const nativeGpu = n > 0 && !gpuNativeRefuses;
+      (context as Record<string, unknown>).gpu = nativeGpu;
+      (context as Record<string, unknown>).devices = nativeGpu ? devices : [];
+      (context as Record<string, unknown>).reasonNoGPU = nativeGpu
+        ? ''
+        : n > 0 ? 'native backend refused offload' : 'gpu layers not requested';
       return context;
     }),
     releaseContext: jest.fn().mockResolvedValue(undefined),
@@ -487,6 +493,7 @@ function makeLlamaFake(onRelease?: () => void, chatTemplate?: string, mtpLayers:
     scriptCompletions: (results) => { scriptedQueue = results.map(normalizeScript); pending = { text: '' }; },
     releaseStream: () => { const f = releaseFn; releaseFn = null; f?.(); },
     scriptGpuInitFailure: (fail = true) => { gpuInitFails = fail; },
+    scriptGpuNativeRefusal: (refuse = true) => { gpuNativeRefuses = refuse; },
     scriptInitFailure: (fail = true) => { initFails = fail; },
     scriptMtpFailure: (message = 'MTP speculative decoder unavailable') => { mtpFailure = message; },
     scriptMultimodalHold: () => { mmHoldPending = true; },

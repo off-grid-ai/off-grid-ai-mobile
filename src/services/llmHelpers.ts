@@ -249,7 +249,9 @@ export function captureGpuInfo(
   const nativeGpuAvailable = context.gpu ?? false;
   const gpuReason = (context as any).reasonNoGPU ?? '';
   const gpuDevices = (context as any).devices ?? [];
-  const activeGpuLayers = gpuAttemptFailed ? 0 : nGpuLayers;
+  // Native context truth wins over requested params: some drivers accept init
+  // but decline every offload layer without throwing.
+  const activeGpuLayers = gpuAttemptFailed || !nativeGpuAvailable ? 0 : nGpuLayers;
   const gpuEnabled = nativeGpuAvailable && activeGpuLayers > 0;
   return { gpuEnabled, gpuReason, gpuDevices, activeGpuLayers, gpuAttemptFailed };
 }

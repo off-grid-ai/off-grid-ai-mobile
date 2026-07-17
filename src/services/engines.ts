@@ -150,6 +150,13 @@ export function backendFallbackNotice(model: { engine?: string } | null | undefi
   return llmService.getBackendFallbackNotice();
 }
 
+/** Consume a local backend downgrade once per native load. Concurrent load
+ * waiters cannot produce duplicate conversation notices. */
+export function consumeBackendFallbackNotice(model: { engine?: string } | null | undefined): string | null {
+  if (!model || model.engine === 'litert') return null;
+  return llmService.consumeBackendFallbackNotice();
+}
+
 /**
  * Live capabilities of the ACTIVE text model (remote OR local), read from the running services
  * and fed through the one pure rule (deriveEngineCapabilities). The imperative counterpart to the

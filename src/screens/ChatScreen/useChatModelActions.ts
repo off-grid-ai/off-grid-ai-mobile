@@ -5,7 +5,7 @@ import {
   hideAlert,
 } from '../../components';
 import { llmService, activeModelService, modelManager } from '../../services';
-import { isModelReady, activeLocalTextCapabilities, activeTextCapabilities, backendFallbackNotice } from '../../services/engines';
+import { isModelReady, activeLocalTextCapabilities, activeTextCapabilities, consumeBackendFallbackNotice } from '../../services/engines';
 import { useAppStore } from '../../stores';
 import { DownloadedModel, RemoteModel, ONNXImageModel, isLiteRTModel } from '../../types';
 import logger from '../../utils/logger';
@@ -74,10 +74,15 @@ function addSystemMsg(
  * device-reported "Backend=GPU but the turn ran on CPU" class). The verdict is owned by the
  * engine layer (engines.backendFallbackNotice); this only renders it.
  */
-function addBackendFallbackMsg(deps: Pick<ModelActionDeps, 'activeModel' | 'activeConversationId' | 'addMessage'>) {
-  const notice = backendFallbackNotice(deps.activeModel);
-  if (!notice || !deps.activeConversationId) return;
-  deps.addMessage(deps.activeConversationId, {
+function addBackendFallbackMsg(
+  deps: Pick<ModelActionDeps, 'activeModel' | 'activeConversationId' | 'addMessage'>,
+  model: DownloadedModel | null | undefined = deps.activeModel,
+  conversationId: string | null | undefined = deps.activeConversationId,
+) {
+  if (!conversationId) return;
+  const notice = consumeBackendFallbackNotice(model);
+  if (!notice) return;
+  deps.addMessage(conversationId, {
     role: 'assistant',
     content: `_${notice}_`,
     isSystemInfo: true,
@@ -107,11 +112,15 @@ async function doLoadTextModel(deps: ModelActionDeps, opts?: { override?: boolea
 export async function initiateModelLoad(
   deps: ModelActionDeps,
   alreadyLoading: boolean,
-  /** When the load was requested to satisfy a chat turn, resume that turn after a
-   *  successful "Load Anyway". Non-generation callers (model select / reload) omit it,
-   *  so nothing is auto-resumed for them. */
-  onLoadedResume?: () => void,
+  options?: (() => void) | {
+    /** Resume a chat turn after a successful Load Anyway. */
+    onLoadedResume?: () => void;
+    /** A new send can create this before React updates activeConversationId. */
+    noticeConversationId?: string | null;
+  },
 ): Promise<ModelReadyOutcome> {
+  const onLoadedResume = typeof options === 'function' ? options : options?.onLoadedResume;
+  const noticeConversationId = typeof options === 'function' ? undefined : options?.noticeConversationId;
   const { activeModel, activeModelId } = deps;
   if (!activeModel || !activeModelId) return { ok: false, reason: 'no-model-selected' };
 
@@ -134,7 +143,10 @@ export async function initiateModelLoad(
       const loadTime = ((Date.now() - deps.modelLoadStartTimeRef.current) / 1000).toFixed(1);
       addSystemMsg(deps, `Model loaded: ${activeModel.name} (${loadTime}s)`);
     }
-    if (!alreadyLoading) addBackendFallbackMsg(deps);
+    // A first-send load may join a selection-triggered load already in flight.
+    // The native load owns once-only consumption, so every waiter can surface
+    // the result without either dropping it or duplicating it.
+    addBackendFallbackMsg(deps, activeModel, noticeConversationId);
     return { ok: true };
   } catch (error: any) {
     const detail = error?.message || 'Unknown error';
@@ -214,6 +226,7 @@ export async function ensureTextModelForChatFn(deps: {
 export async function ensureModelLoadedFn(
   deps: ModelActionDeps,
   onLoadedResume?: () => void,
+  noticeConversationId?: string | null,
 ): Promise<ModelReadyOutcome> {
   const { activeModel, activeModelId } = deps;
   if (!activeModel || !activeModelId) return { ok: false, reason: 'no-model-selected' };
@@ -228,7 +241,11 @@ export async function ensureModelLoadedFn(
     return { ok: true };
   }
   deps.setSupportsVision(loadedModelVision(activeModel)); // LiteRT: known from the flag pre-load
-  const outcome = await initiateModelLoad(deps, activeModelService.getActiveModels().text.isLoading, onLoadedResume);
+  const outcome = await initiateModelLoad(
+    deps,
+    activeModelService.getActiveModels().text.isLoading,
+    { onLoadedResume, noticeConversationId },
+  );
   if (!outcome.ok) return outcome;
   // Post-verify against native truth — catches a load that reported ok but left no resident model.
   return isModelReady(activeModel)
@@ -262,6 +279,7 @@ export async function proceedWithModelLoadFn(
       },
       onSuccess: () => {
         deps.setSupportsVision(loadedModelVision(model));
+        addBackendFallbackMsg(deps, model);
         if (deps.modelLoadStartTimeRef.current && deps.settings.showGenerationDetails && deps.activeConversationId) {
           const loadTime = ((Date.now() - deps.modelLoadStartTimeRef.current) / 1000).toFixed(1);
           deps.addMessage(deps.activeConversationId, {

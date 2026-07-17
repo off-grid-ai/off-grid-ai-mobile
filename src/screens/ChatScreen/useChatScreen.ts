@@ -227,7 +227,10 @@ export const useChatScreen = () => {
     downloadedModels, setAlertState, setIsClassifying, setAppImageGenerationStatus,
     setAppIsGeneratingImage, addMessage, clearStreamingMessage, deleteConversation,
     setActiveConversation, removeImagesByConversationId, navigation, setShowSettingsPanel,
-    ensureModelLoaded: async (onLoadedResume?: () => void) => ensureModelLoadedFn(modelDeps, onLoadedResume),
+    ensureModelLoaded: async (
+      onLoadedResume?: () => void,
+      noticeConversationId?: string | null,
+    ) => ensureModelLoadedFn(modelDeps, onLoadedResume, noticeConversationId),
     ensureTextModelForChat: () => ensureTextModelForChatFn({ setShowModelSelector, setLoadingModel, setIsModelLoading }),
     setPendingMessage: (text: string, attachments?: MediaAttachment[]) => { pendingMessageRef.current = { text, attachments }; },
     createConversation,

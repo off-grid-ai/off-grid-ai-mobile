@@ -64,7 +64,10 @@ export type GenerationDeps = {
   removeImagesByConversationId: (convId: string) => string[];
   navigation: any;
   setShowSettingsPanel?: SetState<boolean>;
-  ensureModelLoaded: () => Promise<ModelReadyOutcome>;
+  ensureModelLoaded: (
+    onLoadedResume?: () => void,
+    noticeConversationId?: string | null,
+  ) => Promise<ModelReadyOutcome>;
   /** Loads the last-selected text model for a chat request that has none; opens
    *  the model selector and returns false when no text model was ever chosen. */
   ensureTextModelForChat: () => Promise<boolean>;
@@ -369,7 +372,14 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   generationSession.begin(targetConversationId);
   // For remote models, skip local model loading
   if (!deps.activeModelInfo?.isRemote && deps.activeModel &&
-      !(await ensureReadyOrAlert(deps, 'startGeneration', () => { startGenerationFn(deps, call); }))) {
+      !(await ensureReadyOrAlert(
+        deps,
+        'startGeneration',
+        {
+          onRetry: () => { startGenerationFn(deps, call); },
+          noticeConversationId: targetConversationId,
+        },
+      ))) {
     generationSession.end('not-ready');
     return;
   }
@@ -616,7 +626,14 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
   // model that can't do vision (would crash with "Multimodal support not enabled"). Shared gate → identical UX.
   if (blockedImageForNonVisionModel(deps, userMessage.attachments)) return;
   if (!deps.activeModelInfo?.isRemote && deps.activeModel &&
-      !(await ensureReadyOrAlert(deps, 'regenerate', () => { regenerateResponseFn(deps, call); }))) return;
+      !(await ensureReadyOrAlert(
+        deps,
+        'regenerate',
+        {
+          onRetry: () => { regenerateResponseFn(deps, call); },
+          noticeConversationId: targetConversationId,
+        },
+      ))) return;
   logger.log('[RESEND-SM] regenerate → reached LLM generate path');
   generationSession.begin(targetConversationId);
   // LiteRT: native history must be rewound to match the JS messages we're about to replay.

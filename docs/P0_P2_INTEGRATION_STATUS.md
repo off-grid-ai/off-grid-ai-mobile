@@ -14,8 +14,8 @@ row does **not** mean that no test exists.
 - Release-checklist traceability contributes 196 rows; the app-derived inventory
   currently contributes 48 additional journeys, including the first P3 set.
 - P0: **19 verified**, **8 partial/device-gated**, **6 audit pending**.
-- P1: **26 verified**, **1 partial/device-gated**, **90 audit pending**.
-- P2: **0 verified**, **0 partial/device-gated**, **84 audit pending**.
+- P1: **34 verified**, **1 partial/device-gated**, **82 audit pending**.
+- P2: **3 verified**, **0 partial/device-gated**, **81 audit pending**.
 - P3: **0 verified**, **0 partial/device-gated**, **10 audit pending**.
 - `[x]` verified; `[~]` automated portion verified with a physical-device gate left; `[ ]` confirmed coverage gap; `[?]` evidence audit pending.
 - This file is updated as journeys are verified or product fixes land.
@@ -213,20 +213,20 @@ row does **not** mean that no test exists.
 
 ### 5 Memory
 
-- [?] #89 Text + whisper co-reside (roomy)
+- [x] #89 Text + whisper co-reside (roomy)
 - [?] #90 Sidecars co-reside with a heavy
-- [?] #94 Idle STT reclaimed in a voice turn
-- [?] #95 Whisper blocked then freed then retried
-- [?] #96 OS memory-warning evicts idle sidecars
+- [x] #94 Idle STT reclaimed in a voice turn
+- [x] #95 Whisper blocked then freed then retried
+- [x] #96 OS memory-warning evicts idle sidecars
 - [?] #97 Aggressive loads bigger automatically
 - [?] #100 Estimators agree (no safe-then-refuse)
 - [?] #102 Survival floor blocks a guaranteed OOM
 - [?] #103 Image->chat swap
 - [?] #104 Switch active model mid-chat
-- [?] #105 Eject All frees everything
-- [?] #106 Eject one resident from In Memory
-- [?] #107 Lazy reload after eject
-- [?] #108 In Memory shows loaded model RAM
+- [x] #105 Eject All frees everything
+- [x] #106 Eject one resident from In Memory
+- [x] #107 Lazy reload after eject
+- [x] #108 In Memory shows loaded model RAM
 - [?] #109 Stale TTS pressure cleared on delete
 
 ### 6 KB/Projects
@@ -341,9 +341,9 @@ row does **not** mean that no test exists.
 
 ### 5 Memory
 
-- [?] #91 TTS co-resident in a voice turn - existing-test evidence audit pending
-- [?] #92 Embedding sidecar resident on KB embed - existing-test evidence audit pending
-- [?] #98 Aggressive does not over-commit dirty - existing-test evidence audit pending
+- [x] #91 TTS co-resident in a voice turn
+- [x] #92 Embedding sidecar resident on KB embed
+- [x] #98 Aggressive does not over-commit dirty
 - [?] #110 Delete mid-playback does not kill audio - existing-test evidence audit pending
 - [?] #111 Device info memory readout - existing-test evidence audit pending
 

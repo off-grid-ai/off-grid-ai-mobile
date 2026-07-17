@@ -188,6 +188,7 @@ export const SettingsScreen: React.FC = () => {
           <View style={styles.navSection}>
             {[
               { icon: 'sliders', title: 'Model Settings', desc: 'System prompt, generation, and performance', screen: 'ModelSettings' as const },
+              { icon: 'zap', title: 'Experimental Features', desc: 'Features still being tested', screen: 'ExperimentalFeatures' as const },
               { icon: 'wifi', title: 'Remote Servers', desc: 'Connect to Off Grid AI Desktop, Ollama, LM Studio, and more', screen: 'RemoteServers' as const },
             //  { icon: 'search', title: 'Web Search', desc: 'Configure search API key for reliable results', screen: 'WebSearchSettings' as const },
               { icon: 'lock', title: 'Security', desc: 'Passphrase and app lock', screen: 'SecuritySettings' as const },

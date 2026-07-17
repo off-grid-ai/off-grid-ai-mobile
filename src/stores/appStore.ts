@@ -66,6 +66,8 @@ type AppSettings = {
   modelLoadingMode?: 'conservative' | 'balanced' | 'aggressive';
   cacheType: CacheType; showGenerationDetails: boolean; enabledTools: string[];
   thinkingEnabled: boolean;
+  /** Experimental embedded Multi-Token Prediction. Off by default. */
+  experimentalMtp: boolean;
   inferenceBackend: InferenceBackend;
   /** True once the user has explicitly picked an inference backend in Settings.
    *  While false, the boot-time backendSync may upgrade the default to the GPU
@@ -222,6 +224,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   showGenerationDetails: false,
   enabledTools: ['web_search', 'read_url', 'search_knowledge_base'],
   thinkingEnabled: false,
+  experimentalMtp: false,
   liteRTBackend: 'gpu',
   liteRTTemperature: 0.7,
   liteRTTopP: 0.9,

@@ -15,7 +15,7 @@ row does **not** mean that no test exists.
   currently contributes 48 additional journeys, including the first P3 set.
 - P0: **18 verified**, **10 partial/device-gated**, **0 confirmed gaps**, **5 audit pending**.
 - P1: **16 verified**, **1 partial/device-gated**, **40 confirmed gaps**, **60 audit pending**.
-- P2: **7 verified**, **0 partial/device-gated**, **23 confirmed gaps**, **54 audit pending**.
+- P2: **8 verified**, **0 partial/device-gated**, **22 confirmed gaps**, **54 audit pending**.
 - P3: **0 verified**, **0 partial/device-gated**, **0 confirmed gaps**, **10 audit pending**.
 - `[x]` verified; `[~]` automated portion verified with a physical-device gate left; `[ ]` confirmed coverage gap; `[?]` evidence audit pending.
 - This file is updated as journeys are verified or product fixes land.
@@ -345,7 +345,7 @@ row does **not** mean that no test exists.
 - [ ] #92 Embedding sidecar resident on KB embed
 - [ ] #98 Aggressive does not over-commit dirty
 - [?] #110 Delete mid-playback does not kill audio - existing-test evidence audit pending
-- [ ] #111 Device info memory readout
+- [x] #111 Device info memory readout
 
 ### 6 KB/Projects
 

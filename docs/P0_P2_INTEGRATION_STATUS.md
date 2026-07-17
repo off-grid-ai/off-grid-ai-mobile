@@ -15,7 +15,7 @@ row does **not** mean that no test exists.
   currently contributes 48 additional journeys, including the first P3 set.
 - P0: **19 verified**, **8 partial/device-gated**, **6 audit pending**.
 - P1: **53 verified**, **1 partial/device-gated**, **63 audit pending**.
-- P2: **30 verified**, **0 partial/device-gated**, **54 audit pending**.
+- P2: **32 verified**, **0 partial/device-gated**, **52 audit pending**.
 - P3: **0 verified**, **0 partial/device-gated**, **10 audit pending**.
 - `[x]` verified; `[~]` automated portion verified with a physical-device gate left; `[ ]` confirmed coverage gap; `[?]` evidence audit pending.
 - This file is updated as journeys are verified or product fixes land.
@@ -357,8 +357,8 @@ row does **not** mean that no test exists.
 
 ### 7 Tools
 
-- [?] #124 Datetime tool runs - existing-test evidence audit pending
-- [?] #125 Device info tool runs - existing-test evidence audit pending
+- [x] #124 Datetime tool runs
+- [x] #125 Device info tool runs
 - [?] #126 Web search tool runs - existing-test evidence audit pending
 - [?] #128 Thinking + tool + answer render in order - existing-test evidence audit pending
 - [x] #130 Stringified tool args parsed

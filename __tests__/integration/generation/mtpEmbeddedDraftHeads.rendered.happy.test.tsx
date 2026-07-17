@@ -46,6 +46,7 @@ describe('embedded Multi-Token Prediction journey', () => {
 
     await rtl.waitFor(() => {
       expect(view.getByText('MTP is active for this model.')).toBeTruthy();
+      expect(view.getByText('MTP 5/8 accepted')).toBeTruthy();
     });
     expect(boundary.llama!.calls.completion[0][0]).toEqual(
       expect.objectContaining({

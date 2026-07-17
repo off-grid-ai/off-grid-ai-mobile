@@ -188,6 +188,10 @@ export interface GenerationMeta {
   timeToFirstToken?: number;
   /** Token count (text generation only) */
   tokenCount?: number;
+  /** Embedded Multi-Token Prediction acceptance metrics (text generation only). */
+  mtpEnabled?: boolean;
+  draftTokens?: number;
+  draftTokensAccepted?: number;
   /** Model load/init time in seconds */
   modelLoadTimeSeconds?: number;
   /** Image generation steps */

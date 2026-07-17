@@ -5,9 +5,32 @@ export const REMOTE_ENDPOINT = 'http://localhost:1234';
 export const REMOTE_MODEL_ID = 'llama-3-8b';
 
 /** Seed only the remote HTTP discovery boundary used by the real server form/store. */
-export function installRemoteDiscoveryBoundary(): void {
+export function installRemoteDiscoveryBoundary(capabilities?: {
+  supportsThinking?: boolean;
+  supportsToolCalling?: boolean;
+}): void {
   globalThis.fetch = async input => {
     const url = String(input);
+    if (capabilities && url.endsWith('/api/v1/models')) {
+      return new Response(
+        JSON.stringify({
+          models: [
+            {
+              key: REMOTE_MODEL_ID,
+              max_context_length: 8192,
+              capabilities: {
+                vision: false,
+                trained_for_tool_use: capabilities.supportsToolCalling === true,
+              },
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+    }
     if (url.endsWith('/v1/models')) {
       return new Response(
         JSON.stringify({
@@ -19,6 +42,15 @@ export function installRemoteDiscoveryBoundary(): void {
           headers: { 'Content-Type': 'application/json' },
         },
       );
+    }
+    if (capabilities && url.endsWith('/v1/chat/completions')) {
+      const reasoningDelta = capabilities.supportsThinking
+        ? 'data: {"choices":[{"delta":{"reasoning_content":"Thinking"}}]}\n\n'
+        : 'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n';
+      return new Response(`${reasoningDelta}data: [DONE]\n\n`, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      });
     }
     return new Response(JSON.stringify({}), {
       status: 404,

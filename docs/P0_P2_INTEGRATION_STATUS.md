@@ -13,7 +13,7 @@ row does **not** mean that no test exists.
 - Current scope: **244 journeys** - **33 P0**, **117 P1**, **84 P2**, and **10 P3**.
 - Release-checklist traceability contributes 196 rows; the app-derived inventory
   currently contributes 48 additional journeys, including the first P3 set.
-- P0: **9 verified**, **10 partial/device-gated**, **9 confirmed gaps**, **5 audit pending**.
+- P0: **11 verified**, **10 partial/device-gated**, **7 confirmed gaps**, **5 audit pending**.
 - P1: **11 verified**, **1 partial/device-gated**, **45 confirmed gaps**, **60 audit pending**.
 - P2: **4 verified**, **0 partial/device-gated**, **26 confirmed gaps**, **54 audit pending**.
 - P3: **0 verified**, **0 partial/device-gated**, **0 confirmed gaps**, **10 audit pending**.
@@ -111,8 +111,8 @@ row does **not** mean that no test exists.
 ### 2 Text gen
 
 - [x] #23 First message loads + replies (GGUF)
-- [ ] #42 Failed generation clears the spinner
-- [ ] #43 Stop mid-generation keeps partial
+- [x] #42 Failed generation clears the spinner
+- [x] #43 Stop mid-generation keeps partial
 
 ### 3 Voice
 

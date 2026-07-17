@@ -15,7 +15,7 @@ row does **not** mean that no test exists.
   currently contributes 48 additional journeys, including the first P3 set.
 - P0: **23 verified**, **10 partial/device-gated**, **0 confirmed gaps**, **0 audit pending**.
 - P1: **51 verified**, **2 partial/device-gated**, **13 confirmed gaps**, **51 audit pending**.
-- P2: **34 verified**, **0 partial/device-gated**, **13 confirmed gaps**, **37 audit pending**.
+- P2: **35 verified**, **0 partial/device-gated**, **12 confirmed gaps**, **37 audit pending**.
 - P3: **0 verified**, **0 partial/device-gated**, **0 confirmed gaps**, **10 audit pending**.
 - `[x]` verified; `[~]` automated portion verified with a physical-device gate left; `[ ]` confirmed coverage gap; `[?]` evidence audit pending.
 - This file is updated as journeys are verified or product fixes land.
@@ -337,7 +337,7 @@ row does **not** mean that no test exists.
 
 - [x] #78 Photo permission prompt on first attach
 - [x] #79 Photo permission DENIED handled gracefully
-- [ ] #81 Image + text in one turn
+- [x] #81 Image + text in one turn
 
 ### 5 Memory
 

@@ -75,6 +75,31 @@ describe('embedded Multi-Token Prediction journey', () => {
     });
   });
 
+  it('keeps standard decoding for an ordinary GGUF when the experiment is enabled', async () => {
+    const { boundary, rtl, view } = await renderMainApp({
+      boundary: { llama: true, llamaMtpLayers: 0 },
+      persistedAppState: {
+        settings: { showGenerationDetails: true, experimentalMtp: true },
+      },
+    });
+    boundary.llama!.scriptCompletion({
+      text: 'This ordinary model uses standard decoding.',
+    });
+
+    await selectModelAndOpenChat(rtl, view);
+    sendMessage(rtl, view, 'Use the supported decoding path');
+
+    await rtl.waitFor(() => {
+      expect(
+        view.getByText('This ordinary model uses standard decoding.'),
+      ).toBeTruthy();
+      expect(view.queryByText(/^MTP /)).toBeNull();
+    });
+    expect(boundary.llama!.calls.completion[0][0]).not.toHaveProperty(
+      'speculative',
+    );
+  });
+
   it('retries once with standard decoding when the runtime rejects MTP', async () => {
     const { boundary, rtl, view } = await renderMainApp({
       boundary: { llama: true, llamaMtpLayers: 3 },

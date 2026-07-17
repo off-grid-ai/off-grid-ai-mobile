@@ -162,3 +162,30 @@ export async function relaunchMainApp(
   );
   return { boundary, asyncStorage, rtl, view };
 }
+
+export type RenderedAppJourney = Awaited<ReturnType<typeof renderMainApp>>;
+
+/** Reach a new chat through the same Home model picker and navigation gestures a user performs. */
+export async function openChatWithJourneyModel(
+  rtl: RenderedAppJourney['rtl'],
+  view: RenderedAppJourney['view'],
+): Promise<void> {
+  rtl.fireEvent.press(view.getByTestId('browse-models-button'));
+  await rtl.waitFor(() => expect(view.getByText('Journey Model')).toBeTruthy());
+  rtl.fireEvent.press(view.getByTestId('model-item'));
+  await rtl.waitFor(() =>
+    expect(view.getByTestId('new-chat-button')).toBeTruthy(),
+  );
+  rtl.fireEvent.press(view.getByTestId('new-chat-button'));
+  await rtl.waitFor(() => expect(view.getByTestId('chat-screen')).toBeTruthy());
+}
+
+/** Type and send through the rendered composer; callers assert the resulting product behavior. */
+export function sendChatMessage(
+  rtl: RenderedAppJourney['rtl'],
+  view: RenderedAppJourney['view'],
+  message: string,
+): void {
+  rtl.fireEvent.changeText(view.getByTestId('chat-input'), message);
+  rtl.fireEvent.press(view.getByTestId('send-button'));
+}

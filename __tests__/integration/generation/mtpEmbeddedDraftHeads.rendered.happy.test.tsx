@@ -1,29 +1,8 @@
-import { renderMainApp } from '../../harness/appJourney';
-
-type AppJourney = Awaited<ReturnType<typeof renderMainApp>>;
-
-async function selectModelAndOpenChat(
-  rtl: AppJourney['rtl'],
-  view: AppJourney['view'],
-) {
-  rtl.fireEvent.press(view.getByTestId('browse-models-button'));
-  await rtl.waitFor(() => expect(view.getByText('Journey Model')).toBeTruthy());
-  rtl.fireEvent.press(view.getByTestId('model-item'));
-  await rtl.waitFor(() =>
-    expect(view.getByTestId('new-chat-button')).toBeTruthy(),
-  );
-  rtl.fireEvent.press(view.getByTestId('new-chat-button'));
-  await rtl.waitFor(() => expect(view.getByTestId('chat-screen')).toBeTruthy());
-}
-
-function sendMessage(
-  rtl: AppJourney['rtl'],
-  view: AppJourney['view'],
-  text: string,
-) {
-  rtl.fireEvent.changeText(view.getByTestId('chat-input'), text);
-  rtl.fireEvent.press(view.getByTestId('send-button'));
-}
+import {
+  openChatWithJourneyModel,
+  renderMainApp,
+  sendChatMessage,
+} from '../../harness/appJourney';
 
 describe('embedded Multi-Token Prediction journey', () => {
   it('uses embedded MTP heads for chat when the experiment is enabled', async () => {
@@ -41,8 +20,8 @@ describe('embedded Multi-Token Prediction journey', () => {
         draft_tokens_accepted: 5,
       },
     });
-    await selectModelAndOpenChat(rtl, view);
-    sendMessage(rtl, view, 'Explain MTP briefly');
+    await openChatWithJourneyModel(rtl, view);
+    sendChatMessage(rtl, view, 'Explain MTP briefly');
 
     await rtl.waitFor(() => {
       expect(view.getByText('MTP is active for this model.')).toBeTruthy();
@@ -66,8 +45,8 @@ describe('embedded Multi-Token Prediction journey', () => {
       text: 'Standard decoding still works.',
     });
 
-    await selectModelAndOpenChat(rtl, view);
-    sendMessage(rtl, view, 'Say hello');
+    await openChatWithJourneyModel(rtl, view);
+    sendChatMessage(rtl, view, 'Say hello');
 
     await rtl.waitFor(() => {
       expect(view.getByText('Standard decoding still works.')).toBeTruthy();
@@ -86,8 +65,8 @@ describe('embedded Multi-Token Prediction journey', () => {
       text: 'This ordinary model uses standard decoding.',
     });
 
-    await selectModelAndOpenChat(rtl, view);
-    sendMessage(rtl, view, 'Use the supported decoding path');
+    await openChatWithJourneyModel(rtl, view);
+    sendChatMessage(rtl, view, 'Use the supported decoding path');
 
     await rtl.waitFor(() => {
       expect(
@@ -110,8 +89,8 @@ describe('embedded Multi-Token Prediction journey', () => {
     boundary.llama!.scriptCompletion({ text: 'The safe fallback completed.' });
     boundary.llama!.scriptMtpFailure();
 
-    await selectModelAndOpenChat(rtl, view);
-    sendMessage(rtl, view, 'Continue even if MTP is unavailable');
+    await openChatWithJourneyModel(rtl, view);
+    sendChatMessage(rtl, view, 'Continue even if MTP is unavailable');
 
     await rtl.waitFor(() => {
       expect(view.getAllByText('The safe fallback completed.')).toHaveLength(1);

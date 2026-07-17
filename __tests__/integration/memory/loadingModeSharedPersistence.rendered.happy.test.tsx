@@ -28,10 +28,11 @@ describe('P0 shared model-loading mode journey', () => {
       expect(view.getByTestId('text-generation-accordion')).toBeTruthy(),
     );
 
-    fireEvent.press(view.getByTestId('text-generation-accordion'));
-    fireEvent.press(
-      await waitFor(() => view.getByTestId('text-advanced-toggle')),
-    );
+    // Model Loading is a global runtime policy, so it is visible before any
+    // modality-specific accordion is opened.
+    expect(
+      view.queryByText('Configure LLM behavior for text responses.'),
+    ).toBeNull();
     const globalAggressive = await waitFor(() =>
       view.getByTestId('model-loading-mode-aggressive-button'),
     );
@@ -55,10 +56,8 @@ describe('P0 shared model-loading mode journey', () => {
     await waitFor(() => expect(view.getByTestId('chat-input')).toBeTruthy());
 
     fireEvent.press(view.getByTestId('chat-settings-icon'));
-    fireEvent.press(await waitFor(() => view.getByText('TEXT GENERATION')));
-    fireEvent.press(
-      await waitFor(() => view.getByTestId('modal-text-advanced-toggle')),
-    );
+    // The chat sheet exposes the same global policy above Image/Text sections.
+    expect(view.queryByTestId('modal-text-advanced-toggle')).toBeNull();
     await waitFor(() => {
       expect(
         view.getByTestId('model-loading-mode-aggressive-button').props

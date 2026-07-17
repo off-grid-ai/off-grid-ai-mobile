@@ -14,12 +14,9 @@
  * the user feels (model loaded / refused, which dialog they see), never
  * `expect(gate).toHaveBeenCalled()`.
  *
- * The ratified contract: "Load Anyway" (override) is UNCONDITIONAL. When the user
- * taps it, makeRoomFor evicts every evictable resident to free the maximum RAM and
- * ALWAYS loads (fits: true) — there is NO survival floor, and it NEVER refuses. The
- * old "override still refuses below a survival floor / when the model is too big"
- * behaviour is gone: the UI frames it as "not recommended, but you can try", and the
- * device — not a predictive guard — decides whether the load survives.
+ * The contract: Load Anyway evicts every evictable resident and bypasses a cautious
+ * budget refusal when the fresh post-eviction RAM probe is safe. It cannot cross the
+ * hard survival floor where native allocation would risk an uncatchable OS kill.
  *
  * The contrast this suite pins: the SAME big model WITHOUT override is refused by the
  * normal memory gate (an overridable "Insufficient Memory" prompt, no eviction); WITH
@@ -188,7 +185,7 @@ describe('Load Anyway override chain (UI helper → service → residency)', () 
     expect(getAppState().activeModelId).not.toBe('big-gguf');
   });
 
-  it('tapping Load Anyway evicts the clean resident and unconditionally loads the model, even with pre-eviction free RAM very low', async () => {
+  it('tapping Load Anyway evicts the clean resident and loads when post-eviction RAM is safe', async () => {
     const victimUnload = registerCleanVictim();
     useAppStore.setState({ downloadedModels: [bigGguf()] });
 
@@ -207,12 +204,9 @@ describe('Load Anyway override chain (UI helper → service → residency)', () 
     expect(ui.alerts.map(a => a.title)).not.toContain('Error');
   });
 
-  it('unconditional override: even when real free RAM stays extremely low AFTER eviction, Load Anyway still loads (no survival floor, no refusal) — while WITHOUT override the same model is refused', async () => {
-    // Free RAM stays very low even after the eviction unload fires. Under the OLD
-    // survival-floor behaviour this was a hard Error; the ratified behaviour is that
-    // "Load Anyway" is UNCONDITIONAL — it evicts everything and loads regardless.
+  it('hard floor: critically low RAM after eviction stops native loading and does not offer Load Anyway twice', async () => {
     mockHardwareService.getAvailableMemoryGB.mockImplementation(() =>
-      reclaimed ? 1.1 : 1,
+      reclaimed ? 0.6 : 0.5,
     );
     const victimUnload = registerCleanVictim();
     useAppStore.setState({ downloadedModels: [bigGguf()] });
@@ -226,16 +220,15 @@ describe('Load Anyway override chain (UI helper → service → residency)', () 
     expect(modelResidencyManager.isResident('whisper')).toBe(true);
     expect(getAppState().activeModelId).not.toBe('big-gguf');
 
-    // WITH override (tapping Load Anyway) it evicts the victim and loads unconditionally.
-    mockLlmService.isModelLoaded.mockReturnValue(true); // native reports loaded after the forced load
+    // WITH override it evicts first, measures the still-critical RAM, then stops
+    // before touching the native engine.
     await gated.tapLoadAnyway();
 
     expect(victimUnload).toHaveBeenCalledTimes(1);
     expect(modelResidencyManager.isResident('whisper')).toBe(false);
-    expect(mockLlmService.loadModel).toHaveBeenCalledTimes(1);
-    expect(getAppState().activeModelId).toBe('big-gguf');
-    // The override never dead-ends in an Error, and it only offered Load Anyway once.
-    expect(gated.alerts.map(a => a.title)).not.toContain('Error');
+    expect(mockLlmService.loadModel).not.toHaveBeenCalled();
+    expect(getAppState().activeModelId).not.toBe('big-gguf');
+    expect(gated.lastVisible()?.title).toBe('Error');
     const overridePrompts = gated.alerts.filter(
       a => a.title === 'Insufficient Memory',
     );

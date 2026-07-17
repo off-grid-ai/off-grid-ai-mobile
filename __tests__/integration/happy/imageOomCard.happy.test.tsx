@@ -19,7 +19,7 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 describe('happy — image-gen OOM surfaces the graceful "Not Enough Memory" card (heavy entry point)', () => {
-  it('refuses the over-budget image load and shows the card with Load Anyway (no crash, no image)', async () => {
+  it('shows Load Anyway, then honors the explicit override and renders the image', async () => {
     const h = await setupChatScreen({ engine: 'litert', platform: 'ios' }); // generous RAM for text-model setup
     h.render();
     await h.placeImageModel({ backend: 'coreml' }); // Core ML — no integrity-file gate; ~2GB model (~3.7GB est on iOS)
@@ -40,5 +40,13 @@ describe('happy — image-gen OOM surfaces the graceful "Not Enough Memory" card
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(/Not Enough Memory/)).not.toBeNull(); });
     expect(h.view!.queryByText('Load Anyway')).not.toBeNull();
     expect(h.boundary.diffusion.calls.generateImage).toHaveLength(0);
+
+    // The explicit override is a real user action. It re-runs the owning image
+    // load/generation path with override=true instead of presenting a second dead end.
+    h.rtl.fireEvent.press(h.view!.getByText('Load Anyway'));
+    await h.rtl.waitFor(() => {
+      expect(h.boundary.diffusion.calls.generateImage).toHaveLength(1);
+      expect(h.view!.queryByTestId('generated-image')).not.toBeNull();
+    }, { timeout: 6000 });
   });
 });

@@ -159,13 +159,15 @@ class ActiveModelService {
     const textIsDirty = model.engine === 'litert';
     // Residency manager is authoritative: evict other generation models to fit the budget.
     // Evicted unloads are the non-locking internal variants (we hold the lock), so no deadlock.
+    const overrideApplied =
+      !!opts?.override || modelResidencyManager.hasSessionOverride(modelId);
     const room = await modelResidencyManager.makeRoomFor(
       { key: 'text', type: 'text', modelId, sizeMB: textSizeMB, dirtyMemory: textIsDirty },
       { override: opts?.override },
     );
     // First refusal is OVERRIDABLE ("Load Anyway"); a refusal UNDER override is a hard limit → plain Error.
     if (!room.fits) {
-      throw opts?.override
+      throw overrideApplied
         ? new Error('Not enough free memory to load this model, even after freeing other models. Close other apps or choose a smaller model.')
         : new OverridableMemoryError('Not enough free memory to load this model. Close other apps or choose a smaller model.');
     }
@@ -176,7 +178,7 @@ class ActiveModelService {
       modelId,
       store,
       timeoutMs,
-      override: !!opts?.override || modelResidencyManager.hasSessionOverride(modelId),
+      override: overrideApplied,
       loadedTextModelId: this.loadedTextModelId,
       onLoaded: id => {
         this.setLoadedText(id);

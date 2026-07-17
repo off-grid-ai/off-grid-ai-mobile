@@ -1,22 +1,22 @@
-/** P0 #99 / #101 — an oversized image model fails gracefully and honors a safe override. */
+/** P1 #102 — Load Anyway cannot cross the post-eviction device survival floor. */
 import {
   openChatWithJourneyModel,
   renderMainApp,
   sendChatMessage,
 } from '../../harness/appJourney';
-import { GB } from '../../harness/nativeBoundary';
+import { GB, MB } from '../../harness/nativeBoundary';
 
-const MODEL_PATH = '/docs/image_models/oversized-coreml';
+const MODEL_PATH = '/docs/image_models/catastrophic-coreml';
 
-describe('P0 oversized-model recovery journey', () => {
-  it('shows the memory card, then generates after the explicit override', async () => {
+describe('P1 full-App override survival-floor journey', () => {
+  it('offers the cautious override once, then blocks native loading at critically low real RAM', async () => {
     const imageModel = {
-      id: 'oversized-coreml',
-      name: 'Oversized Image',
-      description: 'A model larger than this device safe budget',
+      id: 'catastrophic-coreml',
+      name: 'Catastrophic Image',
+      description: 'A model that cannot leave enough live memory for the app',
       modelPath: MODEL_PATH,
       downloadedAt: '2026-07-17T00:00:00.000Z',
-      size: 1 * GB,
+      size: 2 * GB,
       style: 'Image',
       backend: 'coreml' as const,
     };
@@ -26,15 +26,11 @@ describe('P0 oversized-model recovery journey', () => {
         ram: {
           platform: 'ios',
           totalBytes: 4 * GB,
-          // The 1.8GB estimated dirty footprint exceeds the current dynamic budget
-          // after its normal 1GB headroom, so the first attempt is refused. It still
-          // leaves ~800MB after loading, above the hard survival floor, so Load
-          // Anyway may honestly proceed.
-          availBytes: 2600 * 1024 * 1024,
+          availBytes: 300 * MB,
         },
       },
       beforeRender: async ({ boundary: native, asyncStorage }) => {
-        native.fs!.seedFile(`${MODEL_PATH}/model.mlmodelc`, 1 * GB);
+        native.fs!.seedFile(`${MODEL_PATH}/model.mlmodelc`, 2 * GB);
         await asyncStorage.setItem(
           '@local_llm/downloaded_image_models',
           JSON.stringify([imageModel]),
@@ -59,25 +55,22 @@ describe('P0 oversized-model recovery journey', () => {
       fireEvent(visibleModal!, 'requestClose');
     });
 
-    sendChatMessage(rtl, view, 'a fox in the snow');
+    sendChatMessage(rtl, view, 'a lighthouse in a storm');
     await waitFor(() => {
-      expect(view.getByTestId('chat-screen')).toBeTruthy();
-      expect(view.getByTestId('model-failure-image')).toBeTruthy();
       expect(view.getByText('Image model: Not Enough Memory')).toBeTruthy();
       expect(view.getByTestId('model-failure-load-anyway-image')).toBeTruthy();
-      expect(view.queryByTestId('generated-image')).toBeNull();
     });
-    expect(boundary.diffusion.calls.generateImage).toHaveLength(0);
 
     fireEvent.press(view.getByTestId('model-failure-load-anyway-image'));
-    await waitFor(
-      () => {
-        expect(view.queryByTestId('model-failure-image')).toBeNull();
-        expect(view.getByTestId('generated-image')).toBeTruthy();
-      },
-      { timeout: 8000 },
-    );
-    expect(boundary.diffusion.calls.generateImage).toHaveLength(1);
+    await waitFor(() => {
+      expect(view.getByText('Image model: Not Enough Memory')).toBeTruthy();
+      expect(view.queryByTestId('model-failure-load-anyway-image')).toBeNull();
+      expect(view.queryByTestId('generated-image')).toBeNull();
+    });
+
+    // The app stops at the JS survival gate, before allocating native image RAM.
+    expect(boundary.diffusion.module.loadModel).toHaveBeenCalledTimes(0);
+    expect(boundary.diffusion.calls.generateImage).toHaveLength(0);
     view.unmount();
   }, 30000);
 });

@@ -11,15 +11,10 @@ import { ImageGenerationSection } from './ImageGenerationSection';
 import { TextGenerationSection } from './TextGenerationSection';
 import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
 import { SWEET_SPOT_SIZE, DEFAULT_IMAGE_GUIDANCE, DEFAULT_IMAGE_STEPS } from '../../utils/imageGenAdvice';
+import { TEXT_GENERATION_DEFAULTS } from '../../config/textGenerationDefaults';
 
 const DEFAULT_SETTINGS = {
-  temperature: 0.7,
-  maxTokens: 1024,
-  topP: 0.9,
-  repeatPenalty: 1.1,
-  contextLength: 4096,
-  nThreads: 0,
-  nBatch: 512,
+  ...TEXT_GENERATION_DEFAULTS,
   // Reset the image params too, from the same single source the pipeline honors — a
   // reset previously left a custom image size/guidance untouched (Q12).
   imageWidth: SWEET_SPOT_SIZE,

@@ -3,6 +3,10 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, CacheType, InferenceBackend, INFERENCE_BACKENDS, LiteRTBackend, GeneratedImage } from '../types';
+import {
+  LITERT_TEXT_GENERATION_DEFAULTS,
+  LLAMA_TEXT_GENERATION_DEFAULTS,
+} from '../config/textGenerationDefaults';
 
 function isUnknownLike(value: string): boolean {
   const normalized = value.trim().toLowerCase();
@@ -197,13 +201,7 @@ const DEFAULT_CHECKLIST: OnboardingChecklist = {
 
 const DEFAULT_SETTINGS: AppSettings = {
   systemPrompt: 'You are a helpful AI assistant running locally on the user\'s device. Be concise and helpful.',
-  temperature: 0.7,
-  maxTokens: 1024,
-  topP: 0.9,
-  repeatPenalty: 1.1,
-  contextLength: 4096,
-  nThreads: 0,
-  nBatch: 512,
+  ...LLAMA_TEXT_GENERATION_DEFAULTS,
   imageGenerationMode: 'auto' as ImageGenerationMode,
   autoDetectMethod: 'pattern' as AutoDetectMethod,
   classifierModelId: null,
@@ -226,9 +224,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   thinkingEnabled: false,
   experimentalMtp: false,
   liteRTBackend: 'gpu',
-  liteRTTemperature: 0.7,
-  liteRTTopP: 0.9,
-  liteRTMaxTokens: 4096,
+  ...LITERT_TEXT_GENERATION_DEFAULTS,
 };
 
 function migrateEnabledTools(merged: any): void {

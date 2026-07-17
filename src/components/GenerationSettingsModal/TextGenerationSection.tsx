@@ -5,6 +5,7 @@ import { AdvancedToggle } from '../AdvancedToggle';
 import { useThemedStyles } from '../../theme';
 import { useAppStore, selectIsLiteRT } from '../../stores';
 import { hardwareService } from '../../services';
+import { TEXT_GENERATION_DEFAULTS } from '../../config/textGenerationDefaults';
 import { createStyles } from './styles';
 import {
   CpuThreadsSlider,
@@ -30,17 +31,6 @@ interface SettingConfig {
 }
 
 const formatContext = (v: number) => v >= 1024 ? `${(v / 1024).toFixed(0)}K` : v.toString();
-
-const DEFAULT_SETTINGS: Record<string, number> = {
-  temperature: 0.7,
-  maxTokens: 1024,
-  topP: 0.9,
-  repeatPenalty: 1.1,
-  contextLength: 4096,
-  liteRTTemperature: 0.7,
-  liteRTTopP: 0.9,
-  liteRTMaxTokens: 4096,
-};
 
 // ─── Config builders ──────────────────────────────────────────────────────────
 
@@ -122,7 +112,8 @@ function buildLiteRTConfig(modelMaxContext: number | null = null): SettingConfig
 const SettingSlider: React.FC<{ config: SettingConfig }> = ({ config }) => {
   const { settings, updateSettings } = useAppStore();
   const rawValue = (settings as Record<string, unknown>)[config.key];
-  const value = (rawValue ?? DEFAULT_SETTINGS[config.key]) as number;
+  const defaultKey = config.key as keyof typeof TEXT_GENERATION_DEFAULTS;
+  const value = (rawValue ?? TEXT_GENERATION_DEFAULTS[defaultKey]) as number;
 
   return (
     <SliderSetting

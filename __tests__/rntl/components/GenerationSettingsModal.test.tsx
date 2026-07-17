@@ -243,6 +243,9 @@ describe('GenerationSettingsModal', () => {
       contextLength: 4096,
       nThreads: 0,
       nBatch: 512,
+      liteRTTemperature: 0.7,
+      liteRTTopP: 0.9,
+      liteRTMaxTokens: 4096,
       // Reset now also restores the image params (Q12).
       imageWidth: 256,
       imageHeight: 256,

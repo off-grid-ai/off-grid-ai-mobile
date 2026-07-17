@@ -67,7 +67,7 @@ type AppSettings = {
   cacheType: CacheType; showGenerationDetails: boolean; enabledTools: string[];
   thinkingEnabled: boolean;
   /** Experimental embedded Multi-Token Prediction. Off by default. */
-  experimentalMtp: boolean;
+  experimentalMtp?: boolean;
   inferenceBackend: InferenceBackend;
   /** True once the user has explicitly picked an inference backend in Settings.
    *  While false, the boot-time backendSync may upgrade the default to the GPU

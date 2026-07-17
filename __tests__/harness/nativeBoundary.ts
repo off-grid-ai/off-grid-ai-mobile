@@ -214,6 +214,8 @@ export interface CompletionMeta {
   stopped_limit?: number;   // 1 = hit the n_predict cap (B15's condition)
   truncated?: boolean;      // llama.rn's own truncation flag
   tokens_predicted?: number;// == n_predict at the cap (device saw 1024)
+  draft_tokens?: number;
+  draft_tokens_accepted?: number;
 }
 
 export interface LlamaFake {
@@ -232,6 +234,8 @@ export interface LlamaFake {
   scriptGpuInitFailure(fail?: boolean): void;
   /** Make EVERY init attempt fail (a model that can't load on any backend) — the real load path throws. */
   scriptInitFailure(fail?: boolean): void;
+  /** Reject the next MTP completion before streaming, then allow standard decoding. */
+  scriptMtpFailure(message?: string): void;
   /** HOLD the next post-init multimodal-support check (context.getMultimodalSupport) open until
    *  releaseMultimodalHold() — the device-shaped load window between context init and capability
    *  detection (the 2026-07-13 18:50 device log shows ~3.4s there for gemma-4-E2B: init succeeded
@@ -246,7 +250,7 @@ export interface LlamaFake {
   calls: { completion: unknown[][] };
 }
 
-function makeLlamaFake(onRelease?: () => void, chatTemplate?: string): LlamaFake {
+function makeLlamaFake(onRelease?: () => void, chatTemplate?: string, mtpLayers: number = 0): LlamaFake {
   const calls: LlamaFake['calls'] = { completion: [] };
   let pending: { text: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; throwAfter?: string; pauseAfter?: string; holdBeforeStream?: boolean; thinkingText?: string; reasoning?: string; completionMeta?: CompletionMeta } = { text: '' };
   let releaseFn: (() => void) | null = null; // resolves a mid-stream pause
@@ -257,6 +261,8 @@ function makeLlamaFake(onRelease?: () => void, chatTemplate?: string): LlamaFake
   let stopRequested = false;
   let gpuInitFails = false; // when true, initLlama with n_gpu_layers>0 rejects (GPU/HTP init timeout → CPU fallback)
   let initFails = false; // when true, EVERY initLlama attempt rejects (a model that fails to load on any backend)
+  let mtpInitialized = false;
+  let mtpFailure: string | null = null;
   // Multimodal-check hold: opens the post-init capability window a real slow device has.
   let mmHoldPending = false;
   let mmHoldEngaged = false;
@@ -272,6 +278,11 @@ function makeLlamaFake(onRelease?: () => void, chatTemplate?: string): LlamaFake
       calls.completion.push([params]);
       stopRequested = false; // per-completion abort flag — a fresh completion starts un-stopped
       if (pending.throwMessage) throw new Error(pending.throwMessage);
+      const speculative = (params as { speculative?: unknown })?.speculative;
+      const mtpRequested = speculative === 'draft-mtp' || speculative === 'mtp' || (!!speculative && typeof speculative === 'object' && (speculative as { type?: string }).type === 'draft-mtp');
+      const mtpEnabled = mtpInitialized && mtpRequested;
+      if (mtpEnabled && mtpFailure) { const message = mtpFailure; mtpFailure = null; throw new Error(message); }
+      const mtpResult = mtpEnabled ? { draft_tokens: pending.completionMeta?.draft_tokens ?? 6, draft_tokens_accepted: pending.completionMeta?.draft_tokens_accepted ?? 4 } : { draft_tokens: 0, draft_tokens_accepted: 0 };
       // holdBeforeStream models PREFILL-in-progress: the completion is in flight but has emitted ZERO
       // tokens. llama cannot honor a stop mid-prefill; on release-by-stop it resolves interrupted with
       // nothing streamed — the exact device state whose empty result the tool loop mistook for a
@@ -296,6 +307,7 @@ function makeLlamaFake(onRelease?: () => void, chatTemplate?: string): LlamaFake
             tool_calls: pending.toolCalls,
             tokens_predicted: metaR.tokens_predicted ?? 8, tokens_evaluated: 4,
             stopped_eos: metaR.stopped_eos ?? true, stopped_limit: metaR.stopped_limit ?? 0, truncated: metaR.truncated ?? false,
+            ...mtpResult,
             timings: { predicted_per_token_ms: 50, predicted_per_second: 20 },
           };
         }
@@ -335,6 +347,7 @@ function makeLlamaFake(onRelease?: () => void, chatTemplate?: string): LlamaFake
           interrupted: true,
           tokens_predicted: 0, tokens_evaluated: 4,
           stopped_eos: false, stopped_limit: 0, truncated: false,
+          ...mtpResult,
           timings: { predicted_per_token_ms: 50, predicted_per_second: 20 },
         };
       }
@@ -346,6 +359,7 @@ function makeLlamaFake(onRelease?: () => void, chatTemplate?: string): LlamaFake
         stopped_eos: meta.stopped_eos ?? true,
         stopped_limit: meta.stopped_limit ?? 0,
         truncated: meta.truncated ?? false,
+        ...mtpResult,
         timings: { predicted_per_token_ms: 50, predicted_per_second: 20 },
       };
     }),
@@ -389,6 +403,7 @@ function makeLlamaFake(onRelease?: () => void, chatTemplate?: string): LlamaFake
   };
 
   const module: Record<string, jest.Mock> = {
+    loadLlamaModelInfo: jest.fn(async () => mtpLayers > 0 ? { 'test.nextn_predict_layers': mtpLayers } : {}),
     // Faithful to llama.rn/llama.cpp: the native loader reports gpu=true (+ the offload device
     // list) when it actually offloaded layers (n_gpu_layers > 0), and gpu=false for a pure-CPU
     // init. Echo that from the requested load params so the REAL captureGpuInfo → GenerationMeta
@@ -400,6 +415,7 @@ function makeLlamaFake(onRelease?: () => void, chatTemplate?: string): LlamaFake
       // Device-faithful GPU/HTP init failure: a hung/timed-out accelerator init rejects, so the real
       // initContextWithFallback falls back to the CPU attempt (which requests n_gpu_layers:0 and succeeds).
       if (gpuInitFails && n > 0) throw new Error('GPU context init timed out after 8000ms');
+      mtpInitialized = Number(params?.spec_draft_n_max ?? 0) > 0;
       const devices = Array.isArray(params?.devices) ? (params!.devices as string[]) : [];
       (context as Record<string, unknown>).gpu = n > 0;
       (context as Record<string, unknown>).devices = n > 0 ? devices : [];
@@ -419,6 +435,7 @@ function makeLlamaFake(onRelease?: () => void, chatTemplate?: string): LlamaFake
     releaseStream: () => { const f = releaseFn; releaseFn = null; f?.(); },
     scriptGpuInitFailure: (fail = true) => { gpuInitFails = fail; },
     scriptInitFailure: (fail = true) => { initFails = fail; },
+    scriptMtpFailure: (message = 'MTP speculative decoder unavailable') => { mtpFailure = message; },
     scriptMultimodalHold: () => { mmHoldPending = true; },
     releaseMultimodalHold: () => { const f = mmHoldRelease; mmHoldRelease = null; f?.(); },
     multimodalHoldActive: () => mmHoldEngaged,
@@ -719,6 +736,8 @@ export interface InstallOpts {
    *  supportsNativeThinking (reasoning-delimiter detection). Omit for the reasoning-capable default;
    *  pass a marker-free template (e.g. Mistral's) to model a non-thinking model. */
   llamaChatTemplate?: string;
+  /** Positive GGUF nextn_predict_layers metadata returned by loadLlamaModelInfo. */
+  llamaMtpLayers?: number;
   /** Seed a stateful background-download native module (boundary.download). */
   download?: boolean;
   /** Replace the global whisper.rn stub with a driveable STT context (boundary.whisper). */
@@ -780,7 +799,7 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
   const diffusion = makeDiffusionFake(fsFake?.seedFile);
 
   // Scriptable llama.rn: override the global stub so completion output is under test control.
-  const llamaFake = opts.llama ? makeLlamaFake(freeModelMemory, opts.llamaChatTemplate) : undefined;
+  const llamaFake = opts.llama ? makeLlamaFake(freeModelMemory, opts.llamaChatTemplate, opts.llamaMtpLayers) : undefined;
   if (llamaFake) jest.doMock('llama.rn', () => llamaFake.module);
 
   // Driveable whisper.rn: override the global stub so realtime/file transcription is under test control.

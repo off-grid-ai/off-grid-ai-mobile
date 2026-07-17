@@ -125,6 +125,7 @@ jest.mock('@react-navigation/native', () => {
 
 // llama.rn mock - use virtual mock since native module may not resolve
 jest.mock('llama.rn', () => ({
+  loadLlamaModelInfo: jest.fn(() => Promise.resolve({})),
   initLlama: jest.fn(() => Promise.resolve({
     id: 'test-context-id',
     gpu: false,

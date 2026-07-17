@@ -235,3 +235,30 @@ export function sendChatMessage(
   rtl.fireEvent.changeText(view.getByTestId('chat-input'), message);
   rtl.fireEvent.press(view.getByTestId('send-button'));
 }
+
+/** Download/select the Voice and Speech sidecars through Models, then open a local chat. */
+export async function openVoiceChatWithJourneyModel(
+  journey: RenderedAppJourney,
+): Promise<void> {
+  const { rtl, view } = journey;
+  rtl.fireEvent.press(view.getByTestId('models-tab'));
+  await rtl.waitFor(() =>
+    expect(view.getByTestId('models-screen')).toBeTruthy(),
+  );
+  rtl.fireEvent.press(view.getByTestId('voice-models-tab'));
+  rtl.fireEvent.press(
+    await rtl.waitFor(() => view.getByText('Download voice')),
+  );
+  await rtl.waitFor(() =>
+    expect(view.getByTestId('voice-af_heart')).toBeTruthy(),
+  );
+  rtl.fireEvent.press(view.getByTestId('transcription-models-tab'));
+  const speechModel = await rtl.waitFor(() =>
+    view.getByTestId('transcription-model-card-0'),
+  );
+  expect(view.queryByTestId('transcription-model-card-0-download')).toBeNull();
+  rtl.fireEvent.press(speechModel);
+  rtl.fireEvent.press(view.getByTestId('home-tab'));
+  await rtl.waitFor(() => expect(view.getByTestId('home-screen')).toBeTruthy());
+  await openChatWithJourneyModel(rtl, view);
+}

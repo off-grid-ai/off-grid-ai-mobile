@@ -14,8 +14,8 @@ row does **not** mean that no test exists.
 - Release-checklist traceability contributes 196 rows; the app-derived inventory
   currently contributes 48 additional journeys, including the first P3 set.
 - P0: **19 verified**, **8 partial/device-gated**, **6 audit pending**.
-- P1: **44 verified**, **1 partial/device-gated**, **72 audit pending**.
-- P2: **15 verified**, **0 partial/device-gated**, **69 audit pending**.
+- P1: **46 verified**, **1 partial/device-gated**, **70 audit pending**.
+- P2: **19 verified**, **0 partial/device-gated**, **65 audit pending**.
 - P3: **0 verified**, **0 partial/device-gated**, **10 audit pending**.
 - `[x]` verified; `[~]` automated portion verified with a physical-device gate left; `[ ]` confirmed coverage gap; `[?]` evidence audit pending.
 - This file is updated as journeys are verified or product fixes land.
@@ -206,9 +206,9 @@ row does **not** mean that no test exists.
 
 ### 4 Vision
 
-- [?] #80 Vision answers about an image
+- [x] #80 Vision answers about an image
 - [?] #82 Big vision model decode handled
-- [?] #83 litert vision affordance consistent
+- [x] #83 litert vision affordance consistent
 - [?] #84 Non-vision model image is refused gracefully
 
 ### 5 Memory
@@ -327,7 +327,7 @@ row does **not** mean that no test exists.
 ### 4 Image
 
 - [?] #68 Image size floors at 256 - existing-test evidence audit pending
-- [?] #71 Tap attached (pre-send) image previews - existing-test evidence audit pending
+- [x] #71 Tap attached (pre-send) image previews
 - [?] #74 Reset to Defaults resets image params - existing-test evidence audit pending
 - [?] #75 Chat-modal vs Model-Settings sliders agree - existing-test evidence audit pending
 - [?] #76 First-gen warmup notice is accurate - existing-test evidence audit pending
@@ -337,7 +337,7 @@ row does **not** mean that no test exists.
 
 - [?] #78 Photo permission prompt on first attach - existing-test evidence audit pending
 - [?] #79 Photo permission DENIED handled gracefully - existing-test evidence audit pending
-- [?] #81 Image + text in one turn - existing-test evidence audit pending
+- [x] #81 Image + text in one turn
 
 ### 5 Memory
 
@@ -345,7 +345,7 @@ row does **not** mean that no test exists.
 - [x] #92 Embedding sidecar resident on KB embed
 - [x] #98 Aggressive does not over-commit dirty
 - [?] #110 Delete mid-playback does not kill audio - existing-test evidence audit pending
-- [?] #111 Device info memory readout - existing-test evidence audit pending
+- [x] #111 Device info memory readout
 
 ### 6 KB/Projects
 
@@ -391,7 +391,7 @@ row does **not** mean that no test exists.
 - [?] #161 Orientation behavior - existing-test evidence audit pending
 - [?] #162 About screen renders - existing-test evidence audit pending
 - [?] #163 Storage usage screen - existing-test evidence audit pending
-- [?] #165 Share/promo sheet once per session - existing-test evidence audit pending
+- [x] #165 Share/promo sheet once per session
 - [?] #175 Thermal / long-context stress - existing-test evidence audit pending
 - [?] #176 Stay-in-the-loop card placement - existing-test evidence audit pending
 - [?] #177 Follow on X opens the profile - existing-test evidence audit pending

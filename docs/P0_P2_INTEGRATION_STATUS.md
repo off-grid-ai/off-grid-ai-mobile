@@ -8,7 +8,7 @@ A row is credited only when a real rendered/native journey proves the user-visib
 - Canonical scope: **196 journeys** - **27 P0**, **99 P1**, and **70 P2**.
 - The canonical checklist currently contains **no P3 rows**.
 - P0: **19 covered**, **8 partial/device-gated**, **0 not yet credited**.
-- P1: **8 covered**, **0 partial/device-gated**, **91 not yet credited**.
+- P1: **12 covered**, **1 partial/device-gated**, **86 not yet credited**.
 - P2: **0 covered**, **0 partial/device-gated**, **70 not yet credited**.
 - `[x]` covered; `[~]` automated portion covered with a physical-device gate left; `[ ]` confirmed open; `[?]` evidence audit pending.
 - This file is updated as journeys are verified or product fixes land.
@@ -77,14 +77,14 @@ A row is credited only when a real rendered/native journey proves the user-visib
 - [x] #7 Download a vision model (mmproj)
 - [x] #8 Downloads badge count matches manager
 - [x] #12 Download an image model
-- [ ] #13 Download a LARGE text model
+- [~] #13 Download a LARGE text model - automated coverage exists; physical-device action remains
 - [x] #14 Download a litert model
-- [ ] #15 Delete does not cancel another download
+- [x] #15 Delete does not cancel another download
 - [ ] #16 Concurrent / queued downloads
 - [x] #17 Download with NO network
-- [ ] #19 Truncated file not listed as ready
-- [ ] #20 Kill mid-extraction recovers
-- [ ] #21 Retry a failed image extraction
+- [x] #19 Truncated file not listed as ready
+- [x] #20 Kill mid-extraction recovers
+- [x] #21 Retry a failed image extraction
 
 ### 2 Text gen
 

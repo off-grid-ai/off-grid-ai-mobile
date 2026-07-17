@@ -5,7 +5,7 @@ native accessibility automation: Android UIAutomator through ADB and iOS XCTest 
 WebDriverAgent (WDA). There is no screenshot interpretation, vision model, LLM judgment, or Provit
 dependency.
 
-The checked-in smoke flow is identical on both platforms:
+The checked-in `smoke` flow is identical on both platforms:
 
 1. Launch the installed debug app.
 2. Poll the native accessibility tree for `home-screen`.
@@ -16,6 +16,11 @@ The checked-in smoke flow is identical on both platforms:
 
 Polling has a bounded 30-second retry window. It avoids timing-dependent sleeps without allowing a
 hung app to pass.
+
+The `chat` flow launches a new conversation, types `Reply with exactly OK.` through the native text
+input, presses the real Send control, and waits up to four minutes for an exact visible `OK` assistant
+reply. The longer bound accommodates cold physical-device model loading; the run still fails if the
+Stop control remains or only the user prompt is visible.
 
 ## Evidence and scope
 
@@ -50,7 +55,8 @@ accessibility XML using `uiautomator dump`, resolves the exact `resource-id` bou
 center through ADB, and asserts the resulting tree.
 
 ```bash
-ANDROID_SERIAL=<android-serial> scripts/run-device-e2e.sh android
+ANDROID_SERIAL=<android-serial> scripts/run-device-e2e.sh android smoke
+ANDROID_SERIAL=<android-serial> scripts/run-device-e2e.sh android chat
 ```
 
 Useful direct diagnostics use the same deterministic mechanism:
@@ -93,7 +99,8 @@ by accessibility ID, clicks them, and asserts the returned XCTest accessibility 
 
 ```bash
 curl -fsS http://<device-ip>:8100/status
-IOS_WDA_URL=http://<device-ip>:8100 scripts/run-device-e2e.sh ios
+IOS_WDA_URL=http://<device-ip>:8100 scripts/run-device-e2e.sh ios smoke
+IOS_WDA_URL=http://<device-ip>:8100 scripts/run-device-e2e.sh ios chat
 ```
 
 Run both physical phones sequentially with one command:
@@ -103,6 +110,8 @@ ANDROID_SERIAL=<android-serial> \
 IOS_WDA_URL=http://<device-ip>:8100 \
 scripts/run-device-e2e.sh both
 ```
+
+Pass `chat` after `both` to run the real local-generation journey on both devices.
 
 Override `DEVICE_E2E_APP_ID` only when intentionally testing another bundle ID. Override
 `DEVICE_E2E_OUTPUT_ROOT` to place run evidence elsewhere.

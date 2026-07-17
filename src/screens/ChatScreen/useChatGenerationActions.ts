@@ -278,7 +278,7 @@ async function generateWithCompactionRetry(
 ): Promise<boolean> {
   const extCount = getToolExtensions().reduce((n, e) => n + e.enabledToolCount(), 0);
   logger.log(`[GEN-SM] generateWithCompactionRetry conv=${opts.id} msgs=${opts.messages.length} tools=${enabledTools.length} ext=${extCount}`);
-  const gen = (msgs: Message[]) => (enabledTools.length > 0 || extCount > 0)
+  const gen = (msgs: Message[], includeOptionalTools = true) => (includeOptionalTools && (enabledTools.length > 0 || extCount > 0))
     ? generationService.generateWithTools(opts.id, msgs, { enabledToolIds: enabledTools, projectId })
     : generationService.generateResponse(opts.id, msgs);
   let turnInterrupted = false; // PER-TURN stop truth from the loop outcome (returned to the caller)
@@ -292,7 +292,18 @@ async function generateWithCompactionRetry(
       const recent = opts.messages.filter(m => m.role !== 'system').slice(-FALLBACK_RECENT_MESSAGE_COUNT);
       return [{ id: 'system', role: 'system', content: opts.prompt, timestamp: 0 } as Message, ...recent];
     });
-    await gen(compacted);
+    // Images consume a fixed block of the native context before text decoding.
+    // If a RAM-clamped LiteRT session rejects the turn, keep the user's image
+    // and question but shed optional tool schemas on the one recovery attempt.
+    // Retrying the identical image+schemas payload can only fail identically.
+    const carriesImage = opts.messages.some(message =>
+      message.attachments?.some(attachment => attachment.type === 'image'),
+    );
+    if (carriesImage && (enabledTools.length > 0 || extCount > 0)) {
+      logger.log('[GEN-SM] context recovery preserves image and omits optional tool schemas');
+    }
+    const outcome = await gen(compacted, !carriesImage);
+    turnInterrupted = !!(outcome as { interrupted?: boolean } | void)?.interrupted;
   }
   return turnInterrupted;
 }
@@ -395,7 +406,7 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   } catch (error: any) {
     const msg = error?.message || error?.toString?.() || 'Failed to generate response';
     logger.error('[ChatGen] Generation failed:', msg, error);
-    const isContextOverflow = msg.includes('too long') || msg.includes('Exceeding the maximum number of tokens') || msg.includes('Input token ids');
+    const isContextOverflow = contextCompactionService.isContextFullError(error);
     if (isContextOverflow) {
       deps.setAlertState({
         ...showAlert(
@@ -634,7 +645,7 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
     await generateWithCompactionRetry({ id: targetConversationId, prompt: systemPrompt, messages: [...prefix, ...filtered] }, activeTools, conversation?.projectId);
   } catch (error: any) {
     const msg = error?.message || 'Failed to generate response';
-    const isContextOverflow = msg.includes('too long') || msg.includes('Exceeding the maximum number of tokens') || msg.includes('Input token ids');
+    const isContextOverflow = contextCompactionService.isContextFullError(error);
     if (isContextOverflow) {
       deps.setAlertState({
         ...showAlert(

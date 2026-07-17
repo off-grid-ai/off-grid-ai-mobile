@@ -22,6 +22,14 @@ const CONTEXT_FULL_PATTERNS = [
   'not enough context space',
   'context window exceeded',
   'context length exceeded',
+  'too long for this context',
+  'input prompt is too long',
+  // LiteRT-LM surfaces Android multimodal overflow with this wording (often
+  // prefixed by OUT_OF_RANGE). Keep runtime vocabulary here, in the one error
+  // classifier shared by recovery and UI, rather than at individual callers.
+  'out of context',
+  'exceeding the maximum number of tokens',
+  'input token ids',
 ];
 
 /** Fraction of context reserved for the prompt (rest is for output) */

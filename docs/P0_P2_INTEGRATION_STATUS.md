@@ -14,7 +14,7 @@ row does **not** mean that no test exists.
 - Release-checklist traceability contributes 196 rows; the app-derived inventory
   currently contributes 48 additional journeys, including the first P3 set.
 - P0: **19 verified**, **8 partial/device-gated**, **6 audit pending**.
-- P1: **52 verified**, **1 partial/device-gated**, **64 audit pending**.
+- P1: **53 verified**, **1 partial/device-gated**, **63 audit pending**.
 - P2: **24 verified**, **0 partial/device-gated**, **60 audit pending**.
 - P3: **0 verified**, **0 partial/device-gated**, **10 audit pending**.
 - `[x]` verified; `[~]` automated portion verified with a physical-device gate left; `[ ]` confirmed coverage gap; `[?]` evidence audit pending.
@@ -269,7 +269,7 @@ row does **not** mean that no test exists.
 ### 11 Polish
 
 - [?] #164 App lock passphrase set + enforce
-- [?] #166 Settings persist across relaunch
+- [x] #166 Settings persist across relaunch
 - [x] #169 Active model selection survives relaunch
 - [?] #170 Projects + KB survive relaunch
 - [?] #172 Background -> foreground mid-generation

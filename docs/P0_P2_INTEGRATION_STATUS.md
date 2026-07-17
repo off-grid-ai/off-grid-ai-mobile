@@ -15,7 +15,7 @@ row does **not** mean that no test exists.
   currently contributes 48 additional journeys, including the first P3 set.
 - P0: **19 verified**, **8 partial/device-gated**, **6 audit pending**.
 - P1: **53 verified**, **1 partial/device-gated**, **63 audit pending**.
-- P2: **29 verified**, **0 partial/device-gated**, **55 audit pending**.
+- P2: **30 verified**, **0 partial/device-gated**, **54 audit pending**.
 - P3: **0 verified**, **0 partial/device-gated**, **10 audit pending**.
 - `[x]` verified; `[~]` automated portion verified with a physical-device gate left; `[ ]` confirmed coverage gap; `[?]` evidence audit pending.
 - This file is updated as journeys are verified or product fixes land.
@@ -314,7 +314,7 @@ row does **not** mean that no test exists.
 - [?] #37 Flash attention toggle applies - existing-test evidence audit pending
 - [x] #40 Thinking header reads Thinking while streaming
 - [x] #41 Long output cutoff indicator
-- [?] #45 Copy a message - existing-test evidence audit pending
+- [x] #45 Copy a message
 - [?] #49 Reset to Defaults (text params) - existing-test evidence audit pending
 - [?] #50 Context-full new-chat prompt - existing-test evidence audit pending
 

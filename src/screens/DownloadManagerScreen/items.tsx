@@ -250,7 +250,10 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({
   const showRepairProgress = isRepairingVision && !!repairEntry;
 
   return (
-    <Card style={styles.downloadCard}>
+    <Card
+      style={styles.downloadCard}
+      testID={`completed-download-${item.modelId}`}
+    >
       <View style={styles.downloadHeader}>
         <View style={styles.modelTypeIcon}>
           <Icon

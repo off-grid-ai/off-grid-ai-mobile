@@ -186,6 +186,13 @@ row does **not** mean that no test exists.
 - [~] #187 Queued downloads survive app kill - strict full-App UI queue/relaunch/drain coverage exists; physical-device action remains
 - [x] #195 Boot is independent of download database recovery
 
+### 14 Device-only legacy
+
+- [~] #215 Cold Whisper load has no ghost recording - the full-App release-during-load
+  and clean next-take journey is automated; the physical OS privacy indicator remains a
+  device gate
+  - `__tests__/integration/audio/whisperStartSupersededNoGhost.redflow.test.tsx`
+
 ## P1
 
 ### 0 Install

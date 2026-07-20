@@ -11,8 +11,8 @@ row does **not** mean that no test exists.
 ## Summary
 
 - Current scope: **245 journeys** - **33 P0**, **118 P1**, **84 P2**, and **10 P3**.
-- Release-checklist traceability contributes 212 rows; the app-derived inventory
-  contributes the remaining app-specific journeys, including the first P3 set.
+- The runnable release checklist contains 219 execution rows. The app-derived inventory is
+  maintained separately and can overlap those rows, including the first P3 set.
 - P0: **24 verified**, **9 partial/device-gated**, **0 confirmed gaps**, **0 audit pending**.
 - P1: **115 verified**, **3 partial/device-gated**, **0 confirmed gaps**, **0 audit pending**.
 - P2: **83 verified**, **1 partial/device-gated**, **0 confirmed gaps**, **0 audit pending**.

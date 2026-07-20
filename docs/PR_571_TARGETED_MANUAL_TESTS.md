@@ -1,7 +1,7 @@
 # PR #571 Targeted Manual Tests
 
 This is the smallest honest device pass for PR #571. It is intentionally smaller than the
-canonical 212-row release checklist, but it is not a tiny smoke test: this PR changes production
+canonical 219-row release checklist, but it is not a tiny smoke test: this PR changes production
 code across onboarding, downloads, chat/generation, voice, image/vision, memory residency,
 projects, tools/MCP, remote models, settings, persistence, and Pro lifecycle.
 
@@ -99,7 +99,17 @@ regression over 15% is a release investigation, not an automatic waiver.
 - [ ] 211 — Background/foreground latency and continuity
 - [ ] 212 — Attach evidence and complete the release performance record
 
+## Pass D — retained physical-device gates from PR #558
+
+- [ ] 213 — Slide-to-cancel pill layout
+- [ ] 214 — Slide-to-cancel cancellation versus ordinary release
+- [ ] 215 — Cold Whisper load has no ghost recording
+- [ ] 216 — iOS Debug build name is distinct
+- [ ] 217 — SDXL Core ML finalization and first ANE compile
+- [ ] 218 — Low-RAM curated LiteRT remains visible with a warning
+- [ ] 219 — TTS memory-pressure failure remains actionable
+
 ## Exit rule
 
-This targeted pass is sufficient for PR-specific manual verification only. The full 212-row list
+This targeted pass is sufficient for PR-specific manual verification only. The full 219-row list
 remains the release checklist because the production diff spans nearly every major app subsystem.

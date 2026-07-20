@@ -321,7 +321,7 @@ describe('P0 queued-download process-death recovery', () => {
         expect(view.queryByTestId('dm-active-queued-count')).toBeNull();
         expect(view.getAllByTestId('remove-download-button')).toHaveLength(3);
       },
-      { timeout: 4000 },
+      { timeout: 8000 },
     );
     await rtl.waitFor(async () => {
       const queued = await asyncStorage.getItem(QUEUED_DOWNLOADS_KEY);

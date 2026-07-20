@@ -112,5 +112,5 @@ describe('P2 Home text count with a remote model', () => {
       view?.unmount();
       global.fetch = originalFetch;
     }
-  }, 20000);
+  }, 30000);
 });

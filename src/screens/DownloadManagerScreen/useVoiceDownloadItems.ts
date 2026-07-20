@@ -11,7 +11,16 @@ import { useWhisperStore } from '../../stores';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { modelDownloadService } from '../../services/modelDownloadService';
 import { isModelDownloadInProgress } from '../../services/modelDownloadService/storeStatus';
+import type { ModelDownloadStatus } from '../../services/modelDownloadService/types';
+import type { DownloadStatus } from '../../stores/downloadStore';
+import { isDownloadingStatus } from '../../stores/downloadStore';
 import { DownloadItem, formatBytes } from './items';
+
+function toDownloadManagerStatus(status: ModelDownloadStatus): DownloadStatus {
+  if (status === 'queued') return 'pending';
+  if (status === 'paused') return 'waiting_for_network';
+  return 'running';
+}
 
 async function loadItems(): Promise<DownloadItem[]> {
   const items: DownloadItem[] = [];
@@ -75,7 +84,7 @@ async function loadItems(): Promise<DownloadItem[]> {
           fileSize: d.sizeBytes,
           bytesDownloaded: d.bytesDownloaded,
           progress: d.progress,
-          status: d.status === 'queued' ? 'pending' : 'downloading',
+          status: toDownloadManagerStatus(d.status),
           name: d.name,
         });
       } else if (d.status === 'error') {
@@ -171,7 +180,11 @@ export function useVoiceDownloadItems(
   // but it's terminal and must NOT keep an 800ms interval alive.
   useEffect(() => {
     if (
-      !voiceItems.some(i => i.type === 'active' && i.status === 'downloading')
+      !voiceItems.some(
+        i =>
+          i.type === 'active' &&
+          isDownloadingStatus(i.status as DownloadStatus),
+      )
     )
       return;
     const t = setInterval(() => {

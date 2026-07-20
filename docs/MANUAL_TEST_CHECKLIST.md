@@ -1,5 +1,11 @@
 # Off Grid Mobile — Manual Release Test Checklist
 
+> Execution note: the canonical runnable release sheet is
+> `docs/RELEASE_TEST_CHECKLIST.csv`; use `docs/RELEASE_MANUAL_TEST_GUIDE.md`
+> for device matrix, pass/fail rules, performance comparison, and evidence capture.
+> For the PR-specific execution order, use `docs/PR_571_TARGETED_MANUAL_TESTS.md`.
+> This document retains the historical adversarial traceability behind those rows.
+
 A human-walkable, release-gate checklist. Go through this before every release. Independent of any automated
 test claims. Aggregated from **both** adversarial/device sessions:
 

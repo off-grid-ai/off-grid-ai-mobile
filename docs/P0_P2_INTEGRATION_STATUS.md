@@ -11,11 +11,11 @@ row does **not** mean that no test exists.
 ## Summary
 
 - Current scope: **245 journeys** - **33 P0**, **118 P1**, **84 P2**, and **10 P3**.
-- Release-checklist traceability contributes 196 rows; the app-derived inventory
-  currently contributes 48 additional journeys, including the first P3 set.
+- Release-checklist traceability contributes 212 rows; the app-derived inventory
+  contributes the remaining app-specific journeys, including the first P3 set.
 - P0: **24 verified**, **9 partial/device-gated**, **0 confirmed gaps**, **0 audit pending**.
 - P1: **115 verified**, **3 partial/device-gated**, **0 confirmed gaps**, **0 audit pending**.
-- P2: **80 verified**, **0 partial/device-gated**, **0 confirmed gaps**, **4 audit pending**.
+- P2: **83 verified**, **1 partial/device-gated**, **0 confirmed gaps**, **0 audit pending**.
 - P3: **0 verified**, **0 partial/device-gated**, **0 confirmed gaps**, **10 audit pending**.
 - `[x]` verified; `[~]` automated portion verified with a physical-device gate left; `[ ]` confirmed coverage gap; `[?]` evidence audit pending.
 - This file is updated as journeys are verified or product fixes land.
@@ -95,11 +95,16 @@ row does **not** mean that no test exists.
   - `__tests__/integration/settings/storageMaintenanceFullApp.rendered.happy.test.tsx`
 - [x] APP-P2-005 Cache clearing updates storage totals and preserves user conversations and models
   - `__tests__/integration/settings/storageMaintenanceFullApp.rendered.happy.test.tsx`
-- [?] APP-P2-006 Tool enablement and disablement persist and affect only subsequent turns
+- [x] APP-P2-006 Tool enablement and disablement persist and affect only subsequent turns
+  - `__tests__/integration/tools/toolTogglePersistenceFullApp.rendered.happy.test.tsx`
 - [x] APP-P2-007 MCP servers reconnect after relaunch without duplicate clients, tools, or routes
   - `__tests__/integration/tools/mcpFullApp.rendered.happy.test.tsx`
-- [?] APP-P2-008 MCP OAuth cancel, expiry, refresh, and retry return to an actionable state
-- [?] APP-P2-009 LAN discovery deduplicates repeated scans and supports multiple configured servers
+- [x] APP-P2-008 MCP OAuth cancel, expiry, refresh, and retry return to an actionable state
+  - `__tests__/integration/tools/mcpOAuthLifecycleFullApp.rendered.happy.test.tsx`
+  - `pro/__tests__/unit/mcpOAuth.test.ts`
+  - `__tests__/unit/services/mcpOAuthNativeAdapters.test.ts`
+- [x] APP-P2-009 LAN discovery deduplicates repeated scans and supports multiple configured servers
+  - `__tests__/integration/settings/lanDiscoveryRepeatFullApp.rendered.happy.test.tsx`
 - [x] APP-P2-010 Supported document types import and preview with stable names and metadata
   - `__tests__/integration/knowledge-base/projectKnowledgeBaseFullApp.rendered.happy.test.tsx`
 - [x] APP-P2-011 Every Settings card opens its registered screen and returns without losing tab state
@@ -433,7 +438,13 @@ row does **not** mean that no test exists.
 - [x] #162 About screen renders
 - [x] #163 Storage usage screen
 - [x] #165 Share/promo sheet once per session
-- [?] #175 Thermal / long-context stress - existing-test evidence audit pending
+- [~] #175 Thermal / long-context stress - deterministic context-full recovery,
+  compaction persistence, survival floors, and OS-memory-warning handling are automated;
+  sustained real-device thermal throttling and jetsam remain a release device gate
+  - `__tests__/integration/generation/contextFullNewChatFullApp.rendered.redflow.test.tsx`
+  - `__tests__/integration/generation/litertCompactionPersistenceFullApp.rendered.happy.test.tsx`
+  - `__tests__/integration/memory/survivalFloorFullApp.rendered.happy.test.tsx`
+  - `__tests__/integration/memory/osMemoryWarningFullApp.rendered.happy.test.tsx`
 - [x] #176 Stay-in-the-loop card placement - `__tests__/integration/settings/settingsPolishFullApp.rendered.happy.test.tsx`
 - [x] #177 Follow on X opens the profile - `__tests__/integration/settings/settingsPolishFullApp.rendered.happy.test.tsx`
 - [x] #178 Join Slack opens the invite - `__tests__/integration/settings/settingsPolishFullApp.rendered.happy.test.tsx`

@@ -3,6 +3,10 @@ import { backgroundDownloadService } from '../../services';
 import { useDownloadStore } from '../../stores/downloadStore';
 import { getUserFacingDownloadMessage } from '../../utils/downloadErrors';
 import { makeImageModelKey } from '../../utils/modelKey';
+import {
+  clearDownloadInProcess,
+  markDownloadInProcess,
+} from '../../services/inProcessDownloadRegistry';
 import { ImageDownloadDeps } from './types';
 
 // Live zip completion and relaunch recovery are two entry points into the same
@@ -27,6 +31,9 @@ export function wireZipFinalization(
       unsubComplete();
       unsubError();
       liveZipFinalizations.add(modelKey);
+      // Mark this JS-driven finalize (unzip + register) window as live so a foreground resume during
+      // it does not strand the 'processing' entry to failed — its native row is already consumed.
+      markDownloadInProcess(modelKey);
       try {
         await onCompleteWork();
       } catch (error: any) {
@@ -39,6 +46,7 @@ export function wireZipFinalization(
           .setStatus(downloadId, 'failed', { message });
       } finally {
         liveZipFinalizations.delete(modelKey);
+        clearDownloadInProcess(modelKey);
       }
     },
   );

@@ -21,8 +21,8 @@ describe('G7 reconcile must not register a partial re-unzip', () => {
         download: true,
         ram: { platform: 'android', totalBytes: 8 * GB, availBytes: 6 * GB },
       },
-      beforeRender: async ({ boundary }) => {
-        const fs = boundary.fs!;
+      beforeRender: async ({ boundary: device }) => {
+        const fs = device.fs!;
         // A staged zip (valid PK header, non-zero) plus the _zip_name sentinel that marks a
         // mid-unzip kill, but NO _ready — the exact state reconcile re-unzips from.
         fs.seedFile(ZIP_PATH, 24 * 1024 * 1024);

@@ -4,6 +4,7 @@ import { makeModelKey, ModelKey } from '../utils/modelKey';
 import { BackgroundDownloadStatus } from '../types';
 import { isMMProjFile } from './mmproj';
 import { loadActiveDownloads } from './activeDownloadPersistence';
+import { isDownloadInProcess } from './inProcessDownloadRegistry';
 import logger from '../utils/logger';
 
 type NativeDownloadRow = {
@@ -152,8 +153,12 @@ function toDownloadEntry(
  *
  * A prior entry that had already `completed`/`cancelled` is intentionally dropped (a
  * clean finish moved it to its domain store; nothing to strand).
+ *
+ * EXCEPTION: a JS-driven transfer (multi-file image, zip finalize) that is still running in THIS
+ * process has no native row BY DESIGN — it is not app-killed. The in-process registry flags it, and
+ * such an entry is carried forward UNCHANGED (still downloading), never stranded or dropped.
  */
-function strandInterruptedEntries(
+function reconcileVanishedEntries(
   hydratedKeys: Set<ModelKey>,
   persistedPrior: DownloadEntry[],
 ): DownloadEntry[] {
@@ -164,20 +169,27 @@ function strandInterruptedEntries(
   for (const e of persistedPrior) priors.set(e.modelKey, e);
   for (const e of Object.values(useDownloadStore.getState().downloads)) priors.set(e.modelKey, e);
 
-  const stranded: DownloadEntry[] = [];
+  const carried: DownloadEntry[] = [];
   for (const prior of priors.values()) {
     if (hydratedKeys.has(prior.modelKey)) continue; // still has a live native row (Android WorkManager survives → never stranded)
     if (!isActiveStatus(prior.status)) continue;     // already completed/failed/cancelled
+    if (isDownloadInProcess(prior.modelKey)) {
+      // A JS-driven transfer (multi-file image, zip finalize) still running in THIS process. It has
+      // NO native row by design, so it is neither app-killed nor safe to drop — carry the live entry
+      // forward UNCHANGED so hydrate() keeps its downloading card instead of failing or losing it.
+      carried.push(prior);
+      continue;
+    }
     logger.log(
       `[DL-SM] ${prior.modelType}:${prior.modelId} hydrate: native row gone (app-kill) → failed/retriable`,
     );
-    stranded.push({
+    carried.push({
       ...prior,
       status: 'failed',
       errorMessage: prior.errorMessage ?? 'Interrupted — app closed. Tap retry.',
     });
   }
-  return stranded;
+  return carried;
 }
 
 /** Preserve a newer logical transfer and never move visible progress backwards when
@@ -232,7 +244,7 @@ export async function hydrateDownloadStore(): Promise<void> {
   const mergedEntries = mergeNewerInMemory(entries);
   const hydratedKeys = new Set(mergedEntries.map(e => e.modelKey));
   const persistedPrior = await loadActiveDownloads();
-  mergedEntries.push(...strandInterruptedEntries(hydratedKeys, persistedPrior));
+  mergedEntries.push(...reconcileVanishedEntries(hydratedKeys, persistedPrior));
 
   useDownloadStore.getState().hydrate(mergedEntries);
 }

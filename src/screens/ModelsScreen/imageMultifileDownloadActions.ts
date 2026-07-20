@@ -8,6 +8,10 @@ import {
   resolveCoreMLModelDir,
 } from '../../utils/coreMLModelUtils';
 import { makeImageModelKey } from '../../utils/modelKey';
+import {
+  clearDownloadInProcess,
+  markDownloadInProcess,
+} from '../../services/inProcessDownloadRegistry';
 import { ImageDownloadDeps, ImageModelDescriptor } from './types';
 import {
   addImageDownloadEntry,
@@ -38,6 +42,9 @@ function makeMultifileId(modelId: string): string {
 function startMultifileRuntime(modelId: string): MultifileRuntime {
   const runtime: MultifileRuntime = { cancelled: false };
   activeMultifileDownloads.set(modelId, runtime);
+  // Announce this JS-driven transfer as live so a foreground hydrate does not strand it to "failed"
+  // (it has no native download row while the per-file loop runs).
+  markDownloadInProcess(makeImageModelKey(modelId));
   return runtime;
 }
 
@@ -229,6 +236,7 @@ export async function downloadHuggingFaceModel(
     await cleanupImageModelDir(modelInfo.id);
   } finally {
     activeMultifileDownloads.delete(modelInfo.id);
+    clearDownloadInProcess(makeImageModelKey(modelInfo.id));
   }
 }
 
@@ -304,5 +312,6 @@ export async function downloadCoreMLMultiFile(
     });
   } finally {
     activeMultifileDownloads.delete(modelInfo.id);
+    clearDownloadInProcess(makeImageModelKey(modelInfo.id));
   }
 }

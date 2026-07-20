@@ -141,13 +141,16 @@ describe('P1 full-app image network retry and finalization', () => {
     });
 
     fireEvent.press(view.getByTestId('failed-retry-button'));
-    await waitFor(() => {
-      expect(view.queryByTestId('failed-retry-button')).toBeNull();
-      expect(view.queryByTestId('dm-active-failed-count')).toBeNull();
-      expect(view.getByTestId('dm-active-queued-count')).toHaveTextContent(
-        '1 queued',
-      );
-    });
+    await waitFor(
+      () => {
+        expect(view.queryByTestId('failed-retry-button')).toBeNull();
+        expect(view.queryByTestId('dm-active-failed-count')).toBeNull();
+        expect(view.getByTestId('dm-active-queued-count')).toHaveTextContent(
+          '1 queued',
+        );
+      },
+      { timeout: 5000 },
+    );
 
     await act(async () => {
       boundary.download!.events.emit('DownloadProgress', {

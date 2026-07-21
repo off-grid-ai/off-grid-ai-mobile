@@ -70,10 +70,10 @@ BUILD_NUMBER=$(date +%s)
 info "Beta build: ${BOLD}${BETA_VERSION}${NC} (build ${BUILD_NUMBER}) - pre-release of ${TARGET_VERSION} (current live: ${CURRENT_VERSION})"
 
 # ── apply the build-number / beta-versionName bump (working tree; committed only on success) ──
-# package.json carries the version the JS bundle sees (AboutScreen/feedback read the native version
-# now, but keep the bundle in sync too). MUST bump it to TARGET here: the store binary's versionName
-# is TARGET, and a stale package.json shipped a JS bundle a version behind (native 0.0.103 vs in-app
-# 0.0.102). Reverted by cleanup like the native files, so the tree stays clean on failure.
+# package.json is the version the JS bundle carries, and the in-app UI (About / Settings / feedback)
+# reads it as a plain local constant. It MUST be bumped to the SAME TARGET as the native versionName
+# below, or the built AAB ships native=TARGET with a JS bundle a version behind — the exact drift that
+# made the store show 0.0.103 while the app showed 0.0.102. Reverted by cleanup like the native files.
 node -e "const fs=require('fs');const f='./package.json';fs.writeFileSync(f, fs.readFileSync(f,'utf8').replace(/(\"version\":\s*\")[^\"]+(\")/, '\$1${TARGET_VERSION}\$2'))"
 if [[ "$DO_ANDROID" = 1 ]]; then
   sed -i '' "s/versionCode .*/versionCode $BUILD_NUMBER/" android/app/build.gradle

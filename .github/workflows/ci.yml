@@ -161,7 +161,9 @@ jobs:
         # SERIAL (no parallel-OOM, the reason in-band was chosen) but runs in a worker that
         # --workerIdleMemoryLimit RECYCLES before it bloats, so memory stays bounded. Conclusive fix
         # for the timeout flakiness without changing any test.
-        run: npx jest --coverage --forceExit --maxWorkers=1 --workerIdleMemoryLimit=1536MB
+        # Call the installed binary directly (not `npx`, which Sonar S6505 flags for on-demand
+        # install + lifecycle scripts). Deps are already installed by `npm ci` above.
+        run: node_modules/.bin/jest --coverage --forceExit --maxWorkers=1 --workerIdleMemoryLimit=1536MB
 
       - name: Install Android NDK
         # Configuring the native modules (op-sqlite etc.) needs the pinned NDK; the macOS

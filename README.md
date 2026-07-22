@@ -202,10 +202,15 @@ Built on the shoulders of giants:
 
 ---
 
-
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=alichherawalla/off-grid-mobile&type=date&legend=top-left)](https://www.star-history.com/#alichherawalla/off-grid-mobile&type=date&legend=top-left)
+<a href="https://www.star-history.com/?repos=off-grid-ai%2FOGAM&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=off-grid-ai/OGAM&type=date&theme=dark&legend=top-left&sealed_token=d1NvdHkxMRYA5HzG4HHcLDnnNhj976V0-Ofw_LKDg38CF9bluDsbRYsDxM8LEom7XSb5CbN9VHh8vpKJOkzOvDYZF1agMvBHd_p7GV7nRGWXsQ0G01GIAQ" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=off-grid-ai/OGAM&type=date&legend=top-left&sealed_token=d1NvdHkxMRYA5HzG4HHcLDnnNhj976V0-Ofw_LKDg38CF9bluDsbRYsDxM8LEom7XSb5CbN9VHh8vpKJOkzOvDYZF1agMvBHd_p7GV7nRGWXsQ0G01GIAQ" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=off-grid-ai/OGAM&type=date&legend=top-left&sealed_token=d1NvdHkxMRYA5HzG4HHcLDnnNhj976V0-Ofw_LKDg38CF9bluDsbRYsDxM8LEom7XSb5CbN9VHh8vpKJOkzOvDYZF1agMvBHd_p7GV7nRGWXsQ0G01GIAQ" />
+ </picture>
+</a>
 
 <div align="center">
 

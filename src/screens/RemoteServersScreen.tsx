@@ -116,9 +116,11 @@ export const RemoteServersScreen: React.FC = () => {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: async () => {
+          onPress: () => {
             if (activeServerId === server.id) setActiveServerId(null);
-            await remoteServerManager.removeServer(server.id);
+            remoteServerManager.removeServer(server.id).catch(error =>
+              setAlertState(showAlert('Deletion Failed', error instanceof Error ? error.message : 'An unknown error occurred.'))
+            );
           },
         },
       ]

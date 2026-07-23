@@ -196,6 +196,16 @@ class RagService {
     return retrievalService.search(projectId, query);
   }
 
+  /**
+   * Retrieve within ONE document of a project (its docPath), budget-fitted. Backs "chat
+   * with this recording": the conversation is scoped to a recording's doc, so every turn
+   * retrieves only that recording's relevant chunks instead of the whole project.
+   */
+  async searchProjectDocument(params: { projectId: string; query: string; docPath: string; contextLength: number }) {
+    await this.ensureReady();
+    return retrievalService.searchDocument(params);
+  }
+
   async deleteProjectDocuments(projectId: string): Promise<void> {
     await this.ensureReady();
     ragDatabase.deleteDocumentsByProject(projectId);

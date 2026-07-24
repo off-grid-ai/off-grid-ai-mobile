@@ -373,3 +373,28 @@ fileExceedsBudget's boundary (size == budget: `>` vs `>=`) has no test straddlin
 the verifier's `>`↔`>=` mutant survived. Off-by-one-byte at the budget edge; no user-visible impact
 (a model exactly at the budget is a measure-zero case). Add a boundary test if fileExceedsBudget is
 touched again. Not fixed now (marginal, near release).
+
+## A1 mmproj fix — VERIFIED iOS, REPRODUCES on Android (2026-07-24)
+
+**Verdict: instrument-and-revisit — merge of PR #605 HELD until root-caused on Android.**
+
+The vision-projector fix (mmProjLocalName precision-only rename + pickMmProjForDownload shape
+handling) is proven on iOS device (ggml-org SmolVLM-256M → real vision answer; log
+`[WIRE-VISION] initialized:true`) and by the live-HF fixture test. But the SAME model on Android
+(OnePlus CPH2707, Android 16, the fixed JS served via Metro) still throws **"Multimodal support
+not enabled. Call initMultimodal first."** at generation — Christophe's exact error.
+
+Observed: the model downloaded (model+mmproj), showed the **Vision badge (no repair wrench)** in the
+picker and a downloaded/trash state in the detail — so the app believes the mmproj is linked — yet
+`initMultimodal` did not take on the loaded Android context. Points to an Android load/init or
+Swift↔Kotlin download-path parity gap, NOT the shared naming logic.
+
+BLOCKER to root-cause: the installed `.dev` build is not debuggable (`run-as` refused), Settings has
+no Debug Logs entry, logcat is empty (file-sink only) — no device trace obtainable. Per the "pull the
+log, don't guess" rule, the Android fix is NOT being written speculatively.
+
+NEXT: install a debuggable `__DEV__` Android build (so `offgrid-debug.log` + Debug Logs exist),
+reproduce, grep `[DL-SM]`/`[WIRE-VISION]`/mmProjLocalPath to see whether (a) the mmproj file is at the
+`mmProjLocalName` path on disk, (b) mmProjPath is passed to the Android load, (c) initMultimodal
+returns false natively. Then fix the identified seam. Decide then whether it belongs in #605 or a
+separate Android-parity PR.

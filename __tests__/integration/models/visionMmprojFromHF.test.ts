@@ -56,7 +56,10 @@ async function fetchTreeGgufFiles(repoId: string): Promise<string[]> {
   const res = await fetch(`https://huggingface.co/api/models/${repoId}/tree/main?recursive=true`, {
     headers: { Accept: 'application/json' },
   });
-  if (!res.ok) return [];
+  // Fail the refresh LOUDLY on a HF error (429/5xx) — silently returning [] would persist an empty/degraded
+  // fixture and mask a real regression on the next offline run. A genuinely non-existent repo returns 200
+  // with an empty tree, which is handled below (empty list), not an error.
+  if (!res.ok) throw new Error(`HF tree fetch failed for ${repoId}: ${res.status}`);
   const entries: Array<{ type: string; path: string }> = await res.json();
   return entries.filter(e => e.type === 'file' && e.path.endsWith('.gguf')).map(e => e.path);
 }

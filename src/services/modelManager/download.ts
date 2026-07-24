@@ -32,7 +32,10 @@ export function mmProjLocalName(ggufFileName: string, mmProjSourceName?: string)
   //    keeps the link. The old `/mmproj.*$/` swallowed a model name the repo put AFTER "mmproj"
   //    (ggml-org ships `mmproj-<ModelName>-<quant>.gguf`), doubling the stem → the link was cleared and vision
   //    never initialized ("Multimodal support not enabled" — device 2026-07-23, SmolVLM/Qwen2.5-VL on iOS).
-  const precision = mmProjSourceName?.match(/\b(iq\d+[a-z0-9_]*|q\d+[a-z0-9_]*|bf16|fp16|f16|f32)\b/i)?.[0];
+  // The projector's own precision is the token immediately before `.gguf`. Anchoring to `\.gguf$` makes the
+  // match LINEAR (no super-linear backtracking) and inherently takes the TRAILING token, so a precision-like
+  // token buried in a model name can never win.
+  const precision = mmProjSourceName?.match(/[-_.](iq\d[a-z0-9_]*|q\d[a-z0-9_]*|bf16|fp16|f16|f32)\.gguf$/i)?.[1];
   const proj = precision ? `mmproj-${precision}.gguf` : 'mmproj.gguf';
   return `${base}-${proj}`;
 }

@@ -13,6 +13,7 @@ export type RootStackParamList = {
   KnowledgeBase: { projectId: string };
   DocumentPreview: { filePath: string; fileName: string; fileSize: number };
   // Former SettingsStack
+  Settings: undefined;
   ModelSettings: undefined;
   RemoteServers: undefined;
   DeviceInfo: undefined;

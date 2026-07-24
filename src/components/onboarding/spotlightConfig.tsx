@@ -75,7 +75,7 @@ export const STEP_TAB_MAP: Record<string, string> = {
   downloadedModel: 'ModelsTab',
   loadedModel: 'HomeTab',
   sentMessage: 'ChatsTab',
-  exploredSettings: 'SettingsTab',
+  exploredSettings: 'Settings',
   createdProject: 'ProjectsTab',
   triedImageGen: 'ModelsTab',
 };

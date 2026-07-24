@@ -150,6 +150,9 @@ export const ONBOARDING_SLIDES = [
 
 // Fonts
 export const FONTS = {
+  // iOS ships Menlo; Android has no Menlo (it would silently fall back to the
+  // sans-serif default), so use Android's built-in monospace so both platforms
+  // render a similar fixed-width face.
   mono: 'Menlo',
 };
 

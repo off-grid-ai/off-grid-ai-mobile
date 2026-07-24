@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { whisperService, WHISPER_MODELS } from '../services/whisperService';
 import { modelResidencyManager } from '../services/modelResidency';
+import { logMemory } from '../utils/memorySnapshot';
 import logger from '../utils/logger';
 
 /**
@@ -41,7 +42,7 @@ interface WhisperState {
   downloadModel: (modelId: string) => Promise<void>;
   /** Activate an already-downloaded model without re-downloading. */
   selectModel: (modelId: string) => Promise<void>;
-  loadModel: () => Promise<WhisperLoadResult>;
+  loadModel: (options?: { useGpu?: boolean; useCoreML?: boolean }) => Promise<WhisperLoadResult>;
   unloadModel: () => Promise<void>;
   deleteModel: () => Promise<void>;
   /** Delete a specific on-disk model (active or not). */
@@ -112,7 +113,28 @@ export const useWhisperStore = create<WhisperState>()(
         }
       },
 
-      loadModel: async (): Promise<WhisperLoadResult> => {
+      downloadFromUrl: async (url: string, modelId: string) => {
+        setProgress(set, modelId, 0);
+        set({ error: null });
+        try {
+          await whisperService.downloadFromUrl(url, modelId, (progress) => {
+            setProgress(set, modelId, progress);
+          });
+          set((s) => ({
+            downloadedModelId: modelId,
+            presentModelIds: s.presentModelIds.includes(modelId) ? s.presentModelIds : [...s.presentModelIds, modelId],
+          }));
+          await get().loadModel();
+        } catch (error) {
+          if (!(error as { cancelled?: boolean })?.cancelled) {
+            set({ error: error instanceof Error ? error.message : 'Download failed' });
+          }
+        } finally {
+          clearProgress(set, modelId);
+        }
+      },
+
+      loadModel: async (options?: { useGpu?: boolean; useCoreML?: boolean }): Promise<WhisperLoadResult> => {
         const { downloadedModelId, isModelLoading } = get();
         if (!downloadedModelId) {
           set({ error: 'No model downloaded' });
@@ -147,7 +169,13 @@ export const useWhisperStore = create<WhisperState>()(
               logger.log('[Whisper] Skipping load — no room alongside the active model (single-model rule)');
               return false;
             }
-            await whisperService.loadModel(modelPath);
+            // Footprint before/after load. On a 4 GB iOS device a large model
+            // (medium/large ~1.5 GB) can push the app past the jetsam limit and the OS
+            // kills it mid-load. The before/after pair localizes a kill to model load
+            // vs transcription. Fire-and-forget: no await points on the load path.
+            logMemory(`whisper:beforeLoad model=${downloadedModelId} ~${sizeMB}MB`).catch(() => {});
+            await whisperService.loadModel(modelPath, options);
+            logMemory('whisper:afterLoad').catch(() => {});
             modelResidencyManager.register(
               { key: 'whisper', type: 'whisper', sizeMB },
               () => get().unloadModel(),
@@ -193,8 +221,16 @@ export const useWhisperStore = create<WhisperState>()(
           await whisperService.unloadModel();
           // Then delete
           await whisperService.deleteModel(downloadedModelId);
+          // Fall back to another downloaded model on disk if there is one, and
+          // drop the just-deleted model from presentModelIds (recompute from disk
+          // so the models list doesn't keep showing a model whose file is gone).
+          const onDisk = await whisperService.listDownloadedModels();
+          const remaining = onDisk.map((m) => m.modelId).filter((id) => id !== downloadedModelId);
+          const fallback = remaining[0] ?? null;
+          logger.log(`[WhisperStore] deleted active ${downloadedModelId}; present [${remaining.join(', ') || 'none'}]; active -> ${fallback ?? 'none'}`);
           set({
-            downloadedModelId: null,
+            presentModelIds: remaining,
+            downloadedModelId: fallback,
             isModelLoaded: false,
           });
         } catch (error) {
@@ -212,13 +248,22 @@ export const useWhisperStore = create<WhisperState>()(
 
       deleteModelById: async (modelId: string) => {
         try {
-          if (get().downloadedModelId === modelId) await whisperService.unloadModel();
+          const wasActive = get().downloadedModelId === modelId;
+          if (wasActive) await whisperService.unloadModel();
           await whisperService.deleteModel(modelId);
-          set((s) => ({
-            presentModelIds: s.presentModelIds.filter((id) => id !== modelId),
-            ...(s.downloadedModelId === modelId ? { downloadedModelId: null, isModelLoaded: false } : {}),
-          }));
+          // Fall back to another model still on disk (e.g. delete small -> use
+          // base) instead of leaving no active model. Scans the real dir so it
+          // catches any downloaded model, not just the catalogue.
+          const onDisk = await whisperService.listDownloadedModels();
+          const remaining = onDisk.map((m) => m.modelId).filter((id) => id !== modelId);
+          const fallback = wasActive ? (remaining[0] ?? null) : get().downloadedModelId;
+          logger.log(`[WhisperStore] deleted ${modelId} (wasActive=${wasActive}); on-disk now [${remaining.join(', ') || 'none'}]; active -> ${fallback ?? 'none'}`);
+          set({
+            presentModelIds: remaining,
+            ...(wasActive ? { downloadedModelId: fallback, isModelLoaded: false } : {}),
+          });
         } catch (error) {
+          logger.warn(`[WhisperStore] deleteModelById(${modelId}) failed: ${String(error)}`);
           set({ error: error instanceof Error ? error.message : 'Failed to delete model' });
         }
       },
@@ -234,11 +279,26 @@ export const useWhisperStore = create<WhisperState>()(
         // which left the Home banner showing a deleted model. Check the active
         // model's own file (works for custom HF ids, not just the catalogue).
         const activeId = get().downloadedModelId;
-        const activeOnDisk = activeId ? await whisperService.isModelDownloaded(activeId) : true;
-        set({
-          presentModelIds: present,
-          ...(activeId && !activeOnDisk ? { downloadedModelId: null, isModelLoaded: false } : {}),
-        });
+        // No active model was ever selected: just refresh the present list. Do NOT
+        // auto-adopt one — selection/loading is an explicit action, and pre-setting
+        // the pointer here would make an explicit select a no-op so the sidecar
+        // never loads/registers (co-residence).
+        if (!activeId) {
+          set({ presentModelIds: present });
+          return;
+        }
+        // Active model is set and on disk: only refresh the present list.
+        const activeOnDisk = await whisperService.isModelDownloaded(activeId);
+        if (activeOnDisk) {
+          set({ presentModelIds: present });
+          return;
+        }
+        // The active model's file is gone (e.g. deleted from the Download Manager,
+        // which bypasses this store). Adopt another model that IS on disk so
+        // transcription keeps working instead of pointing at a deleted file.
+        const fallback = present[0] ?? null;
+        logger.log(`[WhisperStore] active whisper model ${activeId} file gone; present [${present.join(', ') || 'none'}]; active -> ${fallback ?? 'none'}`);
+        set({ presentModelIds: present, downloadedModelId: fallback, isModelLoaded: false });
       },
 
       clearError: () => {

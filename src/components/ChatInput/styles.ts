@@ -30,6 +30,13 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     borderRadius: 8,
     overflow: 'hidden' as const,
   },
+  // Wider, taller chip for document/transcript attachments so the file name and
+  // the Summarize action are both fully visible (the square image size clipped
+  // the button).
+  attachmentPreviewDoc: {
+    width: 168,
+    height: 76,
+  },
   attachmentImage: {
     width: '100%' as const,
     height: '100%' as const,
@@ -42,12 +49,50 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     alignItems: 'center' as const,
     padding: 4,
   },
+  documentPreviewDoc: {
+    justifyContent: 'space-between' as const,
+    alignItems: 'stretch' as const,
+    padding: 8,
+    paddingRight: 22,
+  },
+  documentNameRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+  },
   documentName: {
     fontSize: 10,
     fontFamily: FONTS.mono,
     color: colors.textMuted,
     textAlign: 'center' as const,
     marginTop: 4,
+  },
+  summarizeButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 4,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
+  },
+  summarizeButtonText: {
+    fontSize: 11,
+    fontFamily: FONTS.mono,
+    color: colors.background,
+  },
+  summarizeBusy: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 6,
+    paddingVertical: 4,
+  },
+  summarizeBusyText: {
+    fontSize: 11,
+    fontFamily: FONTS.mono,
+    color: colors.primary,
   },
   removeAttachment: {
     position: 'absolute' as const,

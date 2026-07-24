@@ -299,7 +299,7 @@ describe('HomeScreen Spotlight Integration', () => {
   // Flow 5: Explore Settings
   // ========================================================================
   describe('Flow 5: exploredSettings', () => {
-    it('queues pending spotlight 6, navigates to SettingsTab, fires goTo(5)', () => {
+    it('queues pending spotlight 6, navigates to Settings, fires goTo(5)', () => {
       const { getByTestId } = renderHomeScreen();
 
       act(() => {
@@ -307,7 +307,7 @@ describe('HomeScreen Spotlight Integration', () => {
       });
 
       expect(peekPendingSpotlight()).toBe(6);
-      expect(mockNavigate).toHaveBeenCalledWith('SettingsTab');
+      expect(mockNavigate).toHaveBeenCalledWith('Settings');
 
       act(() => { jest.advanceTimersByTime(800); });
       expect(mockGoTo).toHaveBeenCalledWith(5);

@@ -307,9 +307,9 @@ describe('handleStepPress', () => {
       expect(peekPendingSpotlight()).toBe(6);
     });
 
-    it('navigates to SettingsTab', () => {
+    it('navigates to Settings', () => {
       simulateHandleStepPress('exploredSettings', callbacks());
-      expect(navigate).toHaveBeenCalledWith('SettingsTab');
+      expect(navigate).toHaveBeenCalledWith('Settings');
     });
 
     it('fires goTo(5) after delay', () => {

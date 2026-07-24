@@ -232,6 +232,7 @@ export const AppNavigator: React.FC = () => {
         />
         <RootStack.Screen name="KnowledgeBase" component={KnowledgeBaseScreen} />
         <RootStack.Screen name="DocumentPreview" component={DocumentPreviewScreen} />
+        <RootStack.Screen name="Settings" component={SettingsScreen} />
         <RootStack.Screen name="ModelSettings" component={ModelSettingsScreen} />
         <RootStack.Screen name="RemoteServers" component={RemoteServersScreen} />
         <RootStack.Screen name="DeviceInfo" component={DeviceInfoScreen} />

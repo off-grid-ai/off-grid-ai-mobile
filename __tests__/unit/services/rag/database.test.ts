@@ -42,11 +42,13 @@ describe('RagDatabase', () => {
     it('opens the database and creates tables', async () => {
       await ragDatabase.ensureReady();
       expect(open).toHaveBeenCalledWith({ name: 'rag.db' });
-      // rag_documents, rag_chunks, rag_embeddings = 3 tables
-      expect(mockExecuteSync).toHaveBeenCalledTimes(3);
+      // rag_documents, rag_chunks, ALTER rag_chunks (metadata migration), rag_embeddings
+      expect(mockExecuteSync).toHaveBeenCalledTimes(4);
       expect(mockExecuteSync.mock.calls[0][0]).toContain('rag_documents');
       expect(mockExecuteSync.mock.calls[1][0]).toContain('rag_chunks');
-      expect(mockExecuteSync.mock.calls[2][0]).toContain('rag_embeddings');
+      expect(mockExecuteSync.mock.calls[2][0]).toContain('ALTER TABLE rag_chunks');
+      expect(mockExecuteSync.mock.calls[2][0]).toContain('metadata');
+      expect(mockExecuteSync.mock.calls[3][0]).toContain('rag_embeddings');
     });
 
     it('does not re-initialize on second call', async () => {
@@ -86,8 +88,22 @@ describe('RagDatabase', () => {
         (c: any[]) => typeof c[0] === 'string' && c[0].includes('INSERT INTO rag_chunks')
       );
       expect(chunkInserts).toHaveLength(2);
-      expect(chunkInserts[0][1]).toEqual(['chunk one', 42, 0]);
-      expect(chunkInserts[1][1]).toEqual(['chunk two', 42, 1]);
+      // 4th bind is metadata (null when the chunk carries none).
+      expect(chunkInserts[0][1]).toEqual(['chunk one', 42, 0, null]);
+      expect(chunkInserts[1][1]).toEqual(['chunk two', 42, 1, null]);
+    });
+
+    it('serializes chunk metadata to a JSON string on the way into the DB', async () => {
+      await ragDatabase.ensureReady();
+      mockExecuteSync.mockReturnValue({ insertId: 7, rowsAffected: 1, rows: [] });
+
+      const metadata = { recordingId: 'rec-1', startMs: 100, eventTitle: 'Standup' };
+      ragDatabase.insertChunks(42, [{ content: 'has meta', position: 0, metadata } as any]);
+
+      const chunkInsert = mockExecuteSync.mock.calls.find(
+        (c: any[]) => typeof c[0] === 'string' && c[0].includes('INSERT INTO rag_chunks'),
+      );
+      expect(chunkInsert![1]).toEqual(['has meta', 42, 0, JSON.stringify(metadata)]);
     });
   });
 

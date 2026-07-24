@@ -1,31 +1,104 @@
+/* eslint-disable max-lines -- 655 lines. transcribeFile complexity is genuinely
+   fixed (buildTranscribeOpts) and the model catalogue is split into whisperModels.ts;
+   getting under 500 needs moving download/model-management into its own module,
+   which touches ~11 call sites across core + pro. Deferred as a dedicated task -
+   see docs/plans/ci-lint-test-progress.md section 4. */
 import { initWhisper, WhisperContext, RealtimeTranscribeEvent } from 'whisper.rn';
+import * as WhisperRn from 'whisper.rn';
 import { Platform, PermissionsAndroid } from 'react-native';
 import RNFS from 'react-native-fs';
+import { unzip } from 'react-native-zip-archive';
 import logger from '../utils/logger';
+import { WHISPER_MODELS, cleanTranscription } from './whisperModels';
 import { audioSessionManager } from './audioSessionManager';
 import { audioRecorderService } from './audioRecorderService';
+import * as whisperModelFiles from './whisperModelFiles';
+import { hardwareService } from './hardware';
+
+// Re-exported so existing consumers keep importing them from whisperService.
+export { WHISPER_MODELS, cleanTranscription };
+
+// Pipe whisper.cpp's native logs (system_info with the real n_threads, model
+// load info, encode/decode timings) into our logger so they show in both the
+// JS debug-log screen and logcat. Wired once, lazily. Accessed via a cast
+// because the local whisper.rn type shim doesn't declare these (they exist at
+// runtime in whisper.rn >= 0.5).
+let nativeWhisperLogWired = false;
+function wireNativeWhisperLog(): void {
+  if (nativeWhisperLogWired) return;
+  nativeWhisperLogWired = true;
+  const w = WhisperRn as unknown as {
+    toggleNativeLog?: (enabled: boolean) => void;
+    addNativeLogListener?: (l: (level: string, text: string) => void) => void;
+  };
+  try {
+    w.toggleNativeLog?.(true);
+    w.addNativeLogListener?.((level: string, text: string) => {
+      const msg = text.trim();
+      if (msg) logger.log(`[whisper.cpp:${level}] ${msg}`);
+    });
+    logger.log('[Whisper] native logging enabled');
+  } catch (e) {
+    logger.warn(`[Whisper] could not enable native logging: ${String(e)}`);
+  }
+}
 import { backgroundDownloadService } from './backgroundDownloadService';
 import { useDownloadStore } from '../stores/downloadStore';
 import { makeModelKey } from '../utils/modelKey';
-import { WHISPER_MODELS, cleanTranscription } from './whisperModels';
-import * as whisperModelFiles from './whisperModelFiles';
 
-// Re-export the model catalog + transcription normalizer (moved to whisperModels.ts
-// to keep this file within the max-lines budget). Behavior-neutral: every existing
-// `import { WHISPER_MODELS, cleanTranscription } from './whisperService'` keeps working.
-export { WHISPER_MODELS, cleanTranscription } from './whisperModels';
-
-interface TranscriptionResult {
+export interface TranscriptionResult {
   text: string;
   isCapturing: boolean;
   processTime: number;
   recordingTime: number;
 }
-type TranscriptionCallback = (result: TranscriptionResult) => void;
+export type TranscriptionCallback = (result: TranscriptionResult) => void;
+
+/** Options for {@link WhisperService.transcribeFile}. */
+interface TranscribeFileOptions {
+  language?: string;
+  onProgress?: (progress: number) => void;
+  // Fires every time Whisper finishes decoding a chunk (~30s of audio). `text`
+  // is the cumulative transcript so far, ready to drop straight into the UI.
+  onPartial?: (text: string) => void;
+  maxThreads?: number;
+  nProcessors?: number;
+  // Transcribe only a window of the file (ms). Used for chunked / resumable
+  // transcription of long recordings.
+  offset?: number;
+  duration?: number;
+  // Receives the final segments with whisper.cpp timestamps. t0/t1 are in
+  // centiseconds (10ms units) relative to the processed window.
+  onSegments?: (segments: { text: string; t0: number; t1: number }[]) => void;
+  // Enable tinydiarize (tdrz): whisper marks speaker-turn boundaries with a
+  // [SPEAKER_TURN] token. Requires a tdrz model (ggml-small.en-tdrz.bin);
+  // other models silently ignore it. English only.
+  diarize?: boolean;
+  // Optional vocabulary hint (whisper.cpp initial prompt): a short list of
+  // proper nouns / jargon (e.g. "Off Grid, Locket, Kokoro") that biases whisper
+  // toward spelling them correctly. Kept short - it competes with audio context.
+  prompt?: string;
+}
+
+/**
+ * Thrown when a file transcription is requested while one is already running on
+ * the single shared context. Lets callers distinguish "busy" from a real failure
+ * (and avoids the old behaviour of silently orphaning the first job's cancel handle).
+ */
+export class WhisperBusyError extends Error {
+  constructor(message = 'A transcription is already in progress') {
+    super(message);
+    this.name = 'WhisperBusyError';
+  }
+}
 
 class WhisperService {
   private context: WhisperContext | null = null;
   private currentModelPath: string | null = null;
+  // Acceleration options the live context was loaded with (serialized). Used to reload
+  // when the user flips a toggle - a same-path load with changed options must NOT
+  // early-return, or the new setting silently never takes effect.
+  private currentLoadOpts: string = '';
   private isTranscribing: boolean = false;
   private stopFn: (() => void) | null = null;
   private isReleasingContext: boolean = false;
@@ -36,11 +109,168 @@ class WhisperService {
   // deleteModel only cancels the download when it is THIS model's — deleting an
   // unrelated (already-downloaded) model must never abort a different in-flight one.
   private activeDownloadModelId: string | null = null;
+  private fileTranscribeStop: (() => void | Promise<void>) | null = null;
+  // True only while the REALTIME fallback recorder (started by startRealtimeTranscription for the
+  // B26/B28 safety net) is running. forceReset uses this to cancel OUR recorder without ever
+  // touching a recording started elsewhere — Voice.ts's direct/file-path modes share the same
+  // audioRecorderService singleton, so a blunt isCurrentlyRecording() check could kill theirs.
+  private fallbackRecorderActive = false;
+  // Models whose CoreML encoder we've already tried to backfill this session,
+  // so a missing/404 encoder isn't re-fetched on every load.
+  private coreMLBackfillTried = new Set<string>();
 
   getModelsDir(): string { return whisperModelFiles.getModelsDir(); }
   async ensureModelsDirExists(): Promise<void> { return whisperModelFiles.ensureModelsDirExists(); }
   getModelPath(modelId: string): string { return whisperModelFiles.getModelPath(modelId); }
   async isModelDownloaded(modelId: string): Promise<boolean> { return whisperModelFiles.isModelDownloaded(modelId); }
+
+  // Path where whisper.cpp looks for a model's CoreML encoder: it derives it
+  // from the ggml filename, `.bin` -> `-encoder.mlmodelc`. Keep in lockstep with
+  // the load-time check below.
+  private coreMLPathFor(modelId: string): string {
+    return this.getModelPath(modelId).replace(/\.bin$/i, '-encoder.mlmodelc');
+  }
+
+  /**
+   * A compiled CoreML model is a DIRECTORY; a partial/interrupted extraction can leave a
+   * dir that exists but is broken, and whisper.cpp may crash trying to load it. So
+   * "present" must mean VALID, not just exists: a compiled .mlmodelc always contains
+   * `coremldata.bin`. Existence-only checks are the bug that lets a corrupt encoder load.
+   */
+  private async isValidCoreMLEncoder(dir: string): Promise<boolean> {
+    if (!(await RNFS.exists(dir))) return false;
+    return RNFS.exists(`${dir}/coremldata.bin`);
+  }
+
+  /** True when this model's CoreML encoder is present AND valid on disk (iOS only). */
+  async hasCoreMLEncoder(modelId: string): Promise<boolean> {
+    if (Platform.OS !== 'ios') return false;
+    return this.isValidCoreMLEncoder(this.coreMLPathFor(modelId));
+  }
+
+  /**
+   * iOS only: download + unzip a model's CoreML encoder next to its .bin so
+   * whisper.cpp can run the encoder on the Apple Neural Engine (~2-3x faster
+   * encode, frees the CPU). Non-fatal - on any failure the model still works on
+   * CPU. No-op on Android, when the model has no published encoder, or when it's
+   * already present.
+   */
+  async ensureCoreMLEncoder(modelId: string, onProgress?: (p: number) => void): Promise<boolean> {
+    if (Platform.OS !== 'ios') return false;
+    const model = WHISPER_MODELS.find(m => m.id === modelId);
+    if (!model?.coreMLUrl) return false;
+    const targetDir = this.coreMLPathFor(modelId); // ggml-<id>-encoder.mlmodelc
+    if (await this.isValidCoreMLEncoder(targetDir)) return true;
+    // A prior run may have left a stale/partial dir that failed validation - clear it
+    // so a corrupt encoder never lingers and blocks a clean re-fetch.
+    await RNFS.unlink(targetDir).catch(() => {});
+    await this.ensureModelsDirExists();
+    const zipPath = `${this.getModelsDir()}/ggml-${modelId}-encoder.mlmodelc.zip`;
+    // Extract into a TEMP dir first, then atomic-rename into place only after an
+    // integrity check. A network drop mid-download must never leave a half-extracted
+    // encoder that whisper.cpp then tries (and crashes) to load.
+    const tmpDir = `${this.getModelsDir()}/.coreml-tmp-${modelId}`;
+    await RNFS.unlink(zipPath).catch(() => {});
+    await RNFS.unlink(tmpDir).catch(() => {});
+    const STALL_MS = 30000; // no bytes for 30s => treat as a dropped connection
+    try {
+      logger.log(`[Whisper][CoreML] START download ${modelId} from ${model.coreMLUrl}`);
+      const t0 = Date.now();
+      let lastPct = -1;
+      let lastProgressAt = Date.now();
+      const { jobId, promise } = RNFS.downloadFile({
+        fromUrl: model.coreMLUrl,
+        toFile: zipPath,
+        progressInterval: 500,
+        progress: (r) => {
+          lastProgressAt = Date.now();
+          if (r.contentLength <= 0) return;
+          const frac = r.bytesWritten / r.contentLength;
+          onProgress?.(frac);
+          const pct = Math.floor(frac * 10) * 10; // log each 10%
+          if (pct !== lastPct) {
+            lastPct = pct;
+            logger.log(`[Whisper][CoreML] ${modelId} ${pct}% (${(r.bytesWritten / 1e6).toFixed(0)}/${(r.contentLength / 1e6).toFixed(0)} MB)`);
+          }
+        },
+      });
+      // Stall watchdog: RNFS/iOS won't reject a dropped connection quickly (it hangs on
+      // OS defaults), so abort ourselves if no bytes arrive for STALL_MS -> clean CPU
+      // fallback instead of a wedged background fetch.
+      let stalled = false;
+      const watchdog = setInterval(() => {
+        if (Date.now() - lastProgressAt > STALL_MS) {
+          stalled = true;
+          RNFS.stopDownload(jobId);
+        }
+      }, 5000);
+      let res;
+      try {
+        res = await promise;
+      } finally {
+        clearInterval(watchdog);
+      }
+      if (stalled) throw new Error('download stalled (network drop)');
+      if (res.statusCode && res.statusCode >= 400) throw new Error(`HTTP ${res.statusCode}`);
+      const zipMB = (Number((await RNFS.stat(zipPath)).size) / 1e6).toFixed(0);
+      logger.log(`[Whisper][CoreML] downloaded ${modelId} (${zipMB} MB) in ${((Date.now() - t0) / 1000).toFixed(1)}s — unzipping to temp`);
+      // unzip throws on a truncated archive; that plus the integrity check below means a
+      // partial download can never become the live encoder.
+      await unzip(zipPath, tmpDir);
+      await RNFS.unlink(zipPath).catch(() => {});
+      // The zip's top-level dir is named after the SOURCE encoder in the URL (a model may
+      // reuse another's encoder, e.g. tdrz -> small.en); fall back to the temp root if the
+      // archive extracted files directly.
+      const extractedName = model.coreMLUrl.split('/').pop()!.replace(/\.zip$/i, '');
+      const extractedDir = `${tmpDir}/${extractedName}`;
+      const src = (await RNFS.exists(extractedDir)) ? extractedDir : tmpDir;
+      if (!(await this.isValidCoreMLEncoder(src))) {
+        throw new Error('extracted CoreML encoder failed integrity check (partial/corrupt)');
+      }
+      await RNFS.unlink(targetDir).catch(() => {}); // clear any stale target
+      await RNFS.moveFile(src, targetDir);
+      await RNFS.unlink(tmpDir).catch(() => {}); // remove the (now-empty) temp parent
+      const ok = await this.isValidCoreMLEncoder(targetDir);
+      const readyMsg = ok
+        ? `READY for ${modelId} — next load will use the Neural Engine`
+        : `FAILED for ${modelId}: invalid after move`;
+      logger.log(`[Whisper][CoreML] ${readyMsg}`);
+      return ok;
+    } catch (e) {
+      logger.warn(`[Whisper][CoreML] fetch FAILED for ${modelId} (staying CPU-only): ${String(e)}`);
+      await RNFS.unlink(zipPath).catch(() => {});
+      await RNFS.unlink(tmpDir).catch(() => {});
+      return false;
+    }
+  }
+
+  /**
+   * iOS CoreML (Neural Engine) gate for a load. Returns whether to use CoreML plus a
+   * human reason for the log. TWO gates, both required: (1) the user's "Neural Engine"
+   * setting (a real off-switch is the only reliable escape on a device where CoreML
+   * crashes/garbles - a native failure we can't catch, with no denylist), and (2) a
+   * VALID encoder asset on disk. When enabled but missing, kick off a one-time
+   * background backfill so the NEXT load uses the ANE (this load stays CPU). Non-iOS
+   * never uses CoreML.
+   */
+  private async resolveCoreML(
+    modelPath: string,
+    coreMLEnabled: boolean,
+  ): Promise<{ useCoreML: boolean; reason: string }> {
+    if (Platform.OS !== 'ios') return { useCoreML: false, reason: 'not iOS' };
+    if (!coreMLEnabled) return { useCoreML: false, reason: 'user disabled (Neural Engine off) - forcing CPU' };
+    const coreMLPath = modelPath.replace(/\.bin$/i, '-encoder.mlmodelc');
+    if (await this.isValidCoreMLEncoder(coreMLPath)) {
+      return { useCoreML: true, reason: `encoder asset present (${coreMLPath.split('/').pop()})` };
+    }
+    const model = WHISPER_MODELS.find(m => this.getModelPath(m.id) === modelPath);
+    if (model?.coreMLUrl && !this.coreMLBackfillTried.has(model.id)) {
+      this.coreMLBackfillTried.add(model.id);
+      logger.log(`[Whisper][CoreML] encoder missing for ${model.id}; fetching in background for next load`);
+      this.ensureCoreMLEncoder(model.id).catch(() => {});
+    }
+    return { useCoreML: false, reason: 'encoder asset missing - CPU this load, backfilling in background' };
+  }
 
   async downloadModel(modelId: string, onProgress?: (progress: number) => void): Promise<string> {
     const model = WHISPER_MODELS.find(m => m.id === modelId);
@@ -138,6 +368,13 @@ class WhisperService {
         await RNFS.unlink(destPath).catch(err => logger.error('[Whisper] Failed to delete invalid model file:', err));
         throw new Error(`Downloaded model file is invalid: ${validationError instanceof Error ? validationError.message : 'unknown error'}`);
       }
+      // iOS: fetch the CoreML encoder before we drop the download row, so the download
+      // stays "in progress" until the model is truly ANE-ready (not a silent second fetch
+      // after the bar disappears). Non-fatal: on any failure the model is already usable on
+      // CPU, and loadModel will backfill the encoder later.
+      if (Platform.OS === 'ios' && model.coreMLUrl) {
+        await this.ensureCoreMLEncoder(modelId).catch(() => {});
+      }
     } finally {
       // Completed STT models are listed from disk by useVoiceDownloadItems, so
       // the in-flight store entry must be dropped on success AND failure: leaving
@@ -164,6 +401,12 @@ class WhisperService {
     }
     const path = this.getModelPath(modelId);
     if (await RNFS.exists(path)) await RNFS.unlink(path);
+    // Also remove the CoreML encoder (iOS ANE asset). It's a derived companion to the
+    // .bin - useless on its own - so deleting the model must delete it too, else it
+    // orphans a ~tens-of-MB .mlmodelc directory on disk. RNFS.unlink removes the dir
+    // recursively; no-op when absent (Android, or a model with no encoder).
+    const encoderPath = this.coreMLPathFor(modelId);
+    if (await RNFS.exists(encoderPath)) await RNFS.unlink(encoderPath);
   }
 
   /**
@@ -176,9 +419,43 @@ class WhisperService {
     return whisperModelFiles.validateModelFile(modelPath);
   }
 
-  async loadModel(modelPath: string): Promise<void> {
-    if (this.context && this.currentModelPath !== modelPath) await this.unloadModel();
-    if (this.context && this.currentModelPath === modelPath) return;
+  /** Download a whisper model from an arbitrary URL (custom / non-catalogue models). */
+  async downloadFromUrl(url: string, modelId: string, onProgress?: (progress: number) => void): Promise<string> {
+    await this.ensureModelsDirExists();
+    const destPath = this.getModelPath(modelId);
+    if (await RNFS.exists(destPath)) return destPath;
+    const download = RNFS.downloadFile({
+      fromUrl: url, toFile: destPath, progressDivider: 1,
+      progress: (res) => { onProgress?.(res.bytesWritten / res.contentLength); },
+    });
+    const result = await download.promise;
+    if (result.statusCode !== 200) {
+      await RNFS.unlink(destPath).catch(() => {});
+      throw new Error(`Download failed with status ${result.statusCode}`);
+    }
+    try {
+      await this.validateModelFile(destPath);
+    } catch (validationError) {
+      await RNFS.unlink(destPath).catch(() => {});
+      throw validationError;
+    }
+    return destPath;
+  }
+
+  async loadModel(
+    modelPath: string,
+    options?: { useGpu?: boolean; useCoreML?: boolean },
+  ): Promise<void> {
+    wireNativeWhisperLog();
+    // Reload when the model OR its acceleration options change - otherwise flipping the
+    // Neural Engine / GPU / Flash toggle silently wouldn't take effect while a context is
+    // live (loadModel used to early-return on same-path regardless of options). Keyed on
+    // the REQUESTED options (default coreML ON) so a user toggle change forces a reload.
+    const optsKey = `gpu=${options?.useGpu ?? false},coreml=${options?.useCoreML ?? true}`;
+    if (this.context && (this.currentModelPath !== modelPath || this.currentLoadOpts !== optsKey)) {
+      await this.unloadModel();
+    }
+    if (this.context && this.currentModelPath === modelPath && this.currentLoadOpts === optsKey) return;
     if (this.isReleasingContext) {
       logger.log('[WhisperService] Waiting for context release to finish before loading');
       await this.contextReleasePromise;
@@ -188,32 +465,86 @@ class WhisperService {
     // Native initWithModelPath calls abort() on invalid files, crashing the app.
     await this.validateModelFile(modelPath);
 
-    logger.log(`[Whisper] Loading model: ${modelPath}`);
+    // Resolve the CoreML (Neural Engine) gate: user setting (default ON) AND a valid
+    // encoder asset present. resolveCoreML also kicks off a one-time background backfill
+    // when enabled-but-missing.
+    const coreMLEnabled = options?.useCoreML ?? true;
+    const { useCoreML, reason: coreMLReason } = await this.resolveCoreML(modelPath, coreMLEnabled);
+
+    // GPU offload is enforced HERE, at the whisper load site, so the stored setting can
+    // never request the GPU on an ineligible device regardless of the settings UI. One
+    // cross-platform rule via hardwareService.whisperSupportsGpu(): iOS -> Metal (real
+    // device, >4GB). Android has no whisper GPU backend (the ggml-OpenCL port was removed
+    // for crashing OpenCL-2.0 devices), so whisper runs on CPU there. Gates ONLY whisper.
+    const useGpu = (options?.useGpu ?? false) && (await hardwareService.whisperSupportsGpu());
+    // One structured line stating the RESOLVED acceleration config for this load, so a
+    // log pull can confirm exactly what was requested. For the DEFINITIVE proof CoreML
+    // actually engaged (vs silently falling back), watch the whisper.cpp NATIVE line
+    // "Core ML model loaded" that wireNativeWhisperLog pipes right after this.
+    logger.log(
+      `[Whisper][ACCEL] resolved for load: platform=${Platform.OS} ` +
+        `coreML=${useCoreML} (enabled=${coreMLEnabled}; ${coreMLReason}) gpu=${useGpu}`,
+    );
     try {
-      this.context = await initWhisper({ filePath: modelPath });
+      // useGpu/useCoreMLIos are real whisper.rn runtime options but absent from this
+      // version's WhisperContextOptions type, so pass via a cast. Flash attention is
+      // intentionally forced off (removed as a setting): it only helps on the GPU, our
+      // encoder is on the ANE, and it's unsupported by the ggml OpenCL backend.
+      const initOpts: Record<string, unknown> = {
+        filePath: modelPath,
+        useGpu,
+        useFlashAttn: false,
+        useCoreMLIos: useCoreML,
+      };
+      // Time initWhisper: this covers reading the .bin into memory AND, when
+      // useCoreML is true, the one-time ANE compile of the .mlmodelc (whisper.cpp
+      // logs "first run on a device may take a while"). If startup is slow, this
+      // number vs the first "transcribe progress" elapsed tells us whether it's
+      // load/compile or the first encode.
+      const tInit = Date.now();
+      this.context = await initWhisper(initOpts as unknown as Parameters<typeof initWhisper>[0]);
       this.currentModelPath = modelPath;
-      logger.log('[Whisper] Model loaded successfully');
+      this.currentLoadOpts = optsKey;
+      const ctxGpu = (this.context as unknown as { gpu?: boolean }).gpu;
+      // Post-load confirmation: context.gpu reflects whether the Metal backend is live;
+      // if coreML was requested, the ABSENCE of the native "Core ML model loaded" line
+      // above means it silently fell back to CPU (e.g. a corrupt/partial encoder).
+      const coreMLNote = useCoreML
+        ? ' — confirm the native "Core ML model loaded" line; its absence = CPU fallback.'
+        : '';
+      logger.log(
+        `[Whisper][ACCEL] context ready in ${((Date.now() - tInit) / 1000).toFixed(1)}s — context.gpu=${ctxGpu} coreMLRequested=${useCoreML}${coreMLNote}`,
+      );
     } catch (error) {
       logger.error('[Whisper] Failed to load model:', error);
       this.context = null;
       this.currentModelPath = null;
+      this.currentLoadOpts = '';
       throw error;
     }
   }
 
   async unloadModel(): Promise<void> {
     if (!this.context) return;
-    // Stop active transcription to prevent SIGSEGV on freed context
+    // Stop active transcription to prevent SIGSEGV on a freed context.
+    // Realtime path (isTranscribing/stopFn):
     if (this.isTranscribing || this.stopFn) {
-      logger.log('[WhisperService] Stopping active transcription before unloading model');
+      logger.log('[WhisperService] Stopping active realtime transcription before unloading model');
       await this.stopTranscription();
       await this.transcriptionFullyStopped;
+    }
+    // File path (fileTranscribeStop): a resumable/whole-file transcribe can be
+    // in flight on this same context (it survives navigation by design). Releasing
+    // underneath it is a use-after-free, so cancel and await it first.
+    if (this.fileTranscribeStop) {
+      logger.log('[WhisperService] Stopping in-flight file transcription before unloading model');
+      await this.stopFileTranscription();
     }
     if (this.isReleasingContext) { logger.log('[WhisperService] Context release already in progress, skipping'); return; }
     this.isReleasingContext = true;
     this.contextReleasePromise = (async () => {
       try { await this.context!.release(); } catch (error) { logger.error('[WhisperService] Error releasing context:', error); }
-      finally { this.context = null; this.currentModelPath = null; this.isReleasingContext = false; }
+      finally { this.context = null; this.currentModelPath = null; this.currentLoadOpts = ''; this.isReleasingContext = false; }
     })()
     await this.contextReleasePromise;
   }
@@ -300,6 +631,7 @@ class WhisperService {
     try {
       await audioRecorderService.startRecording();
       recordedFile = true;
+      this.fallbackRecorderActive = true;
     } catch (recErr) {
       logger.error('[WhisperService] Fallback recorder failed to start (realtime only):', recErr);
     }
@@ -311,6 +643,7 @@ class WhisperService {
       if (!recordedFile) return realtimeText;
       try {
         const { path } = await audioRecorderService.stopRecording();
+        this.fallbackRecorderActive = false;
         const fileText = await this.transcribeFile(path);
         logger.log(`[WhisperService] Realtime captured nothing — file transcript: "${fileText.slice(0, 50)}"`);
         return fileText;
@@ -324,7 +657,7 @@ class WhisperService {
       // Guard: context could have been released during the async permission check
       if (!this.context) {
         this.isTranscribing = false;
-        if (recordedFile) audioRecorderService.cancelRecording();
+        if (recordedFile) { audioRecorderService.cancelRecording(); this.fallbackRecorderActive = false; }
         resolveTranscriptionStopped();
         throw new Error('Whisper context was released before transcription could start');
       }
@@ -355,6 +688,7 @@ class WhisperService {
           hasData: !!evt.data,
           text: evt.data?.result?.slice(0, 50),
         });
+
         // [WIRE] raw realtime transcription event shape from-device (voice-mode STT path) — full result +
         // segments + timing, so we can ground the realtime-transcript fixtures (distinct from file transcribe).
         logger.log(`[WIRE-STT-REALTIME] ${JSON.stringify(evt)}`);
@@ -389,7 +723,7 @@ class WhisperService {
         });
       });
     } catch (error) {
-      if (recordedFile) audioRecorderService.cancelRecording();
+      if (recordedFile) { audioRecorderService.cancelRecording(); this.fallbackRecorderActive = false; }
       logger.error('[WhisperService] transcribeRealtime error:', error);
       this.isTranscribing = false;
       this.stopFn = null;
@@ -439,9 +773,25 @@ class WhisperService {
     if (fn && this.context) {
       try { fn(); } catch (e) { logger.error('[WhisperService] Error calling stopFn during forceReset:', e); }
     }
-    // Discard the parallel fallback recording (B26/B28) if one is mid-flight — a cancelled/aborted
-    // realtime session must not leave the file recorder capturing (B11-class leak).
-    if (audioRecorderService.isCurrentlyRecording()) audioRecorderService.cancelRecording();
+    // Also clear the whole-file transcription stop handle. forceReset previously reset only the realtime
+    // stopFn; if it ran while a file transcription was in flight, fileTranscribeStop stayed non-null and
+    // every subsequent transcribeFile threw WhisperBusyError ("already transcribing") until app restart.
+    // Same atomic grab-and-clear + best-effort native stop (the handle may be async — fire and forget).
+    const fileFn = this.fileTranscribeStop;
+    this.fileTranscribeStop = null;
+    if (fileFn) {
+      try {
+        const r = fileFn();
+        if (r && typeof (r as Promise<void>).catch === 'function') {
+          (r as Promise<void>).catch((e) => logger.warn(`[WhisperService] fileTranscribeStop threw during forceReset: ${String(e)}`));
+        }
+      } catch (e) { logger.error('[WhisperService] Error calling fileTranscribeStop during forceReset:', e); }
+    }
+    // Discard the parallel fallback recording (B26/B28) ONLY when THIS realtime session started it —
+    // a cancelled/aborted realtime session must not leave the file recorder capturing (B11-class
+    // leak), but we must never cancel a recording Voice.ts started (its direct/file-path modes share
+    // the same audioRecorderService singleton). Owned recorder → cancel; anything else → left as-is.
+    if (this.fallbackRecorderActive) { audioRecorderService.cancelRecording(); this.fallbackRecorderActive = false; }
     this.isTranscribing = false;
     this.transcriptionFullyStopped = Promise.resolve();
   }
@@ -449,26 +799,165 @@ class WhisperService {
   isCurrentlyTranscribing(): boolean { return this.isTranscribing; }
 
   // Transcribe a single audio file
+  /** Build the whisper.rn transcribe options from our TranscribeFileOptions.
+   * Extracted from transcribeFile to keep that method under the complexity limit. */
+  private buildTranscribeOpts(
+    options: TranscribeFileOptions | undefined,
+    ctx: { language: string; maxThreads: number; nProcessors: number; tStart: number },
+  ): Record<string, unknown> {
+    const { language, maxThreads, nProcessors, tStart } = ctx;
+    let lastProgressLog = 0;
+    // 'auto' means "let Whisper sniff the first ~30s of audio and pick". whisper.rn
+    // does this when the language field is omitted; passing 'auto' would be a literal code.
+    const transcribeOpts: Record<string, unknown> = {
+      onProgress: (progress: number) => {
+        if (progress - lastProgressLog >= 10 || progress >= 100) {
+          lastProgressLog = progress;
+          logger.log(
+            `[Whisper] transcribe progress ${progress.toFixed(0)}% ` +
+              `elapsed=${((Date.now() - tStart) / 1000).toFixed(1)}s`,
+          );
+        }
+        options?.onProgress?.(progress);
+      },
+    };
+    if (language !== 'auto') transcribeOpts.language = language;
+    // Do NOT condition on previously-decoded text (whisper.cpp -mc 0). On noisy /
+    // ambient clips whisper otherwise falls into a repetition death-spiral,
+    // looping the same token or phrase; clearing the text context is the standard
+    // fix and the biggest lever against hallucinated repeats.
+    transcribeOpts.maxContext = 0;
+    // Vocabulary hint: whisper.cpp seeds decoding with this text so proper nouns
+    // and jargon are spelled the user's way. Trimmed; empty is omitted entirely.
+    const promptHint = options?.prompt?.trim();
+    if (promptHint) transcribeOpts.prompt = promptHint;
+    if (maxThreads > 0) transcribeOpts.maxThreads = maxThreads;
+    if (nProcessors > 1) transcribeOpts.nProcessors = nProcessors;
+    if (options?.offset && options.offset > 0) transcribeOpts.offset = Math.floor(options.offset);
+    if (options?.duration && options.duration > 0) transcribeOpts.duration = Math.floor(options.duration);
+    // Speaker-turn marking; whisper.cpp only honors this with a tdrz model (else a no-op).
+    if (options?.diarize) transcribeOpts.tdrzEnable = true;
+    // whisper.rn fires onNewSegments after every decoded chunk (cumulative text);
+    // nProcessors > 1 disables it in whisper.cpp, so it only fires when nProcessors == 1.
+    if (options?.onPartial || options?.onSegments) {
+      transcribeOpts.onNewSegments = (eventData: {
+        result: string;
+        segments?: { text: string; t0: number; t1: number }[];
+      }) => {
+        try {
+          options.onPartial?.(eventData.result);
+          if (options.onSegments && Array.isArray(eventData.segments)) {
+            options.onSegments(eventData.segments);
+          }
+        } catch (err) {
+          logger.warn(`[Whisper] onPartial callback threw: ${String(err)}`);
+        }
+      };
+    }
+    return transcribeOpts;
+  }
+
   async transcribeFile(
     filePath: string,
-    options?: {
-      language?: string;
-      onProgress?: (progress: number) => void;
-    }
+    options?: TranscribeFileOptions,
   ): Promise<string> {
+    wireNativeWhisperLog();
     if (!this.context) {
       throw new Error('No Whisper model loaded');
     }
+    // Single shared context: refuse a second overlapping file transcription
+    // instead of overwriting the in-flight job's cancel handle (which would leave
+    // the first job un-cancellable and both racing the one native context).
+    if (this.fileTranscribeStop) {
+      throw new WhisperBusyError();
+    }
 
-    const { promise } = this.context.transcribe(filePath, {
-      language: options?.language || 'en',
-      onProgress: options?.onProgress,
+    const requestedLanguage = options?.language || 'auto';
+    // English-only models (ggml-*.en) have ONLY English tokens. Asking them for
+    // any other language - via auto-detect (which returns garbage like "tg") OR an
+    // explicit pick like "fr" - makes whisper unstable on iOS: it crashes at 0%,
+    // thrashes (762s for 13%, 0 segments), or garbles. So force English for ANY
+    // English-only model, whatever was requested. Use the catalogue's `lang`
+    // metadata; fall back to the filename convention for custom models. (To
+    // transcribe other languages, a multilingual model like ggml-base.bin is needed.)
+    const modelFile = (this.currentModelPath ?? '').split('/').pop() ?? '';
+    const catalogModel = WHISPER_MODELS.find((m) => m.url.endsWith(modelFile));
+    const isEnglishOnlyModel = catalogModel ? catalogModel.lang === 'en' : /\.en\.bin$/i.test(modelFile);
+    const language = isEnglishOnlyModel ? 'en' : requestedLanguage;
+    const maxThreads = options?.maxThreads ?? 0;
+    const nProcessors = options?.nProcessors ?? 1;
+    const loadedPath = this.currentModelPath ?? '(unknown)';
+    const gpu = (this.context as unknown as { gpu?: boolean }).gpu;
+
+    logger.log(
+      `[Whisper] transcribeFile START path=${filePath} lang=${language} ` +
+        `maxThreads=${maxThreads} nProcessors=${nProcessors} ` +
+        `model=${loadedPath} gpu=${gpu}`,
+    );
+    const tStart = Date.now();
+
+    // whisper.rn's new_segment_callback used to crash the iOS file path (its
+    // user_data was a stack struct that died before the callback fired); our
+    // whisper.rn+0.5.5 patch hoists it so streaming works on both platforms.
+    const transcribeOpts = this.buildTranscribeOpts(options, {
+      language,
+      maxThreads,
+      nProcessors,
+      tStart,
     });
 
-    const __res = await promise;
-    logger.log(`[WIRE-STT] ${JSON.stringify(__res)}`); // [WIRE] raw whisper.rn transcribe result (segments/text) from-device
-    const { result } = __res;
-    return cleanTranscription(result);
+    logger.log(`[Whisper] dispatching native transcribe (lang=${language} diarize=${options?.diarize ?? false} threads=${maxThreads} nProc=${nProcessors}) — awaiting first progress...`);
+    const { stop, promise } = this.context.transcribe(
+      filePath,
+      transcribeOpts as Parameters<WhisperContext['transcribe']>[1],
+    );
+    this.fileTranscribeStop = stop;
+
+    try {
+      const res = await promise;
+      const result = res.result;
+      // The local whisper.rn type shim only declares `result`; segments exist
+      // at runtime (whisper.cpp t0/t1 in centiseconds).
+      const segments = (res as unknown as {
+        segments?: { text: string; t0: number; t1: number }[];
+      }).segments;
+      if (options?.onSegments && Array.isArray(segments)) {
+        try {
+          options.onSegments(segments);
+        } catch (err) {
+          logger.warn(`[Whisper] onSegments callback threw: ${String(err)}`);
+        }
+      }
+      const totalMs = Date.now() - tStart;
+      logger.log(
+        `[Whisper] transcribeFile DONE elapsed=${(totalMs / 1000).toFixed(1)}s ` +
+          `outputLen=${result.length} preview="${result.slice(0, 100)}"`,
+      );
+      return cleanTranscription(result);
+    } catch (e) {
+      const totalMs = Date.now() - tStart;
+      logger.error(`[Whisper] transcribeFile FAILED after ${(totalMs / 1000).toFixed(1)}s`, e);
+      throw e;
+    } finally {
+      this.fileTranscribeStop = null;
+    }
+  }
+
+  /**
+   * Cancels an in-flight file transcription. The Stop button calls this so
+   * whisper.cpp actually stops, otherwise the next Transcribe tap throws
+   * "Context is already transcribing".
+   */
+  async stopFileTranscription(): Promise<void> {
+    const fn = this.fileTranscribeStop;
+    this.fileTranscribeStop = null;
+    if (!fn) {
+      logger.log('[Whisper] stopFileTranscription: no active file transcription');
+      return;
+    }
+    logger.log('[Whisper] stopFileTranscription: cancelling native job');
+    try { await fn(); }
+    catch (e) { logger.warn(`[Whisper] stopFileTranscription threw: ${String(e)}`); }
   }
 }
 

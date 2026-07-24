@@ -116,7 +116,7 @@ class ActiveModelService {
   async loadTextModel(
     modelId: string,
     timeoutMs: number = 120000,
-    opts?: { override?: boolean },
+    opts?: { override?: boolean; textOnly?: boolean },
   ): Promise<void> {
     // Fast path — model already loaded (no lock; just sync the store).
     if (this.isTextModelCurrent(modelId)) {
@@ -135,7 +135,7 @@ class ActiveModelService {
   private async doLoadTextModelLocked(
     modelId: string,
     timeoutMs: number,
-    opts?: { override?: boolean },
+    opts?: { override?: boolean; textOnly?: boolean },
   ): Promise<void> {
     // Re-check after acquiring — a queued call may have loaded it already.
     if (this.isTextModelCurrent(modelId)) {
@@ -152,8 +152,12 @@ class ActiveModelService {
     }
     // Use estimated runtime RAM (file size + overhead), not just file size,
     // so the residency budget reflects the model's real memory footprint.
-    // GPU-aware overhead: a GPU/NPU backend adds working buffers in system RAM the flat CPU 1.5× misses.
-    const textSizeMB = Math.round((hardwareService.estimateModelRam(model, textOverheadMultiplier(store.settings.inferenceBackend)) || 0) / (1024 * 1024));
+    // Text-only loads (transcription/insights) skip the vision mmproj clip, so
+    // size the budget on the gguf weights alone - don't reserve for a clip we
+    // won't load. GPU-aware overhead: a GPU/NPU backend adds working buffers in
+    // system RAM the flat CPU 1.5× misses.
+    const ramModel = opts?.textOnly ? { fileSize: model.fileSize, mmProjFileSize: 0 } : model;
+    const textSizeMB = Math.round((hardwareService.estimateModelRam(ramModel, textOverheadMultiplier(store.settings.inferenceBackend)) || 0) / (1024 * 1024));
     // LiteRT weights + KV are dirty/accelerator memory → gated on REAL free RAM (mmap GGUF
     // stays clean/physical-cap). Derived once so makeRoomFor and register agree.
     const textIsDirty = model.engine === 'litert';
@@ -177,6 +181,7 @@ class ActiveModelService {
       store,
       timeoutMs,
       override: !!opts?.override || modelResidencyManager.hasSessionOverride(modelId),
+      textOnly: !!opts?.textOnly,
       loadedTextModelId: this.loadedTextModelId,
       onLoaded: id => {
         this.setLoadedText(id);

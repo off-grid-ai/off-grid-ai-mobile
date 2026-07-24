@@ -23,6 +23,18 @@ const createLayoutStyles = (colors: ThemeColors) => ({
     alignItems: 'center' as const,
     gap: 8,
   },
+  headerRight: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+  },
+  iconButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
   crownButton: {
     width: 32,
     height: 32,

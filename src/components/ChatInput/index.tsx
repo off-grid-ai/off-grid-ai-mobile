@@ -1,3 +1,6 @@
+/* eslint-disable max-lines -- 520 lines. Combines two independent attachment
+   features that landed on separate branches (document Summarize + image tap-to-view).
+   Extracting the attachment toolbar into its own component is deferred. */
 import React, { useState, useRef, useEffect } from 'react';
 import { View, TextInput, TouchableOpacity, Animated, StyleSheet, Platform, ActionSheetIOS } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -13,6 +16,7 @@ import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from
 import { createStyles, PILL_ICON_SIZE, ANIM_DURATION_IN, ANIM_DURATION_OUT } from './styles';
 import { QueueRow } from './Toolbar';
 import { AttachmentPreview, useAttachments } from './Attachments';
+import { useSummarizeAttachment } from './useSummarizeAttachment';
 import { useVoiceInput } from './Voice';
 import { buildVoiceNoteHandlers } from './voiceNoteSend';
 import { QuickSettingsPopover, AttachPickerPopover } from './Popovers';
@@ -66,6 +70,67 @@ const IMAGE_MODE_CYCLE: ImageModeState[] = ['auto', 'force', 'disabled'];
 // Attach + quick-settings only. The Chat/Voice mode toggle is no longer in this
 // (collapsing) row — it's rendered persistently above the input instead.
 const computePillIconsWidth = (): number => PILL_ICON_SIZE * 2;
+
+// ─── Send / Stop / Voice button ─────────────────────────────────────────────
+// The trailing circle button: Send when there's something to send, Stop while
+// generating, otherwise the voice-record button. Extracted so the main
+// component stays within the max-lines-per-function budget; behaviour is
+// identical to the previous inline ternary.
+interface ActionButtonProps {
+  canSend: boolean;
+  isGenerating?: boolean;
+  disabled?: boolean;
+  onStop?: () => void;
+  onSendPress: () => void;
+  onStopPress: () => void;
+  isRecording: boolean;
+  voiceAvailable: boolean;
+  isModelLoading: boolean;
+  isTranscribing: boolean;
+  partialResult: string;
+  error: string | null;
+  onStartRecording: () => void;
+  onStopRecording: () => void;
+  onCancelRecording: () => void;
+}
+
+const ActionButton: React.FC<ActionButtonProps> = (props) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  if (props.canSend) {
+    return (
+      <TouchableOpacity testID="send-button" style={styles.circleButton} onPress={props.onSendPress}>
+        <Icon name="send" size={18} color={colors.background} />
+      </TouchableOpacity>
+    );
+  }
+  if (props.isGenerating && props.onStop) {
+    return (
+      <TouchableOpacity
+        testID="stop-button"
+        style={[styles.circleButton, styles.circleButtonStop]}
+        onPress={props.onStopPress}
+      >
+        <Icon name="square" size={18} color={colors.background} />
+      </TouchableOpacity>
+    );
+  }
+  return (
+    <VoiceRecordButton
+      isRecording={props.isRecording}
+      isAvailable={props.voiceAvailable}
+      isModelLoading={props.isModelLoading}
+      isTranscribing={props.isTranscribing}
+      asSendButton
+      partialResult={props.partialResult}
+      error={props.error}
+      disabled={props.disabled}
+      onStartRecording={props.onStartRecording}
+      onStopRecording={props.onStopRecording}
+      onCancelRecording={props.onCancelRecording}
+    />
+  );
+};
 
 /**
  * Alert shown when the user attaches an image to a model without vision support.
@@ -159,6 +224,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const { attachments, removeAttachment, clearAttachments, handlePickImage, handlePickDocument, addAudioAttachment } = useAttachments(setAlertState);
   attachmentsRef.current = attachments;
+  const { summarizingId, handleSummarize } = useSummarizeAttachment();
+  const onSummarizeAttachment = async (attachment: MediaAttachment) => {
+    await handleSummarize(attachment);
+    removeAttachment(attachment.id);
+  };
   const interfaceMode = useUiModeStore((s) => s.interfaceMode);
   const isAudioMode = interfaceMode === 'audio';
 
@@ -323,32 +393,20 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   // Pro-only inline Chat↔Audio toggle (empty slot in free builds → null).
   const pillIconsExpandedWidth = computePillIconsWidth();
 
-  const actionButton = canSend ? (
-    <TouchableOpacity
-      testID="send-button"
-      style={styles.circleButton}
-      onPress={handleSend}
-    >
-      <Icon name="send" size={18} color={colors.background} />
-    </TouchableOpacity>
-  ) : isGenerating && onStop ? (
-    <TouchableOpacity
-      testID="stop-button"
-      style={[styles.circleButton, styles.circleButtonStop]}
-      onPress={handleStop}
-    >
-      <Icon name="square" size={18} color={colors.background} />
-    </TouchableOpacity>
-  ) : (
-    <VoiceRecordButton
+  const actionButton = (
+    <ActionButton
+      canSend={canSend}
+      isGenerating={isGenerating}
+      disabled={disabled}
+      onStop={onStop}
+      onSendPress={handleSend}
+      onStopPress={handleStop}
       isRecording={isRecording}
-      isAvailable={voiceAvailable}
+      voiceAvailable={voiceAvailable}
       isModelLoading={isModelLoading}
       isTranscribing={isTranscribing}
-      asSendButton
       partialResult={partialResult}
       error={error}
-      disabled={disabled}
       onStartRecording={startRecording}
       onStopRecording={stopRecording}
       onCancelRecording={cancelRecording}
@@ -357,7 +415,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   return (
     <View style={styles.container}>
-      <AttachmentPreview attachments={attachments} onRemove={removeAttachment} onImagePress={onImagePress} />
+      <AttachmentPreview
+        attachments={attachments}
+        onRemove={removeAttachment}
+        onSummarize={onSummarizeAttachment}
+        summarizingId={summarizingId}
+        onImagePress={onImagePress}
+      />
       <QueueRow
         queueCount={queueCount}
         queuedTexts={queuedTexts}

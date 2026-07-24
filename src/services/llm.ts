@@ -1,3 +1,6 @@
+/* eslint-disable max-lines -- 517 lines. Core LLM service; the generateWithMaxTokens
+   streaming/GBNF-grammar superset is needed by the insights summarizer. Splitting the
+   completion pipeline off is a dedicated task, deferred. */
 import { LlamaContext, RNLlamaOAICompatibleMessage } from 'llama.rn';
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
@@ -401,18 +404,48 @@ class LLMService {
     return messages.some(m => m.attachments?.some(a => a.type === 'image'));
   }
   /** Generate a completion with a hard token cap (used for summarization, not user-facing). */
-  async generateWithMaxTokens(messages: Message[], maxTokens: number): Promise<string> {
+  async generateWithMaxTokens(
+    messages: Message[],
+    maxTokens: number,
+    opts?: { onToken?: (delta: string) => void; grammar?: string; repeatPenalty?: number },
+  ): Promise<string> {
     if (!this.context) throw new Error('No model loaded');
     if (this.isGenerating) throw new Error('Generation already in progress');
     this.isGenerating = true;
+    const onToken = opts?.onToken;
     const oaiMessages = this.convertToOAIMessages(messages);
     const { settings } = useAppStore.getState();
     let fullResponse = '';
     const ctx = this.context;
-    const completionWork = safeCompletion(ctx, () => ctx.completion(
-      { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }), n_predict: maxTokens },
-      (data) => { if (this.isGenerating && data.token) fullResponse += data.token; },
-    ), 'generateWithMaxTokens');
+    // These internal generations (summarize, tool-selection) never want the
+    // model to "think" - reasoning wastes the token budget, is slow + hot, and
+    // leaks into the output. Force thinking OFF (for models that gate it via the
+    // thinking channel; prose chain-of-thought is additionally curbed by prompts).
+    const params: Record<string, unknown> = { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }), ...buildThinkingCompletionParams(false, this.isGemma4Model()), n_predict: maxTokens };
+    // Optional GBNF grammar (llama.cpp constrained decoding) so callers like the
+    // insights pass can force a fixed output shape. A bad grammar must never
+    // brick generation, so retry once without it on failure.
+    if (opts?.grammar) params.grammar = opts.grammar;
+    // Stronger repetition penalty for callers (insights) prone to small-model
+    // loops; overrides the default penalty_repeat from buildCompletionParams.
+    if (opts?.repeatPenalty != null) params.penalty_repeat = opts.repeatPenalty;
+    const run = () => ctx.completion(
+      params as Parameters<typeof ctx.completion>[0],
+      (data) => { if (this.isGenerating && data.token) { fullResponse += data.token; onToken?.(data.token); } },
+    );
+    const completionWork = (async () => {
+      try {
+        return await safeCompletion(ctx, run, 'generateWithMaxTokens');
+      } catch (e) {
+        if (params.grammar) {
+          logger.warn(`[LLM] grammared generation failed, retrying without grammar: ${String(e)}`);
+          fullResponse = '';
+          delete params.grammar;
+          return await safeCompletion(ctx, run, 'generateWithMaxTokens-fallback');
+        }
+        throw e;
+      }
+    })();
     this.activeCompletionPromise = completionWork.then(() => { }, () => { });
     try { await completionWork; return fullResponse.trim(); } finally { this.isGenerating = false; this.activeCompletionPromise = null; }
   }

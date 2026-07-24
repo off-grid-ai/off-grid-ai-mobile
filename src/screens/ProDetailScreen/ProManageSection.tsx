@@ -11,7 +11,7 @@
  * in-app portal because RevenueCat authenticates Web Billing customers by email.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, ActivityIndicator } from 'react-native';
+import { View, Text, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors, ThemeShadows } from '../../theme';
@@ -19,6 +19,7 @@ import { SPACING, TYPOGRAPHY } from '../../constants';
 import {
   getProLicenseInfo,
   listProDevices,
+  clearProForTesting,
   PRO_TIER_META,
   type ProLicenseInfo,
 } from '../../services/proLicenseService';
@@ -118,6 +119,22 @@ export const ProManageSection: React.FC = () => {
           </View>
         </View>
       ) : null}
+
+      {/* TEMPORARY: ungated testing control. Clears the cached license so the
+          device drops back to free. The Keygen machine slot stays claimed (the
+          fingerprint persists); re-pasting the key re-activates instantly.
+          Re-gate behind __DEV__ before shipping. */}
+      <TouchableOpacity
+        style={styles.removeButton}
+        onPress={() => {
+          clearProForTesting()
+            .then(() => Alert.alert('Pro removed', 'Cached license cleared. The app is back to free on this device.'))
+            .catch((e) => logger.error('[ProManage] clear failed:', e instanceof Error ? e.message : String(e)));
+        }}
+      >
+        <Icon name="trash-2" size={14} color={colors.textMuted} />
+        <Text style={styles.removeText}>Remove Pro (testing)</Text>
+      </TouchableOpacity>
     </View>
   );
 };
@@ -168,4 +185,13 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
       gap: SPACING.md,
     },
     manageHint: { ...TYPOGRAPHY.meta, color: colors.textMuted, flex: 1 },
+    removeButton: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      gap: SPACING.sm,
+      marginTop: SPACING.md,
+      paddingVertical: SPACING.md,
+    },
+    removeText: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary },
   });

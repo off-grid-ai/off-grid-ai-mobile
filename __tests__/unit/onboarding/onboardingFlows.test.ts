@@ -80,7 +80,7 @@ describe('Onboarding Flows', () => {
         downloadedModel: 'ModelsTab',
         loadedModel: 'HomeTab',
         sentMessage: 'ChatsTab',
-        exploredSettings: 'SettingsTab',
+        exploredSettings: 'Settings',
         createdProject: 'ProjectsTab',
         triedImageGen: 'ModelsTab',
       });

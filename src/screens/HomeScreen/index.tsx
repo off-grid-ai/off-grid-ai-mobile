@@ -26,6 +26,7 @@ import { VoiceModelsSheet } from '../../components/models/VoiceModelsSheet';
 import { useWhisperStore } from '../../stores/whisperStore';
 import { WHISPER_MODELS } from '../../services';
 import { useUiModeStore } from '../../stores/uiModeStore';
+import { useSlot, SLOTS } from '../../bootstrap/slotRegistry';
 
 type HomeScreenProps = {
   navigation: HomeScreenNavigationProp;
@@ -96,6 +97,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const whisperModelId = useWhisperStore((s) => s.downloadedModelId);
   const whisperPresentCount = useWhisperStore((s) => s.presentModelIds?.length ?? 0);
   const voiceSummary = useUiModeStore((s) => s.voiceSummary);
+  // Pro recorder entry (tap-to-record card). Empty in free builds. Replaces the
+  // old dedicated Recorder tab - the recorder now lives here on Home.
+  const HomeRecorder = useSlot(SLOTS.homeRecorder);
 
   const modelLabels: Record<ModelRowType, string> = {
     text: activeTextModel?.name ?? '—',
@@ -144,9 +148,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               <Text style={styles.title}>Off Grid AI</Text>
               {showIcon && <PulsatingIcon onPress={openSheet} />}
             </View>
-            <TouchableOpacity onPress={() => navigation.navigate('ProDetail')} hitSlop={8} style={styles.crownButton}>
-              <IconMC name="crown" size={16} color={colors.primary} />
-            </TouchableOpacity>
+            <View style={styles.headerRight}>
+              <TouchableOpacity onPress={() => navigation.navigate('ProDetail')} hitSlop={8} style={styles.crownButton}>
+                <IconMC name="crown" size={16} color={colors.primary} />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Collapsed Models summary — tap to open the manager sheet. Both the
@@ -163,6 +169,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               </AttachStep>
             </AttachStep>
           </AnimatedEntry>
+
+          {/* Pro recorder card (tap to record + link to recordings). Renders
+              only when Pro registered it; free builds show nothing here. */}
+          {HomeRecorder ? (
+            <AnimatedEntry index={1} staggerMs={50} trigger={focusTrigger}>
+              <HomeRecorder />
+            </AnimatedEntry>
+          ) : null}
 
           {/* New Chat Button */}
           {

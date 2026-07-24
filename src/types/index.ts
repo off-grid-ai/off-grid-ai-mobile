@@ -161,6 +161,13 @@ export interface MediaAttachment {
   fileName?: string;
   textContent?: string; // documents: extracted text
   fileSize?: number; // documents: file size in bytes
+  // Transcript attachments (a document sourced from a recording). When present,
+  // the document text came from a recording's transcript; the range fields are
+  // set when the user attached a timestamp-to-timestamp slice rather than the
+  // whole transcript, so the chat can cite/seek back into the audio.
+  recordingId?: string;
+  transcriptStartMs?: number; // documents: start of the attached transcript range
+  transcriptEndMs?: number; // documents: end of the attached transcript range
   audioFormat?: 'wav' | 'mp3'; // audio attachments: format for model input
   audioDurationSeconds?: number; // audio attachments: recorded duration in seconds
 }

@@ -6,7 +6,7 @@
  */
 
 /** Provider types supported by the system */
-type RemoteProviderType = 'openai-compatible' | 'anthropic';
+export type RemoteProviderType = 'openai-compatible' | 'anthropic' | 'whisper';
 
 /** Remote server configuration */
 export interface RemoteServer {
